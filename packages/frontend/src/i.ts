@@ -29,6 +29,10 @@ export function incNotesCount() {
 	notesCount++;
 }
 
+export function decNotesCount() {
+    if (notesCount > 0) notesCount--;
+}
+
 if (_DEV_) {
 	(window as any).$i = $i;
 }

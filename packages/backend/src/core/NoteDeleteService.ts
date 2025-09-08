@@ -114,6 +114,15 @@ export class NoteDeleteService {
 			id: note.id,
 			userId: user.id,
 		});
+                await this.usersRepository
+                    .createQueryBuilder()
+                    .update()
+                    .set({
+                        updatedAt: () => 'CURRENT_TIMESTAMP',
+                        notesCount: () => 'GREATEST("notesCount" - 1, 0)',
+                    })
+                    .where('id = :id', { id: note.userId })
+                    .execute();
 
 		if (deleter && (note.userId !== deleter.id)) {
 			const user = await this.usersRepository.findOneByOrFail({ id: note.userId });
