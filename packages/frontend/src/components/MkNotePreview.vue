@@ -13,12 +13,12 @@ SPDX-License-Identifier: AGPL-3.0-only
 		<div>
 			<p v-if="hasCw" :class="$style.cw">
 				<Mfm v-if="cw != null && cw != ''" :text="cw" :author="user" :nyaize="'respect'" :i="user" style="margin-right: 8px;"/>
-				<MkCwButton v-if="!isCwReplyLocked" v-model="showContent" :text="text.trim()" :files="files" :poll="poll" style="margin: 4px 0;"/>
-				<div v-else style="margin: 4px 0; opacity: 0.8; font-size: 0.9em;">
-					<i class="ti ti-lock" style="margin-right: 4px;"></i>{{ i18n.ts.replyToSeeCw }}
+				<div v-if="showReplyLockedContentInPreview" :class="$style.replyRequiredBadge">
+					<i class="ti ti-lock"></i>{{ i18n.ts.cwReplyRequired }}
 				</div>
+				<MkCwButton v-else v-model="showContent" :text="text.trim()" :files="files" :poll="poll" style="margin: 4px 0;"/>
 			</p>
-			<div v-show="!hasCw || (!isCwReplyLocked && showContent)">
+			<div v-show="!hasCw || showReplyLockedContentInPreview || showContent">
 				<Mfm :text="text.trim()" :author="user" :nyaize="'respect'" :i="user"/>
 			</div>
 		</div>
@@ -47,7 +47,7 @@ const props = defineProps<{
 }>();
 
 const hasCw = computed(() => props.useCw);
-const isCwReplyLocked = computed(() => props.cwReplyRequired === true);
+const showReplyLockedContentInPreview = computed(() => props.cwReplyRequired === true);
 </script>
 
 <style lang="scss" module>
@@ -80,6 +80,15 @@ const isCwReplyLocked = computed(() => props.cwReplyRequired === true);
 	margin: 0;
 	padding: 0;
 	overflow-wrap: break-word;
+}
+
+.replyRequiredBadge {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	margin: 4px 0 0;
+	font-size: 0.9em;
+	color: var(--MI_THEME-warn);
 }
 
 .header {

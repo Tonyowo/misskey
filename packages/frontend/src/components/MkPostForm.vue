@@ -76,14 +76,14 @@ SPDX-License-Identifier: AGPL-3.0-only
 		<div v-if="maxCwTextLength - cwTextLength < 20" :class="['_acrylic', $style.cwTextCount, { [$style.cwTextOver]: cwTextLength > maxCwTextLength }]">{{ maxCwTextLength - cwTextLength }}</div>
 	</div>
 	<div v-if="useCw" :class="$style.cwReplyRequired">
-		<div :class="$style.cwReplyRequiredCard">
-			<MkSwitch :modelValue="cwReplyRequired" @update:modelValue="onCwReplyRequiredChange">
-				{{ i18n.ts.cwReplyRequired }}
-			</MkSwitch>
-		</div>
-		<div v-if="cwReplyRequired" :class="$style.cwReplyRequiredHint">
-			<i class="ti ti-rocket-off"></i>{{ i18n.ts.cwReplyRequiredLocalOnly }}
-		</div>
+		<MkSwitch :class="$style.cwReplyRequiredSwitch" :modelValue="cwReplyRequired" @update:modelValue="onCwReplyRequiredChange">
+			{{ i18n.ts.cwReplyRequired }}
+			<template #caption>
+				<span v-if="cwReplyRequired" :class="$style.cwReplyRequiredHint">
+					<i class="ti ti-rocket-off"></i>{{ i18n.ts.cwReplyRequiredLocalOnly }}
+				</span>
+			</template>
+		</MkSwitch>
 	</div>
 	<div :class="[$style.textOuter, { [$style.withCw]: useCw }]">
 		<div v-if="targetChannel" :class="$style.colorBar" :style="{ background: targetChannel.color }"></div>
@@ -1786,13 +1786,6 @@ html[data-color-scheme=light] .preview {
 	margin: 0 20px 16px 20px;
 }
 
-.fieldLabel {
-	padding: 0 24px 6px;
-	font-size: 0.88em;
-	font-weight: 600;
-	color: var(--MI_THEME-fgTransparentWeak);
-}
-
 .cw,
 .hashtags,
 .text {
@@ -1823,26 +1816,19 @@ html[data-color-scheme=light] .preview {
 }
 
 .cwReplyRequired {
-	display: flex;
-	flex-direction: column;
-	gap: 8px;
-	padding: 10px 24px 8px;
+	padding: 10px 24px 4px;
 }
 
-.cwReplyRequiredCard {
-	padding: 10px 14px;
-	border: 1px solid color-mix(in srgb, var(--MI_THEME-divider) 78%, transparent);
-	border-radius: 14px;
-	background: color-mix(in srgb, var(--MI_THEME-accent) 4%, transparent);
-	box-shadow: 0 1px 0 color-mix(in srgb, var(--MI_THEME-bg) 60%, transparent);
+.cwReplyRequiredSwitch {
+	align-items: flex-start;
 }
 
 .cwReplyRequiredHint {
-	display: flex;
+	display: inline-flex;
 	align-items: center;
 	gap: 6px;
-	padding: 0 2px;
 	font-size: 0.9em;
+	line-height: 1.45;
 	color: var(--MI_THEME-warn);
 }
 
@@ -1874,53 +1860,6 @@ html[data-color-scheme=light] .preview {
 	padding-top: 8px;
 	padding-bottom: 8px;
 	border-top: solid 0.5px var(--MI_THEME-divider);
-}
-
-.replyLockedOuter {
-	width: 100%;
-	position: relative;
-	border-top: solid 0.5px var(--MI_THEME-divider);
-}
-
-.replyLockedText {
-	display: block;
-	box-sizing: border-box;
-	padding: 12px 24px;
-	margin: 0;
-	width: 100%;
-	min-height: 120px;
-	font-size: 110%;
-	border: none;
-	border-radius: 0;
-	background: color-mix(in srgb, var(--MI_THEME-accent) 4%, transparent);
-	color: var(--MI_THEME-fg);
-	font-family: inherit;
-	resize: vertical;
-
-	&:focus {
-		outline: none;
-	}
-
-	&:disabled {
-		opacity: 0.5;
-	}
-}
-
-.replyLockedTextCount {
-	position: absolute;
-	top: 8px;
-	right: 2px;
-	padding: 2px 6px;
-	font-size: .9em;
-	color: var(--MI_THEME-warn);
-	border-radius: 6px;
-	max-width: 100%;
-	min-width: 1.6em;
-	text-align: center;
-
-	&.textOver {
-		color: #ff2a2a;
-	}
 }
 
 .textOuter {
@@ -2031,6 +1970,10 @@ html[data-color-scheme=light] .preview {
 	.hashtags,
 	.text {
 		padding: 0 16px;
+	}
+
+	.cwReplyRequired {
+		padding: 10px 16px 4px;
 	}
 
 	.text {
