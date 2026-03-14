@@ -163,6 +163,52 @@ describe('Note', () => {
 		assert.strictEqual(stored.localOnly, true);
 	});
 
+	test('返信では返信可視CWは無効化される', async () => {
+		const base = await post(bob, {
+			text: 'base note',
+		});
+
+		const res = await api('notes/create', {
+			text: 'reply body',
+			cw: 'reply spoiler',
+			cwReplyRequired: true,
+			localOnly: false,
+			replyId: base.id,
+		}, alice);
+
+		assert.strictEqual(res.status, 200);
+		assert.strictEqual(res.body.createdNote.replyId, base.id);
+		assert.strictEqual(res.body.createdNote.cwReplyRequired, undefined);
+		assert.strictEqual(res.body.createdNote.localOnly, false);
+
+		const stored = await Notes.findOneByOrFail({ id: res.body.createdNote.id });
+		assert.strictEqual(stored.cwReplyRequired, false);
+		assert.strictEqual(stored.localOnly, false);
+	});
+
+	test('引用では返信可視CWは無効化される', async () => {
+		const base = await post(bob, {
+			text: 'base quote target',
+		});
+
+		const res = await api('notes/create', {
+			text: 'quote body',
+			cw: 'quote spoiler',
+			cwReplyRequired: true,
+			localOnly: false,
+			renoteId: base.id,
+		}, alice);
+
+		assert.strictEqual(res.status, 200);
+		assert.strictEqual(res.body.createdNote.renoteId, base.id);
+		assert.strictEqual(res.body.createdNote.cwReplyRequired, undefined);
+		assert.strictEqual(res.body.createdNote.localOnly, false);
+
+		const stored = await Notes.findOneByOrFail({ id: res.body.createdNote.id });
+		assert.strictEqual(stored.cwReplyRequired, false);
+		assert.strictEqual(stored.localOnly, false);
+	});
+
 	test('renoteできる', async () => {
 		const bobPost = await post(bob, {
 			text: 'test',

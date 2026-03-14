@@ -75,7 +75,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 		<input ref="cwInputEl" v-model="cw" :class="$style.cw" :placeholder="cwInputPlaceholder" @keydown="onKeydown" @keyup="onKeyup" @compositionend="onCompositionEnd">
 		<div v-if="maxCwTextLength - cwTextLength < 20" :class="['_acrylic', $style.cwTextCount, { [$style.cwTextOver]: cwTextLength > maxCwTextLength }]">{{ maxCwTextLength - cwTextLength }}</div>
 	</div>
-	<div v-if="useCw" :class="$style.cwReplyRequired">
+	<div v-if="useCw && canUseCwReplyRequired" :class="$style.cwReplyRequired">
 		<MkSwitch :class="$style.cwReplyRequiredSwitch" :modelValue="cwReplyRequired" @update:modelValue="onCwReplyRequiredChange">
 			{{ i18n.ts.cwReplyRequired }}
 			<template #caption>
@@ -99,7 +99,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 		<MkUploaderItems :items="uploader.items.value" @showMenu="(item, ev) => showPerUploadItemMenu(item, ev)" @showMenuViaContextmenu="(item, ev) => showPerUploadItemMenuViaContextmenu(item, ev)"/>
 	</div>
 	<MkPollEditor v-if="poll" v-model="poll" @destroyed="poll = null"/>
-	<MkNotePreview v-if="showPreview" :class="$style.preview" :text="text" :files="files" :poll="poll ?? undefined" :useCw="useCw" :cw="cw" :cwReplyRequired="cwReplyRequired" :user="postAccount ?? $i"/>
+	<MkNotePreview v-if="showPreview" :class="$style.preview" :text="text" :files="files" :poll="poll ?? undefined" :useCw="useCw" :cw="cw" :cwReplyRequired="effectiveCwReplyRequired" :user="postAccount ?? $i"/>
 	<div v-if="showingOptions" style="padding: 8px 16px;">
 	</div>
 	<footer ref="footerEl" :class="$style.footer">
@@ -236,7 +236,9 @@ const justEndedComposition = ref(false);
 const renoteTargetNote: ShallowRef<PostFormProps['renote'] | null> = shallowRef(props.renote);
 const replyTargetNote: ShallowRef<PostFormProps['reply'] | null> = shallowRef(props.reply);
 const targetChannel = shallowRef(props.channel);
-const isLocalOnlyForcedByCwReply = computed(() => useCw.value && cwReplyRequired.value);
+const canUseCwReplyRequired = computed(() => replyTargetNote.value == null && renoteTargetNote.value == null && quoteId.value == null);
+const effectiveCwReplyRequired = computed(() => useCw.value && canUseCwReplyRequired.value && cwReplyRequired.value);
+const isLocalOnlyForcedByCwReply = computed(() => effectiveCwReplyRequired.value);
 const effectiveLocalOnly = computed(() => {
 	if (targetChannel.value != null) return true;
 	if (isLocalOnlyForcedByCwReply.value) return true;
@@ -246,6 +248,12 @@ const effectiveLocalOnly = computed(() => {
 const disableFederationTooltip = computed(() => isLocalOnlyForcedByCwReply.value
 	? i18n.ts.cwReplyRequiredLocalOnly
 	: i18n.ts._visibility.disableFederation);
+
+watch(canUseCwReplyRequired, (canUse) => {
+	if (!canUse && cwReplyRequired.value) {
+		cwReplyRequired.value = false;
+	}
+}, { immediate: true });
 
 const serverDraftId = ref<string | null>(null);
 const postFormActions = getPluginHandlers('post_form_action');
@@ -962,7 +970,7 @@ function saveDraft() {
 			replyLockedText: null,
 			useCw: useCw.value,
 			cw: cw.value,
-			cwReplyRequired: useCw.value ? cwReplyRequired.value : false,
+			cwReplyRequired: effectiveCwReplyRequired.value,
 			visibility: visibility.value,
 			localOnly: effectiveLocalOnly.value,
 			files: files.value,
@@ -993,7 +1001,7 @@ async function saveServerDraft(options: {
 		text: text.value,
 		replyLockedText: null,
 		cw: useCw.value ? cw.value || null : null,
-		cwReplyRequired: useCw.value ? cwReplyRequired.value : false,
+		cwReplyRequired: effectiveCwReplyRequired.value,
 		visibility: visibility.value,
 		localOnly: effectiveLocalOnly.value,
 		hashtag: hashtags.value,
@@ -1102,7 +1110,7 @@ async function post(ev?: PointerEvent) {
 		channelId: targetChannel.value ? targetChannel.value.id : undefined,
 		poll: poll.value,
 		cw: useCw.value ? cw.value || null : null,
-		cwReplyRequired: useCw.value ? cwReplyRequired.value : false,
+		cwReplyRequired: effectiveCwReplyRequired.value,
 		localOnly: effectiveLocalOnly.value,
 		visibility: visibility.value,
 		visibleUserIds: visibility.value === 'specified' ? visibleUsers.value.map(u => u.id) : undefined,

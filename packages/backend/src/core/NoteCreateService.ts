@@ -422,6 +422,7 @@ export class NoteCreateService implements OnApplicationShutdown {
 		if (data.createdAt == null) data.createdAt = new Date();
 		if (data.visibility == null) data.visibility = 'public';
 		if (data.localOnly == null) data.localOnly = false;
+		if (data.reply != null || data.renote != null) data.cwReplyRequired = false;
 		if (!data.cwReplyRequired) data.replyLockedText = null;
 		if (data.cwReplyRequired) data.localOnly = true;
 		if (data.channel != null) data.visibility = 'public';
