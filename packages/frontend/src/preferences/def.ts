@@ -204,7 +204,7 @@ export const PREF_DEF = definePreferences({
 		default: [] as StatusbarStore[],
 	},
 	serverDisconnectedBehavior: {
-		default: 'quiet' as 'quiet' | 'reload' | 'dialog' | 'none',
+		default: 'none' as 'quiet' | 'reload' | 'dialog' | 'none',
 	},
 	nsfw: {
 		default: 'respect' as 'respect' | 'force' | 'ignore',
