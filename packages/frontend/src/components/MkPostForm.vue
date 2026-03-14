@@ -87,10 +87,20 @@ SPDX-License-Identifier: AGPL-3.0-only
 	</div>
 	<div :class="[$style.textOuter, { [$style.withCw]: useCw }]">
 		<div v-if="targetChannel" :class="$style.colorBar" :style="{ background: targetChannel.color }"></div>
-		<div v-if="showCustomEmojiPreview" :class="$style.textPreview" aria-hidden="true">
-			<MkCustomEmojiTextPreview :class="$style.textPreviewContent" :style="textPreviewStyle" :text="text"/>
-		</div>
-		<textarea ref="textareaEl" v-model="text" :class="[$style.text, { [$style.textWithCustomEmojiPreview]: showCustomEmojiPreview }]" :disabled="posting || posted" :readonly="textAreaReadOnly" :placeholder="placeholder" data-cy-post-form-text @scroll="syncTextPreviewScroll" @keydown="onKeydown" @keyup="onKeyup" @paste="onPaste" @compositionstart="onTextCompositionStart" @compositionupdate="onCompositionUpdate" @compositionend="onTextCompositionEnd"></textarea>
+		<MkPostFormTextEditor
+			ref="textareaEl"
+			v-model="text"
+			:class="$style.text"
+			:disabled="posting || posted"
+			:readonly="textAreaReadOnly"
+			:placeholder="placeholder"
+			data-cy-post-form-text
+			@keydown="onKeydown"
+			@keyup="onKeyup"
+			@paste="onPaste"
+			@compositionupdate="onCompositionUpdate"
+			@compositionend="onCompositionEnd"
+		/>
 		<div v-if="maxTextLength - textLength < 100" :class="['_acrylic', $style.textCount, { [$style.textOver]: textLength > maxTextLength }]">{{ maxTextLength - textLength }}</div>
 	</div>
 	<input v-show="withHashtags" ref="hashtagsInputEl" v-model="hashtags" :class="$style.hashtags" :placeholder="i18n.ts.hashtags" list="hashtags">
@@ -130,7 +140,6 @@ SPDX-License-Identifier: AGPL-3.0-only
 import { watch, nextTick, onMounted, defineAsyncComponent, provide, shallowRef, ref, computed, useTemplateRef, onUnmounted, onBeforeUnmount } from 'vue';
 import * as mfm from 'mfm-js';
 import * as Misskey from 'misskey-js';
-import insertTextAtCursor from 'insert-text-at-cursor';
 import { toASCII } from 'punycode.js';
 import { host, url } from '@@/js/config.js';
 import MkUploaderItems from './MkUploaderItems.vue';
@@ -142,9 +151,9 @@ import type { UploaderItem } from '@/composables/use-uploader.js';
 import MkNotePreview from '@/components/MkNotePreview.vue';
 import XPostFormAttaches from '@/components/MkPostFormAttaches.vue';
 import XTextCounter from '@/components/MkPostForm.TextCounter.vue';
-import MkCustomEmojiTextPreview from '@/components/MkCustomEmojiTextPreview.vue';
 import MkPollEditor from '@/components/MkPollEditor.vue';
 import MkNoteSimple from '@/components/MkNoteSimple.vue';
+import MkPostFormTextEditor from '@/components/MkPostFormTextEditor.vue';
 import MkSwitch from '@/components/MkSwitch.vue';
 import { erase, unique } from '@/utility/array.js';
 import { extractMentions } from '@/utility/extract-mentions.js';
@@ -199,7 +208,7 @@ const emit = defineEmits<{
 	(ev: 'fileChangeSensitive', fileId: string, to: boolean): void;
 }>();
 
-const textareaEl = useTemplateRef('textareaEl');
+const textareaEl = useTemplateRef<InstanceType<typeof MkPostFormTextEditor>>('textareaEl');
 const cwInputEl = useTemplateRef('cwInputEl');
 const hashtagsInputEl = useTemplateRef('hashtagsInputEl');
 const visibilityButton = useTemplateRef('visibilityButton');
@@ -237,7 +246,6 @@ const imeText = ref('');
 const showingOptions = ref(false);
 const textAreaReadOnly = ref(false);
 const justEndedComposition = ref(false);
-const textCompositionActive = ref(false);
 const renoteTargetNote: ShallowRef<PostFormProps['renote'] | null> = shallowRef(props.renote);
 const replyTargetNote: ShallowRef<PostFormProps['reply'] | null> = shallowRef(props.reply);
 const targetChannel = shallowRef(props.channel);
@@ -263,17 +271,8 @@ watch(canUseCwReplyRequired, (canUse) => {
 const serverDraftId = ref<string | null>(null);
 const postFormActions = getPluginHandlers('post_form_action');
 
-let textAutocomplete: Autocomplete | null = null;
 let cwAutocomplete: Autocomplete | null = null;
 let hashtagAutocomplete: Autocomplete | null = null;
-const customEmojiPreviewRegex = /:([a-zA-Z0-9_+\-]+(?:@[a-zA-Z0-9.\-]+)?):/;
-const textPreviewScrollTop = ref(0);
-const textPreviewScrollLeft = ref(0);
-
-const showCustomEmojiPreview = computed(() => !textCompositionActive.value && text.value !== '' && customEmojiPreviewRegex.test(text.value));
-const textPreviewStyle = computed(() => ({
-	transform: `translate(${-textPreviewScrollLeft.value}px, ${-textPreviewScrollTop.value}px)`,
-}));
 
 watch(cwInputEl, (el, oldEl) => {
 	if (oldEl && cwAutocomplete) {
@@ -393,16 +392,7 @@ const hashtags = store.model('postFormHashtags');
 
 watch(text, () => {
 	checkMissingMention();
-	nextTick(() => {
-		syncTextPreviewScroll();
-	});
 }, { immediate: true });
-
-watch(showCustomEmojiPreview, () => {
-	nextTick(() => {
-		syncTextPreviewScroll();
-	});
-});
 
 watch(visibility, () => {
 	checkMissingMention();
@@ -579,20 +569,14 @@ function onCwReplyRequiredChange(value: boolean) {
 
 function addTag(tag: string) {
 	if (textareaEl.value == null) return;
-	insertTextAtCursor(textareaEl.value, ` #${tag} `);
+	textareaEl.value.insertText(` #${tag} `);
 }
 
 function focus() {
 	if (textareaEl.value) {
 		textareaEl.value.focus();
-		textareaEl.value.setSelectionRange(textareaEl.value.value.length, textareaEl.value.value.length);
+		textareaEl.value.setSelectionRange(text.value.length, text.value.length);
 	}
-}
-
-function syncTextPreviewScroll() {
-	if (textareaEl.value == null) return;
-	textPreviewScrollTop.value = textareaEl.value.scrollTop;
-	textPreviewScrollLeft.value = textareaEl.value.scrollLeft;
 }
 
 function chooseFileFromPc(ev: PointerEvent) {
@@ -842,19 +826,9 @@ function onCompositionUpdate(ev: CompositionEvent) {
 	imeText.value = ev.data;
 }
 
-function onTextCompositionStart() {
-	textCompositionActive.value = true;
-	justEndedComposition.value = false;
-}
-
 function onCompositionEnd(ev: CompositionEvent) {
 	imeText.value = '';
 	justEndedComposition.value = true;
-}
-
-function onTextCompositionEnd(ev: CompositionEvent) {
-	textCompositionActive.value = false;
-	onCompositionEnd(ev);
 }
 
 const pastedFileName = 'yyyy-MM-dd HH-mm-ss [{{number}}]';
@@ -862,7 +836,6 @@ const pastedFileName = 'yyyy-MM-dd HH-mm-ss [{{number}}]';
 async function onPaste(ev: ClipboardEvent) {
 	if (props.mock) return;
 	if (ev.clipboardData == null) return;
-	if (textareaEl.value == null) return;
 
 	let pastedFiles: File[] = [];
 	for (const { item, i } of Array.from(ev.clipboardData.items, (data, x) => ({ item: data, i: x }))) {
@@ -893,7 +866,7 @@ async function onPaste(ev: ClipboardEvent) {
 		});
 
 		if (canceled) {
-			insertTextAtCursor(textareaEl.value, paste);
+			textareaEl.value?.insertText(paste);
 			return;
 		}
 
@@ -909,7 +882,7 @@ async function onPaste(ev: ClipboardEvent) {
 		});
 
 		if (canceled) {
-			insertTextAtCursor(textareaEl.value, paste);
+			textareaEl.value?.insertText(paste);
 			return;
 		}
 
@@ -1289,7 +1262,7 @@ function cancel() {
 function insertMention() {
 	os.selectUser({ localOnly: effectiveLocalOnly.value, includeSelf: true }).then(user => {
 		if (textareaEl.value == null) return;
-		insertTextAtCursor(textareaEl.value, '@' + Misskey.acct.toString(user) + ' ');
+		textareaEl.value.insertText('@' + Misskey.acct.toString(user) + ' ');
 	});
 }
 
@@ -1298,30 +1271,28 @@ async function insertEmoji(ev: PointerEvent) {
 	const target = ev.currentTarget ?? ev.target;
 	if (target == null) return;
 
-	// emojiPickerはダイアログが閉じずにtextareaとやりとりするので、
-	// focustrapをかけているとinsertTextAtCursorが効かない
+	// emojiPickerはダイアログが閉じずにエディタとやりとりするので、
+	// focustrapをかけていると通常のフォーカス経由では挿入できない
 	// そのため、投稿フォームのテキストに直接注入する
 	// See: https://github.com/misskey-dev/misskey/pull/14282
 	//      https://github.com/misskey-dev/misskey/issues/14274
 
-	let pos = textareaEl.value?.selectionStart ?? 0;
-	let posEnd = textareaEl.value?.selectionEnd ?? text.value.length;
+	const selection = textareaEl.value?.getSelectionRange() ?? { start: 0, end: text.value.length };
+	let pos = selection.start;
+	let posEnd = selection.end;
 	emojiPicker.show(
 		target as HTMLElement,
 		emoji => {
-			const textBefore = text.value.substring(0, pos);
-			const textAfter = text.value.substring(posEnd);
-			text.value = textBefore + emoji + textAfter;
+			textareaEl.value?.setSelectionRange(pos, posEnd);
+			textareaEl.value?.insertText(emoji);
 			pos += emoji.length;
 			posEnd += emoji.length;
 		},
 		() => {
 			textAreaReadOnly.value = false;
 			nextTick(() => {
-				if (textareaEl.value) {
-					textareaEl.value.focus();
-					textareaEl.value.setSelectionRange(pos, posEnd);
-				}
+				textareaEl.value?.focus();
+				textareaEl.value?.setSelectionRange(pos, posEnd);
 			});
 		},
 	);
@@ -1329,27 +1300,28 @@ async function insertEmoji(ev: PointerEvent) {
 
 async function insertMfmFunction(ev: PointerEvent) {
 	if (textareaEl.value == null) return;
-	let pos = textareaEl.value.selectionStart ?? 0;
-	let posEnd = textareaEl.value.selectionEnd ?? text.value.length;
+	const selection = textareaEl.value.getSelectionRange();
+	let pos = selection.start;
+	let posEnd = selection.end;
 	mfmFunctionPicker(
 		ev.currentTarget ?? ev.target,
 		(tag) => {
+			textareaEl.value?.setSelectionRange(pos, posEnd);
 			if (pos === posEnd) {
-				text.value = `${text.value.substring(0, pos)}$[${tag} ]${text.value.substring(pos)}`;
+				textareaEl.value?.insertText(`$[${tag} ]`);
 				pos += tag.length + 3;
 				posEnd = pos;
 			} else {
-				text.value = `${text.value.substring(0, pos)}$[${tag} ${text.value.substring(pos, posEnd)}]${text.value.substring(posEnd)}`;
+				const selectedText = text.value.substring(pos, posEnd);
+				textareaEl.value?.insertText(`$[${tag} ${selectedText}]`);
 				pos += tag.length + 3;
 				posEnd = pos;
 			}
 		},
 		() => {
 			nextTick(() => {
-				if (textareaEl.value) {
-					textareaEl.value.focus();
-					textareaEl.value.setSelectionRange(pos, posEnd);
-				}
+				textareaEl.value?.focus();
+				textareaEl.value?.setSelectionRange(pos, posEnd);
 			});
 		},
 	);
@@ -1491,7 +1463,9 @@ function cancelSchedule() {
 }
 
 function showTour() {
-	if (textareaEl.value == null ||
+	const editorElement = textareaEl.value?.getElement();
+
+	if (editorElement == null ||
 		footerEl.value == null ||
 		accountMenuEl.value == null ||
 		visibilityButton.value == null ||
@@ -1501,7 +1475,7 @@ function showTour() {
 	}
 
 	startTour([{
-		element: textareaEl.value,
+		element: editorElement,
 		title: i18n.ts._postForm._howToUse.content_title,
 		description: i18n.ts._postForm._howToUse.content_description,
 	}, {
@@ -1535,11 +1509,9 @@ onMounted(() => {
 
 		nextTick(() => {
 			focus();
-			syncTextPreviewScroll();
 		});
 	}
 
-	if (textareaEl.value) textAutocomplete = new Autocomplete(textareaEl.value, text);
 	if (hashtagsInputEl.value) hashtagAutocomplete = new Autocomplete(hashtagsInputEl.value, hashtags);
 
 	nextTick(() => {
@@ -1600,15 +1572,11 @@ onMounted(() => {
 		}
 
 		nextTick(() => watchForDraft());
-		nextTick(() => syncTextPreviewScroll());
 	});
 });
 
 onBeforeUnmount(() => {
 	uploader.abortAll();
-	if (textAutocomplete) {
-		textAutocomplete.detach();
-	}
 	if (cwAutocomplete) {
 		cwAutocomplete.detach();
 	}
@@ -1836,8 +1804,7 @@ html[data-color-scheme=light] .preview {
 
 .cw,
 .hashtags,
-.text,
-.textPreviewContent {
+.text {
 	display: block;
 	box-sizing: border-box;
 	padding: 0 24px;
@@ -1921,43 +1888,13 @@ html[data-color-scheme=light] .preview {
 	}
 }
 
-.textPreview {
-	position: absolute;
-	inset: 0;
-	overflow: hidden;
-	pointer-events: none;
-}
-
 .text {
-	position: relative;
-	z-index: 1;
 	max-width: 100%;
 	min-width: 100%;
 	width: 100%;
 	min-height: 90px;
 	max-height: 500px;
 	field-sizing: content;
-}
-
-.textPreviewContent {
-	min-height: 90px;
-}
-
-.textWithCustomEmojiPreview {
-	color: transparent;
-	-webkit-text-fill-color: transparent;
-	caret-color: var(--MI_THEME-fg);
-
-	&::selection {
-		color: transparent;
-		-webkit-text-fill-color: transparent;
-		background-color: color(from var(--MI_THEME-accent) srgb r g b / 0.35);
-	}
-
-	&::-moz-selection {
-		color: transparent;
-		background-color: color(from var(--MI_THEME-accent) srgb r g b / 0.35);
-	}
 }
 
 .textCount {
@@ -2048,8 +1985,7 @@ html[data-color-scheme=light] .preview {
 	}
 	.cw,
 	.hashtags,
-	.text,
-	.textPreviewContent {
+	.text {
 		padding: 0 16px;
 	}
 
