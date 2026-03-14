@@ -87,7 +87,12 @@ SPDX-License-Identifier: AGPL-3.0-only
 	</div>
 	<div :class="[$style.textOuter, { [$style.withCw]: useCw }]">
 		<div v-if="targetChannel" :class="$style.colorBar" :style="{ background: targetChannel.color }"></div>
-		<textarea ref="textareaEl" v-model="text" :class="[$style.text]" :disabled="posting || posted" :readonly="textAreaReadOnly" :placeholder="placeholder" data-cy-post-form-text @keydown="onKeydown" @keyup="onKeyup" @paste="onPaste" @compositionupdate="onCompositionUpdate" @compositionend="onCompositionEnd"></textarea>
+		<div aria-hidden="true" :class="[$style.textPreviewViewport, { [$style.textPreviewDisabled]: posting || posted }]">
+			<div :class="$style.textPreviewContent" :style="textPreviewStyle">
+				<MkCustomEmojiTextPreview :text="text"/>
+			</div>
+		</div>
+		<textarea ref="textareaEl" v-model="text" :class="[$style.text]" :disabled="posting || posted" :readonly="textAreaReadOnly" :placeholder="placeholder" data-cy-post-form-text @keydown="onKeydown" @keyup="onKeyup" @paste="onPaste" @scroll="syncTextPreviewScroll" @compositionupdate="onCompositionUpdate" @compositionend="onCompositionEnd"></textarea>
 		<div v-if="maxTextLength - textLength < 100" :class="['_acrylic', $style.textCount, { [$style.textOver]: textLength > maxTextLength }]">{{ maxTextLength - textLength }}</div>
 	</div>
 	<input v-show="withHashtags" ref="hashtagsInputEl" v-model="hashtags" :class="$style.hashtags" :placeholder="i18n.ts.hashtags" list="hashtags">
@@ -141,6 +146,7 @@ import XPostFormAttaches from '@/components/MkPostFormAttaches.vue';
 import XTextCounter from '@/components/MkPostForm.TextCounter.vue';
 import MkPollEditor from '@/components/MkPollEditor.vue';
 import MkNoteSimple from '@/components/MkNoteSimple.vue';
+import MkCustomEmojiTextPreview from '@/components/MkCustomEmojiTextPreview.vue';
 import MkSwitch from '@/components/MkSwitch.vue';
 import { erase, unique } from '@/utility/array.js';
 import { extractMentions } from '@/utility/extract-mentions.js';
@@ -233,6 +239,8 @@ const imeText = ref('');
 const showingOptions = ref(false);
 const textAreaReadOnly = ref(false);
 const justEndedComposition = ref(false);
+const textPreviewScrollTop = ref(0);
+const textPreviewScrollLeft = ref(0);
 const renoteTargetNote: ShallowRef<PostFormProps['renote'] | null> = shallowRef(props.renote);
 const replyTargetNote: ShallowRef<PostFormProps['reply'] | null> = shallowRef(props.reply);
 const targetChannel = shallowRef(props.channel);
@@ -248,6 +256,9 @@ const effectiveLocalOnly = computed(() => {
 const disableFederationTooltip = computed(() => isLocalOnlyForcedByCwReply.value
 	? i18n.ts.cwReplyRequiredLocalOnly
 	: i18n.ts._visibility.disableFederation);
+const textPreviewStyle = computed(() => ({
+	transform: `translate(${-textPreviewScrollLeft.value}px, ${-textPreviewScrollTop.value}px)`,
+}));
 
 watch(canUseCwReplyRequired, (canUse) => {
 	if (!canUse && cwReplyRequired.value) {
@@ -817,6 +828,13 @@ function onCompositionUpdate(ev: CompositionEvent) {
 function onCompositionEnd(ev: CompositionEvent) {
 	imeText.value = '';
 	justEndedComposition.value = true;
+}
+
+function syncTextPreviewScroll() {
+	if (textareaEl.value == null) return;
+
+	textPreviewScrollTop.value = textareaEl.value.scrollTop;
+	textPreviewScrollLeft.value = textareaEl.value.scrollLeft;
 }
 
 const pastedFileName = 'yyyy-MM-dd HH-mm-ss [{{number}}]';
@@ -1502,6 +1520,7 @@ onMounted(() => {
 
 	if (textareaEl.value) textAutocomplete = new Autocomplete(textareaEl.value, text);
 	if (hashtagsInputEl.value) hashtagAutocomplete = new Autocomplete(hashtagsInputEl.value, hashtags);
+	nextTick(() => syncTextPreviewScroll());
 
 	nextTick(() => {
 		// 書きかけの投稿を復元
@@ -1562,6 +1581,10 @@ onMounted(() => {
 
 		nextTick(() => watchForDraft());
 	});
+});
+
+watch(text, () => {
+	nextTick(() => syncTextPreviewScroll());
 });
 
 onBeforeUnmount(() => {
@@ -1796,7 +1819,8 @@ html[data-color-scheme=light] .preview {
 
 .cw,
 .hashtags,
-.text {
+.text,
+.textPreviewContent {
 	display: block;
 	box-sizing: border-box;
 	padding: 0 24px;
@@ -1879,13 +1903,40 @@ html[data-color-scheme=light] .preview {
 	}
 }
 
+.textPreviewViewport {
+	position: absolute;
+	inset: 0;
+	overflow: hidden;
+	pointer-events: none;
+}
+
+.textPreviewContent {
+	min-height: 100%;
+	color: var(--MI_THEME-fg);
+}
+
 .text {
+	position: relative;
+	z-index: 1;
 	max-width: 100%;
 	min-width: 100%;
 	width: 100%;
 	min-height: 90px;
 	max-height: 500px;
 	field-sizing: content;
+	color: transparent;
+	-webkit-text-fill-color: transparent;
+	caret-color: var(--MI_THEME-fg);
+
+	&::placeholder {
+		color: var(--MI_THEME-fg);
+		opacity: 0.35;
+		-webkit-text-fill-color: currentColor;
+	}
+}
+
+.textPreviewDisabled {
+	opacity: 0.5;
 }
 
 .textCount {
@@ -1976,7 +2027,8 @@ html[data-color-scheme=light] .preview {
 	}
 	.cw,
 	.hashtags,
-	.text {
+	.text,
+	.textPreviewContent {
 		padding: 0 16px;
 	}
 
