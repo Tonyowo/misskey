@@ -2621,6 +2621,10 @@ export interface Locale extends ILocale {
      */
     "cwReplyRequiredLocalOnly": string;
     /**
+     * 公开正文
+     */
+    "publicText": string;
+    /**
      * 隠し内容のタイトル（任意）
      */
     "replyLockedTitle": string;

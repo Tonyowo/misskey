@@ -71,24 +71,33 @@ SPDX-License-Identifier: AGPL-3.0-only
 		</I18n> - <button class="_textButton" @click="cancelSchedule()">{{ i18n.ts.cancel }}</button>
 	</MkInfo>
 	<MkInfo v-if="hasNotSpecifiedMentions" warn :class="$style.hasNotSpecifiedMentions">{{ i18n.ts.notSpecifiedMentionWarning }} - <button class="_textButton" @click="addMissingMention()">{{ i18n.ts.add }}</button></MkInfo>
-	<div v-show="useCw" :class="$style.cwOuter">
+	<div v-if="useCw && !cwReplyRequired" :class="$style.cwOuter">
 		<input ref="cwInputEl" v-model="cw" :class="$style.cw" :placeholder="cwInputPlaceholder" @keydown="onKeydown" @keyup="onKeyup" @compositionend="onCompositionEnd">
 		<div v-if="maxCwTextLength - cwTextLength < 20" :class="['_acrylic', $style.cwTextCount, { [$style.cwTextOver]: cwTextLength > maxCwTextLength }]">{{ maxCwTextLength - cwTextLength }}</div>
 	</div>
 	<div v-if="useCw" :class="$style.cwReplyRequired">
-		<MkSwitch v-model="cwReplyRequired">
-			{{ i18n.ts.cwReplyRequired }}
-		</MkSwitch>
-	</div>
-	<div v-if="useCw && cwReplyRequired" :class="$style.cwReplyRequiredHint">
-		<i class="ti ti-rocket-off"></i>{{ i18n.ts.cwReplyRequiredLocalOnly }}
+		<div :class="$style.cwReplyRequiredCard">
+			<MkSwitch :modelValue="cwReplyRequired" @update:modelValue="onCwReplyRequiredChange">
+				{{ i18n.ts.cwReplyRequired }}
+			</MkSwitch>
+		</div>
+		<div v-if="cwReplyRequired" :class="$style.cwReplyRequiredHint">
+			<i class="ti ti-rocket-off"></i>{{ i18n.ts.cwReplyRequiredLocalOnly }}
+		</div>
 	</div>
 	<div :class="[$style.textOuter, { [$style.withCw]: useCw }]">
+		<div v-if="useCw && cwReplyRequired" :class="$style.fieldLabel">{{ i18n.ts.publicText }}</div>
 		<div v-if="targetChannel" :class="$style.colorBar" :style="{ background: targetChannel.color }"></div>
-		<textarea ref="textareaEl" v-model="text" :class="[$style.text]" :disabled="posting || posted" :readonly="textAreaReadOnly" :placeholder="placeholder" data-cy-post-form-text @keydown="onKeydown" @keyup="onKeyup" @paste="onPaste" @compositionupdate="onCompositionUpdate" @compositionend="onCompositionEnd"></textarea>
+		<textarea ref="textareaEl" v-model="text" :class="[$style.text]" :disabled="posting || posted" :readonly="textAreaReadOnly" :placeholder="textInputPlaceholder" data-cy-post-form-text @keydown="onKeydown" @keyup="onKeyup" @paste="onPaste" @compositionupdate="onCompositionUpdate" @compositionend="onCompositionEnd"></textarea>
 		<div v-if="maxTextLength - textLength < 100" :class="['_acrylic', $style.textCount, { [$style.textOver]: textLength > maxTextLength }]">{{ maxTextLength - textLength }}</div>
 	</div>
+	<div v-if="useCw && cwReplyRequired" :class="$style.cwOuter">
+		<div :class="$style.fieldLabel">{{ i18n.ts.replyLockedTitle }}</div>
+		<input ref="cwInputEl" v-model="cw" :class="$style.cw" :placeholder="cwInputPlaceholder" @keydown="onKeydown" @keyup="onKeyup" @compositionend="onCompositionEnd">
+		<div v-if="maxCwTextLength - cwTextLength < 20" :class="['_acrylic', $style.cwTextCount, { [$style.cwTextOver]: cwTextLength > maxCwTextLength }]">{{ maxCwTextLength - cwTextLength }}</div>
+	</div>
 	<div v-if="useCw && cwReplyRequired" :class="$style.replyLockedOuter">
+		<div :class="$style.fieldLabel">{{ i18n.ts.replyLockedText }}</div>
 		<textarea v-model="replyLockedText" :class="$style.replyLockedText" :disabled="posting || posted" :placeholder="i18n.ts.replyLockedText" @keydown="onKeydown" @keyup="onKeyup" @compositionupdate="onCompositionUpdate" @compositionend="onCompositionEnd"></textarea>
 		<div v-if="maxTextLength - replyLockedTextLength < 100" :class="['_acrylic', $style.replyLockedTextCount, { [$style.textOver]: replyLockedTextLength > maxTextLength }]">{{ maxTextLength - replyLockedTextLength }}</div>
 	</div>
@@ -256,6 +265,17 @@ let textAutocomplete: Autocomplete | null = null;
 let cwAutocomplete: Autocomplete | null = null;
 let hashtagAutocomplete: Autocomplete | null = null;
 
+watch(cwInputEl, (el, oldEl) => {
+	if (oldEl && cwAutocomplete) {
+		cwAutocomplete.detach();
+		cwAutocomplete = null;
+	}
+
+	if (el) {
+		cwAutocomplete = new Autocomplete(el, cw);
+	}
+}, { immediate: true });
+
 const uploader = useUploader({
 	multiple: true,
 });
@@ -304,6 +324,7 @@ const placeholder = computed((): string => {
 });
 
 const cwInputPlaceholder = computed(() => cwReplyRequired.value ? i18n.ts.replyLockedTitle : i18n.ts.annotation);
+const textInputPlaceholder = computed(() => useCw.value && cwReplyRequired.value ? i18n.ts.publicText : placeholder.value);
 
 const submitText = computed((): string => {
 	return scheduledAt.value != null
@@ -513,6 +534,27 @@ function togglePoll() {
 			expiredAfter: null,
 		};
 	}
+}
+
+function onCwReplyRequiredChange(value: boolean) {
+	if (value === cwReplyRequired.value) return;
+
+	const currentText = text.value.trim();
+	const currentReplyLockedText = (replyLockedText.value ?? '').trim();
+
+	if (value) {
+		if (currentReplyLockedText === '' && currentText !== '') {
+			replyLockedText.value = text.value;
+			text.value = '';
+		}
+	} else {
+		if (currentText === '' && currentReplyLockedText !== '') {
+			text.value = replyLockedText.value ?? '';
+			replyLockedText.value = null;
+		}
+	}
+
+	cwReplyRequired.value = value;
 }
 
 function addTag(tag: string) {
@@ -1460,7 +1502,6 @@ onMounted(() => {
 	}
 
 	if (textareaEl.value) textAutocomplete = new Autocomplete(textareaEl.value, text);
-	if (cwInputEl.value) cwAutocomplete = new Autocomplete(cwInputEl.value, cw);
 	if (hashtagsInputEl.value) hashtagAutocomplete = new Autocomplete(hashtagsInputEl.value, hashtags);
 
 	nextTick(() => {
@@ -1752,6 +1793,13 @@ html[data-color-scheme=light] .preview {
 	margin: 0 20px 16px 20px;
 }
 
+.fieldLabel {
+	padding: 0 24px 6px;
+	font-size: 0.88em;
+	font-weight: 600;
+	color: var(--MI_THEME-fgTransparentWeak);
+}
+
 .cw,
 .hashtags,
 .text {
@@ -1782,14 +1830,25 @@ html[data-color-scheme=light] .preview {
 }
 
 .cwReplyRequired {
-	padding: 0 0 8px;
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	padding: 10px 24px 8px;
+}
+
+.cwReplyRequiredCard {
+	padding: 10px 14px;
+	border: 1px solid color-mix(in srgb, var(--MI_THEME-divider) 78%, transparent);
+	border-radius: 14px;
+	background: color-mix(in srgb, var(--MI_THEME-accent) 4%, transparent);
+	box-shadow: 0 1px 0 color-mix(in srgb, var(--MI_THEME-bg) 60%, transparent);
 }
 
 .cwReplyRequiredHint {
 	display: flex;
 	align-items: center;
 	gap: 6px;
-	padding: 0 24px 8px;
+	padding: 0 2px;
 	font-size: 0.9em;
 	color: var(--MI_THEME-warn);
 }
