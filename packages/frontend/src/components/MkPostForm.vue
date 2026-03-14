@@ -78,11 +78,6 @@ SPDX-License-Identifier: AGPL-3.0-only
 	<div v-if="useCw && canUseCwReplyRequired" :class="$style.cwReplyRequired">
 		<MkSwitch :class="$style.cwReplyRequiredSwitch" :modelValue="cwReplyRequired" @update:modelValue="onCwReplyRequiredChange">
 			{{ i18n.ts.cwReplyRequired }}
-			<template #caption>
-				<span v-if="cwReplyRequired" :class="$style.cwReplyRequiredHint">
-					<i class="ti ti-rocket-off"></i>{{ i18n.ts.cwReplyRequiredLocalOnly }}
-				</span>
-			</template>
 		</MkSwitch>
 	</div>
 	<div :class="[$style.textOuter, { [$style.withCw]: useCw }]">
@@ -1828,15 +1823,6 @@ html[data-color-scheme=light] .preview {
 
 .cwReplyRequiredSwitch {
 	align-items: flex-start;
-}
-
-.cwReplyRequiredHint {
-	display: inline-flex;
-	align-items: center;
-	gap: 6px;
-	font-size: 0.9em;
-	line-height: 1.45;
-	color: var(--MI_THEME-warn);
 }
 
 .cw {
