@@ -8720,6 +8720,10 @@ export interface Locale extends ILocale {
          * 控えめに警告
          */
         "quiet": string;
+        /**
+         * 警告を表示しない
+         */
+        "none": string;
     };
     "_channel": {
         /**

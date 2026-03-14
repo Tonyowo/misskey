@@ -2243,6 +2243,7 @@ _serverDisconnectedBehavior:
   reload: "自动重载"
   dialog: "对话框警告"
   quiet: "静默警告"
+  none: "不显示警告"
 _channel:
   create: "创建频道"
   edit: "编辑频道"
