@@ -1947,6 +1947,17 @@ html[data-color-scheme=light] .preview {
 	color: transparent;
 	-webkit-text-fill-color: transparent;
 	caret-color: var(--MI_THEME-fg);
+
+	&::selection {
+		color: transparent;
+		-webkit-text-fill-color: transparent;
+		background-color: color(from var(--MI_THEME-accent) srgb r g b / 0.35);
+	}
+
+	&::-moz-selection {
+		color: transparent;
+		background-color: color(from var(--MI_THEME-accent) srgb r g b / 0.35);
+	}
 }
 
 .textCount {

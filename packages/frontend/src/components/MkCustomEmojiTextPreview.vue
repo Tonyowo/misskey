@@ -7,7 +7,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 <span :class="[$style.root, { [$style.nowrap]: nowrap }]">
 	<template v-for="(segment, index) in segments" :key="`${index}:${segment.type}`">
 		<span v-if="segment.type === 'text'">{{ segment.value }}</span>
-		<span v-else :class="$style.customEmojiSlot">
+		<span v-else :class="[$style.customEmojiSlot, { [$style.longCodeEmojiSlot]: segment.code.length > 12 }]">
 			<span :class="$style.customEmojiGhost">{{ segment.code }}</span>
 			<MkCustomEmoji
 				:name="segment.name"
@@ -115,6 +115,10 @@ const segments = computed<Segment[]>(() => {
 	color: transparent;
 	opacity: 0;
 	user-select: none;
+}
+
+.longCodeEmojiSlot > .customEmojiGhost {
+	letter-spacing: -0.08em;
 }
 
 .customEmoji {
