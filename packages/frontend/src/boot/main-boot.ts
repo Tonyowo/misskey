@@ -11,7 +11,7 @@ import { common } from './common.js';
 import type { Component } from 'vue';
 import type { Keymap } from '@/utility/hotkey.js';
 import { i18n } from '@/i18n.js';
-import { alert, confirm, popup, post } from '@/os.js';
+import { alert, popup, post } from '@/os.js';
 import { useStream } from '@/stream.js';
 import * as sound from '@/utility/sound.js';
 import { $i } from '@/i.js';
@@ -303,22 +303,9 @@ export async function mainBoot() {
 		if (store.s.realtimeMode) {
 			const stream = useStream();
 
-			let reloadDialogShowing = false;
-			stream.on('_disconnected_', async () => {
+			stream.on('_disconnected_', () => {
 				if (prefer.s.serverDisconnectedBehavior === 'reload') {
 					window.location.reload();
-				} else if (prefer.s.serverDisconnectedBehavior === 'dialog') {
-					if (reloadDialogShowing) return;
-					reloadDialogShowing = true;
-					const { canceled } = await confirm({
-						type: 'warning',
-						title: i18n.ts.disconnectedFromServer,
-						text: i18n.ts.reloadConfirm,
-					});
-					reloadDialogShowing = false;
-					if (!canceled) {
-						window.location.reload();
-					}
 				}
 			});
 

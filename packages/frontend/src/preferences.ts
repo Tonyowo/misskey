@@ -100,6 +100,10 @@ const io: StorageProvider = {
 
 export const prefer = new PreferencesManager(io, $i);
 
+if (prefer.s.serverDisconnectedBehavior === 'dialog') {
+	prefer.commit('serverDisconnectedBehavior', 'quiet');
+}
+
 //#region タブ間同期
 let latestPreferencesUpdate: {
 	tabId: string;

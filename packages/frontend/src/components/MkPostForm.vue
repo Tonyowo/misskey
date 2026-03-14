@@ -32,7 +32,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 					<span :class="$style.headerRightButtonText">{{ targetChannel.name }}</span>
 				</button>
 			</template>
-			<button v-if="visibility !== 'specified'" v-tooltip="disableFederationTooltip" class="_button" :class="[$style.headerRightItem, { [$style.danger]: effectiveLocalOnly }]" :disabled="targetChannel != null || isLocalOnlyForcedByCwReply" @click="toggleLocalOnly">
+			<button v-if="visibility !== 'specified'" v-tooltip.top="disableFederationTooltip" class="_button" :class="[$style.headerRightItem, { [$style.danger]: effectiveLocalOnly }]" :disabled="targetChannel != null || isLocalOnlyForcedByCwReply" @click="toggleLocalOnly">
 				<span v-if="!effectiveLocalOnly"><i class="ti ti-rocket"></i></span>
 				<span v-else><i class="ti ti-rocket-off"></i></span>
 			</button>

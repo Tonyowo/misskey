@@ -792,7 +792,6 @@ SPDX-License-Identifier: AGPL-3.0-only
 									v-model="serverDisconnectedBehavior"
 									:items="[
 										{ label: i18n.ts._serverDisconnectedBehavior.reload, value: 'reload' },
-										{ label: i18n.ts._serverDisconnectedBehavior.dialog, value: 'dialog' },
 										{ label: i18n.ts._serverDisconnectedBehavior.quiet, value: 'quiet' },
 									]"
 								>
