@@ -26,9 +26,21 @@ export const packedNoteSchema = {
 			type: 'string',
 			optional: false, nullable: true,
 		},
+		replyLockedText: {
+			type: 'string',
+			optional: true, nullable: true,
+		},
 		cw: {
 			type: 'string',
 			optional: true, nullable: true,
+		},
+		cwReplyRequired: {
+			type: 'boolean',
+			optional: true, nullable: false,
+		},
+		canRevealCw: {
+			type: 'boolean',
+			optional: true, nullable: false,
 		},
 		userId: {
 			type: 'string',

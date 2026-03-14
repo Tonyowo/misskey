@@ -77,6 +77,16 @@ export class MiNote {
 	})
 	public cw: string | null;
 
+	@Column('boolean', {
+		default: false,
+	})
+	public cwReplyRequired: boolean;
+
+	@Column('text', {
+		nullable: true,
+	})
+	public replyLockedText: string | null;
+
 	@Column({
 		...id(),
 		comment: 'The ID of author.',

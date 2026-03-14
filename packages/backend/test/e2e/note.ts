@@ -107,6 +107,63 @@ describe('Note', () => {
 		assert.strictEqual(res.body.createdNote.reply.text, bobPost.text);
 	});
 
+	test('返信可視CWは返信前に隠れ、返信後に見える', async () => {
+		const res = await api('notes/create', {
+			text: 'public body',
+			replyLockedText: 'secret body',
+			cw: 'spoiler',
+			cwReplyRequired: true,
+		}, alice);
+
+		assert.strictEqual(res.status, 200);
+		assert.strictEqual(res.body.createdNote.cwReplyRequired, true);
+		assert.strictEqual(res.body.createdNote.canRevealCw, true);
+
+		const noteId = res.body.createdNote.id;
+		const hiddenForBob = await api('notes/show', {
+			noteId,
+		}, bob);
+
+		assert.strictEqual(hiddenForBob.status, 200);
+		assert.strictEqual(hiddenForBob.body.cw, 'spoiler');
+		assert.strictEqual(hiddenForBob.body.text, 'public body');
+		assert.strictEqual(hiddenForBob.body.replyLockedText, undefined);
+		assert.strictEqual(hiddenForBob.body.cwReplyRequired, true);
+		assert.strictEqual(hiddenForBob.body.canRevealCw, false);
+
+		const replyRes = await api('notes/create', {
+			text: 'I replied',
+			replyId: noteId,
+		}, bob);
+
+		assert.strictEqual(replyRes.status, 200);
+
+		const visibleForBob = await api('notes/show', {
+			noteId,
+		}, bob);
+
+		assert.strictEqual(visibleForBob.status, 200);
+		assert.strictEqual(visibleForBob.body.text, 'public body');
+		assert.strictEqual(visibleForBob.body.replyLockedText, 'secret body');
+		assert.strictEqual(visibleForBob.body.cwReplyRequired, true);
+		assert.strictEqual(visibleForBob.body.canRevealCw, true);
+	});
+
+	test('返信可視CWは自動的にローカルのみにされる', async () => {
+		const res = await api('notes/create', {
+			text: 'public body',
+			replyLockedText: 'secret body',
+			cwReplyRequired: true,
+			localOnly: false,
+		}, alice);
+
+		assert.strictEqual(res.status, 200);
+		assert.strictEqual(res.body.createdNote.localOnly, true);
+
+		const stored = await Notes.findOneByOrFail({ id: res.body.createdNote.id });
+		assert.strictEqual(stored.localOnly, true);
+	});
+
 	test('renoteできる', async () => {
 		const bobPost = await post(bob, {
 			text: 'test',

@@ -6,7 +6,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 <template>
 <div :key="note.id" :class="$style.note">
 	<div class="_panel _gaps_s" :class="$style.content">
-		<div v-if="note.cw != null" :class="$style.richcontent">
+		<div v-if="hasRegularCw" :class="$style.richcontent">
 			<div><Mfm :text="note.cw" :author="note.user"/></div>
 			<MkCwButton v-model="showContent" :text="note.text" :renote="note.renote" :files="note.files" :poll="note.poll" style="margin: 4px 0;"/>
 			<div v-if="showContent">
@@ -20,7 +20,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 			<Mfm v-if="note.text" :text="note.text" :author="note.user"/>
 			<MkA v-if="note.renoteId" class="rp" :to="`/notes/${note.renoteId}`">RN: ...</MkA>
 		</div>
-		<div v-if="note.files && note.files.length > 0 && (note.cw == null || showContent)" :class="$style.richcontent">
+		<MkReplyLockedBlock v-if="note.cwReplyRequired" :class="$style.richcontent" :title="note.cw" :text="note.replyLockedText" :locked="note.canRevealCw === false" :user="note.user" :emojiUrls="note.emojis"/>
+		<div v-if="note.files && note.files.length > 0 && (!hasRegularCw || showContent)" :class="$style.richcontent">
 			<MkMediaList :mediaList="note.files.slice(0, 4)"/>
 		</div>
 		<div v-if="note.reactionCount > 0" :class="$style.reactions">
@@ -31,20 +32,23 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script lang="ts" setup>
-import { ref, useTemplateRef, onUpdated, onMounted } from 'vue';
+import { computed, ref, useTemplateRef, onUpdated, onMounted } from 'vue';
 import * as Misskey from 'misskey-js';
 import MkReactionsViewer from '@/components/MkReactionsViewer.vue';
 import MkMediaList from '@/components/MkMediaList.vue';
 import MkPoll from '@/components/MkPoll.vue';
 import MkCwButton from '@/components/MkCwButton.vue';
+import MkReplyLockedBlock from '@/components/MkReplyLockedBlock.vue';
 
-defineProps<{
+const props = defineProps<{
 	note: Misskey.entities.Note;
 }>();
 
+const note = computed(() => props.note);
 const noteTextEl = useTemplateRef('noteTextEl');
 const shouldCollapse = ref(false);
 const showContent = ref(false);
+const hasRegularCw = computed(() => props.note.cw != null && props.note.cwReplyRequired !== true);
 
 function calcCollapse() {
 	if (noteTextEl.value) {

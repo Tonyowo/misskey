@@ -32,8 +32,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 					<span :class="$style.headerRightButtonText">{{ targetChannel.name }}</span>
 				</button>
 			</template>
-			<button v-if="visibility !== 'specified'" v-tooltip="i18n.ts._visibility.disableFederation" class="_button" :class="[$style.headerRightItem, { [$style.danger]: localOnly }]" :disabled="targetChannel != null" @click="toggleLocalOnly">
-				<span v-if="!localOnly"><i class="ti ti-rocket"></i></span>
+			<button v-if="visibility !== 'specified'" v-tooltip="disableFederationTooltip" class="_button" :class="[$style.headerRightItem, { [$style.danger]: effectiveLocalOnly }]" :disabled="targetChannel != null || isLocalOnlyForcedByCwReply" @click="toggleLocalOnly">
+				<span v-if="!effectiveLocalOnly"><i class="ti ti-rocket"></i></span>
 				<span v-else><i class="ti ti-rocket-off"></i></span>
 			</button>
 			<button ref="otherSettingsButton" v-tooltip="i18n.ts.other" class="_button" :class="$style.headerRightItem" @click="showOtherSettings"><i class="ti ti-dots"></i></button>
@@ -72,13 +72,25 @@ SPDX-License-Identifier: AGPL-3.0-only
 	</MkInfo>
 	<MkInfo v-if="hasNotSpecifiedMentions" warn :class="$style.hasNotSpecifiedMentions">{{ i18n.ts.notSpecifiedMentionWarning }} - <button class="_textButton" @click="addMissingMention()">{{ i18n.ts.add }}</button></MkInfo>
 	<div v-show="useCw" :class="$style.cwOuter">
-		<input ref="cwInputEl" v-model="cw" :class="$style.cw" :placeholder="i18n.ts.annotation" @keydown="onKeydown" @keyup="onKeyup" @compositionend="onCompositionEnd">
+		<input ref="cwInputEl" v-model="cw" :class="$style.cw" :placeholder="cwInputPlaceholder" @keydown="onKeydown" @keyup="onKeyup" @compositionend="onCompositionEnd">
 		<div v-if="maxCwTextLength - cwTextLength < 20" :class="['_acrylic', $style.cwTextCount, { [$style.cwTextOver]: cwTextLength > maxCwTextLength }]">{{ maxCwTextLength - cwTextLength }}</div>
+	</div>
+	<div v-if="useCw" :class="$style.cwReplyRequired">
+		<MkSwitch v-model="cwReplyRequired">
+			{{ i18n.ts.cwReplyRequired }}
+		</MkSwitch>
+	</div>
+	<div v-if="useCw && cwReplyRequired" :class="$style.cwReplyRequiredHint">
+		<i class="ti ti-rocket-off"></i>{{ i18n.ts.cwReplyRequiredLocalOnly }}
 	</div>
 	<div :class="[$style.textOuter, { [$style.withCw]: useCw }]">
 		<div v-if="targetChannel" :class="$style.colorBar" :style="{ background: targetChannel.color }"></div>
 		<textarea ref="textareaEl" v-model="text" :class="[$style.text]" :disabled="posting || posted" :readonly="textAreaReadOnly" :placeholder="placeholder" data-cy-post-form-text @keydown="onKeydown" @keyup="onKeyup" @paste="onPaste" @compositionupdate="onCompositionUpdate" @compositionend="onCompositionEnd"></textarea>
 		<div v-if="maxTextLength - textLength < 100" :class="['_acrylic', $style.textCount, { [$style.textOver]: textLength > maxTextLength }]">{{ maxTextLength - textLength }}</div>
+	</div>
+	<div v-if="useCw && cwReplyRequired" :class="$style.replyLockedOuter">
+		<textarea v-model="replyLockedText" :class="$style.replyLockedText" :disabled="posting || posted" :placeholder="i18n.ts.replyLockedText" @keydown="onKeydown" @keyup="onKeyup" @compositionupdate="onCompositionUpdate" @compositionend="onCompositionEnd"></textarea>
+		<div v-if="maxTextLength - replyLockedTextLength < 100" :class="['_acrylic', $style.replyLockedTextCount, { [$style.textOver]: replyLockedTextLength > maxTextLength }]">{{ maxTextLength - replyLockedTextLength }}</div>
 	</div>
 	<input v-show="withHashtags" ref="hashtagsInputEl" v-model="hashtags" :class="$style.hashtags" :placeholder="i18n.ts.hashtags" list="hashtags">
 	<XPostFormAttaches v-model="files" @detach="detachFile" @changeSensitive="updateFileSensitive" @changeName="updateFileName"/>
@@ -89,7 +101,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 		<MkUploaderItems :items="uploader.items.value" @showMenu="(item, ev) => showPerUploadItemMenu(item, ev)" @showMenuViaContextmenu="(item, ev) => showPerUploadItemMenuViaContextmenu(item, ev)"/>
 	</div>
 	<MkPollEditor v-if="poll" v-model="poll" @destroyed="poll = null"/>
-	<MkNotePreview v-if="showPreview" :class="$style.preview" :text="text" :files="files" :poll="poll ?? undefined" :useCw="useCw" :cw="cw" :user="postAccount ?? $i"/>
+	<MkNotePreview v-if="showPreview" :class="$style.preview" :text="text" :replyLockedText="replyLockedText" :files="files" :poll="poll ?? undefined" :useCw="useCw" :cw="cw" :cwReplyRequired="cwReplyRequired" :user="postAccount ?? $i"/>
 	<div v-if="showingOptions" style="padding: 8px 16px;">
 	</div>
 	<footer ref="footerEl" :class="$style.footer">
@@ -131,6 +143,7 @@ import XPostFormAttaches from '@/components/MkPostFormAttaches.vue';
 import XTextCounter from '@/components/MkPostForm.TextCounter.vue';
 import MkPollEditor from '@/components/MkPollEditor.vue';
 import MkNoteSimple from '@/components/MkNoteSimple.vue';
+import MkSwitch from '@/components/MkSwitch.vue';
 import { erase, unique } from '@/utility/array.js';
 import { extractMentions } from '@/utility/extract-mentions.js';
 import { formatTimeString } from '@/utility/format-time-string.js';
@@ -196,14 +209,16 @@ const submitButtonEl = useTemplateRef('submitButtonEl');
 const posting = ref(false);
 const posted = ref(false);
 const text = ref(props.initialText ?? '');
+const replyLockedText = ref<string | null>(props.initialNote?.replyLockedText ?? null);
 const files = ref(props.initialFiles ?? []);
 const poll = ref<PollEditorModelValue | null>(null);
-const useCw = ref<boolean>(!!props.initialCw);
+const useCw = ref<boolean>(!!props.initialCw || props.initialNote?.cwReplyRequired === true);
 const showPreview = ref(store.s.showPreview);
 watch(showPreview, () => store.set('showPreview', showPreview.value));
 const showAddMfmFunction = ref(prefer.s.enableQuickAddMfmFunction);
 watch(showAddMfmFunction, () => prefer.commit('enableQuickAddMfmFunction', showAddMfmFunction.value));
 const cw = ref<string | null>(props.initialCw ?? null);
+const cwReplyRequired = ref<boolean>(props.initialNote?.cwReplyRequired ?? false);
 const localOnly = ref(props.initialLocalOnly ?? (prefer.s.rememberNoteVisibility ? store.s.localOnly : prefer.s.defaultNoteLocalOnly));
 const visibility = ref(props.initialVisibility ?? (prefer.s.rememberNoteVisibility ? store.s.visibility : prefer.s.defaultNoteVisibility));
 const visibleUsers = ref<Misskey.entities.UserDetailed[]>([]);
@@ -223,6 +238,16 @@ const justEndedComposition = ref(false);
 const renoteTargetNote: ShallowRef<PostFormProps['renote'] | null> = shallowRef(props.renote);
 const replyTargetNote: ShallowRef<PostFormProps['reply'] | null> = shallowRef(props.reply);
 const targetChannel = shallowRef(props.channel);
+const isLocalOnlyForcedByCwReply = computed(() => useCw.value && cwReplyRequired.value);
+const effectiveLocalOnly = computed(() => {
+	if (targetChannel.value != null) return true;
+	if (isLocalOnlyForcedByCwReply.value) return true;
+	if (visibility.value === 'specified') return false;
+	return localOnly.value;
+});
+const disableFederationTooltip = computed(() => isLocalOnlyForcedByCwReply.value
+	? i18n.ts.cwReplyRequiredLocalOnly
+	: i18n.ts._visibility.disableFederation);
 
 const serverDraftId = ref<string | null>(null);
 const postFormActions = getPluginHandlers('post_form_action');
@@ -278,6 +303,8 @@ const placeholder = computed((): string => {
 	}
 });
 
+const cwInputPlaceholder = computed(() => cwReplyRequired.value ? i18n.ts.replyLockedTitle : i18n.ts.annotation);
+
 const submitText = computed((): string => {
 	return scheduledAt.value != null
 		? i18n.ts.schedule
@@ -296,6 +323,11 @@ const textLength = computed((): number => {
 	return (text.value + imeText.value).length;
 });
 
+const replyLockedTextLength = computed((): number => {
+	return (replyLockedText.value ?? '').length;
+});
+const activeReplyLockedTextLength = computed(() => useCw.value && cwReplyRequired.value ? replyLockedTextLength.value : 0);
+
 const maxTextLength = computed((): number => {
 	return instance ? instance.maxNoteTextLength : 1000;
 });
@@ -310,6 +342,7 @@ const canPost = computed((): boolean => {
 	return !props.mock && !posting.value && !posted.value && !uploader.uploading.value && (uploader.items.value.length === 0 || uploader.readyForUpload.value) &&
 		(
 			1 <= textLength.value ||
+			1 <= activeReplyLockedTextLength.value ||
 			1 <= files.value.length ||
 			1 <= uploader.items.value.length ||
 			poll.value != null ||
@@ -317,12 +350,13 @@ const canPost = computed((): boolean => {
 			quoteId.value != null
 		) &&
 		(textLength.value <= maxTextLength.value) &&
+		(activeReplyLockedTextLength.value <= maxTextLength.value) &&
 		(
-			useCw.value ?
-				(
-					cw.value != null && cw.value.trim() !== '' &&
-					cwTextLength.value <= maxCwTextLength
-				) : true
+			useCw.value
+				? cwReplyRequired.value
+					? cwTextLength.value <= maxCwTextLength && replyLockedText.value != null && replyLockedText.value.trim() !== ''
+					: cw.value != null && cw.value.trim() !== '' && cwTextLength.value <= maxCwTextLength
+				: true
 		) &&
 		(files.value.length <= 16) &&
 		(!poll.value || poll.value.choices.length >= 2);
@@ -330,7 +364,7 @@ const canPost = computed((): boolean => {
 
 // cannot save pure renote as draft
 const canSaveAsServerDraft = computed((): boolean => {
-	return canPost.value && (textLength.value > 0 || files.value.length > 0 || poll.value != null);
+	return canPost.value && (textLength.value > 0 || activeReplyLockedTextLength.value > 0 || files.value.length > 0 || poll.value != null);
 });
 
 const withHashtags = store.model('postFormWithHashtags');
@@ -429,8 +463,10 @@ if (prefer.s.keepCw && replyTargetNote.value && replyTargetNote.value.cw) {
 
 function watchForDraft() {
 	watch(text, () => saveDraft());
+	watch(replyLockedText, () => saveDraft());
 	watch(useCw, () => saveDraft());
 	watch(cw, () => saveDraft());
+	watch(cwReplyRequired, () => saveDraft());
 	watch(poll, () => saveDraft());
 	watch(files, () => saveDraft(), { deep: true });
 	watch(visibility, () => saveDraft());
@@ -714,6 +750,7 @@ function removeVisibleUser(id: string) {
 
 function clear() {
 	text.value = '';
+	replyLockedText.value = null;
 	cw.value = null;
 	files.value = [];
 	poll.value = null;
@@ -865,8 +902,10 @@ type StoredDrafts = {
 		updatedAt: string;
 		data: {
 			text: string;
+			replyLockedText: string | null;
 			useCw: boolean;
 			cw: string | null;
+			cwReplyRequired: boolean;
 			visibility: 'public' | 'home' | 'followers' | 'specified';
 			localOnly: boolean;
 			files: Misskey.entities.DriveFile[];
@@ -888,10 +927,12 @@ function saveDraft() {
 		updatedAt: new Date().toISOString(),
 		data: {
 			text: text.value,
+			replyLockedText: useCw.value && cwReplyRequired.value ? replyLockedText.value : null,
 			useCw: useCw.value,
 			cw: cw.value,
+			cwReplyRequired: useCw.value ? cwReplyRequired.value : false,
 			visibility: visibility.value,
-			localOnly: localOnly.value,
+			localOnly: effectiveLocalOnly.value,
 			files: files.value,
 			poll: poll.value,
 			...( visibleUsers.value.length > 0 ? { visibleUserIds: visibleUsers.value.map(x => x.id) } : {}),
@@ -918,9 +959,11 @@ async function saveServerDraft(options: {
 	return await os.apiWithDialog(serverDraftId.value == null ? 'notes/drafts/create' : 'notes/drafts/update', {
 		...(serverDraftId.value == null ? {} : { draftId: serverDraftId.value }),
 		text: text.value,
+		replyLockedText: useCw.value && cwReplyRequired.value ? replyLockedText.value || null : null,
 		cw: useCw.value ? cw.value || null : null,
+		cwReplyRequired: useCw.value ? cwReplyRequired.value : false,
 		visibility: visibility.value,
-		localOnly: localOnly.value,
+		localOnly: effectiveLocalOnly.value,
 		hashtag: hashtags.value,
 		fileIds: files.value.map(f => f.id),
 		poll: poll.value,
@@ -1020,13 +1063,15 @@ async function post(ev?: PointerEvent) {
 
 	let postData = {
 		text: text.value === '' ? null : text.value,
+		replyLockedText: useCw.value && cwReplyRequired.value ? replyLockedText.value || null : null,
 		fileIds: files.value.length > 0 ? files.value.map(f => f.id) : undefined,
 		replyId: replyTargetNote.value ? replyTargetNote.value.id : undefined,
 		renoteId: renoteTargetNote.value ? renoteTargetNote.value.id : quoteId.value ? quoteId.value : undefined,
 		channelId: targetChannel.value ? targetChannel.value.id : undefined,
 		poll: poll.value,
-		cw: useCw.value ? cw.value ?? '' : null,
-		localOnly: visibility.value === 'specified' ? false : localOnly.value,
+		cw: useCw.value ? cw.value || null : null,
+		cwReplyRequired: useCw.value ? cwReplyRequired.value : false,
+		localOnly: effectiveLocalOnly.value,
 		visibility: visibility.value,
 		visibleUserIds: visibility.value === 'specified' ? visibleUsers.value.map(u => u.id) : undefined,
 		reactionAcceptance: reactionAcceptance.value,
@@ -1164,7 +1209,7 @@ function cancel() {
 }
 
 function insertMention() {
-	os.selectUser({ localOnly: localOnly.value, includeSelf: true }).then(user => {
+	os.selectUser({ localOnly: effectiveLocalOnly.value, includeSelf: true }).then(user => {
 		if (textareaEl.value == null) return;
 		insertTextAtCursor(textareaEl.value, '@' + Misskey.acct.toString(user) + ' ');
 	});
@@ -1259,8 +1304,10 @@ async function openAccountMenu(ev: PointerEvent) {
 		}, {
 			restore: async (draft: Misskey.entities.NoteDraft) => {
 				text.value = draft.text ?? '';
-				useCw.value = draft.cw != null;
+				replyLockedText.value = draft.replyLockedText ?? null;
+				useCw.value = draft.cw != null || draft.cwReplyRequired === true;
 				cw.value = draft.cw ?? null;
+				cwReplyRequired.value = draft.cwReplyRequired ?? false;
 				visibility.value = draft.visibility;
 				localOnly.value = draft.localOnly ?? false;
 				files.value = draft.files ?? [];
@@ -1422,8 +1469,10 @@ onMounted(() => {
 			const draft = JSON.parse(miLocalStorage.getItem('drafts') ?? '{}')[draftKey.value] as StoredDrafts[string] | undefined;
 			if (draft != null) {
 				text.value = draft.data.text;
-				useCw.value = draft.data.useCw;
+				replyLockedText.value = draft.data.replyLockedText ?? null;
+				useCw.value = draft.data.useCw || draft.data.cwReplyRequired === true;
 				cw.value = draft.data.cw;
+				cwReplyRequired.value = draft.data.cwReplyRequired ?? false;
 				visibility.value = draft.data.visibility;
 				localOnly.value = draft.data.localOnly;
 				files.value = (draft.data.files || []).filter(draftFile => draftFile);
@@ -1445,8 +1494,10 @@ onMounted(() => {
 		if (props.initialNote) {
 			const init = props.initialNote;
 			text.value = init.text ? init.text : '';
-			useCw.value = init.cw != null;
+			replyLockedText.value = init.replyLockedText ?? null;
+			useCw.value = init.cw != null || init.cwReplyRequired === true;
 			cw.value = init.cw ?? null;
+			cwReplyRequired.value = init.cwReplyRequired ?? false;
 			visibility.value = init.visibility;
 			localOnly.value = init.localOnly ?? false;
 			files.value = init.files ?? [];
@@ -1730,6 +1781,19 @@ html[data-color-scheme=light] .preview {
 	position: relative;
 }
 
+.cwReplyRequired {
+	padding: 0 0 8px;
+}
+
+.cwReplyRequiredHint {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 0 24px 8px;
+	font-size: 0.9em;
+	color: var(--MI_THEME-warn);
+}
+
 .cw {
 	z-index: 1;
 	padding-bottom: 8px;
@@ -1758,6 +1822,53 @@ html[data-color-scheme=light] .preview {
 	padding-top: 8px;
 	padding-bottom: 8px;
 	border-top: solid 0.5px var(--MI_THEME-divider);
+}
+
+.replyLockedOuter {
+	width: 100%;
+	position: relative;
+	border-top: solid 0.5px var(--MI_THEME-divider);
+}
+
+.replyLockedText {
+	display: block;
+	box-sizing: border-box;
+	padding: 12px 24px;
+	margin: 0;
+	width: 100%;
+	min-height: 120px;
+	font-size: 110%;
+	border: none;
+	border-radius: 0;
+	background: color-mix(in srgb, var(--MI_THEME-accent) 4%, transparent);
+	color: var(--MI_THEME-fg);
+	font-family: inherit;
+	resize: vertical;
+
+	&:focus {
+		outline: none;
+	}
+
+	&:disabled {
+		opacity: 0.5;
+	}
+}
+
+.replyLockedTextCount {
+	position: absolute;
+	top: 8px;
+	right: 2px;
+	padding: 2px 6px;
+	font-size: .9em;
+	color: var(--MI_THEME-warn);
+	border-radius: 6px;
+	max-width: 100%;
+	min-width: 1.6em;
+	text-align: center;
+
+	&.textOver {
+		color: #ff2a2a;
+	}
 }
 
 .textOuter {

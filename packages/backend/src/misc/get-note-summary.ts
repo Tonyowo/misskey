@@ -21,10 +21,10 @@ export const getNoteSummary = (note: Packed<'Note'>): string => {
 	let summary = '';
 
 	// 本文
-	if (note.cw != null) {
+	if (note.cw != null && !note.cwReplyRequired) {
 		summary += note.cw;
 	} else {
-		summary += note.text ? note.text : '';
+		summary += note.text ? note.text : note.cw ? note.cw : note.replyLockedText ? note.replyLockedText : '';
 	}
 
 	// ファイルが添付されているとき

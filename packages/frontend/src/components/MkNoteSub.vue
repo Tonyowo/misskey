@@ -14,12 +14,16 @@ SPDX-License-Identifier: AGPL-3.0-only
 		<div :class="$style.body">
 			<MkNoteHeader :class="$style.header" :note="note" :mini="true"/>
 			<div>
-				<p v-if="note.cw != null" :class="$style.cw">
+				<p v-if="hasRegularCw" :class="$style.cw">
 					<Mfm v-if="note.cw != ''" style="margin-right: 8px;" :text="note.cw" :author="note.user" :nyaize="'respect'"/>
-					<MkCwButton v-model="showContent" :text="note.text" :files="note.files" :poll="note.poll"/>
+					<MkCwButton v-if="!isCwReplyLocked" v-model="showContent" :text="note.text" :files="note.files" :poll="note.poll"/>
+					<div v-else style="margin-top: 4px; opacity: 0.8; font-size: 0.9em;">
+						<i class="ti ti-lock" style="margin-right: 4px;"></i>{{ i18n.ts.replyToSeeCw }}
+					</div>
 				</p>
-				<div v-show="note.cw == null || showContent">
+				<div v-show="!hasRegularCw || (!isCwReplyLocked && showContent)">
 					<MkSubNoteContent :class="$style.text" :note="note"/>
+					<MkReplyLockedBlock v-if="note.cwReplyRequired" :title="note.cw" :text="note.replyLockedText" :locked="isCwReplyLocked" :user="note.user" :emojiUrls="note.emojis"/>
 				</div>
 			</div>
 		</div>
@@ -43,11 +47,12 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script lang="ts" setup>
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import * as Misskey from 'misskey-js';
 import MkNoteHeader from '@/components/MkNoteHeader.vue';
 import MkSubNoteContent from '@/components/MkSubNoteContent.vue';
 import MkCwButton from '@/components/MkCwButton.vue';
+import MkReplyLockedBlock from '@/components/MkReplyLockedBlock.vue';
 import { notePage } from '@/filters/note.js';
 import { misskeyApi } from '@/utility/misskey-api.js';
 import { i18n } from '@/i18n.js';
@@ -68,6 +73,8 @@ const props = withDefaults(defineProps<{
 const muted = ref(props.note && $i ? checkWordMute(props.note, $i, $i.mutedWords) : false);
 
 const showContent = ref(false);
+const isCwReplyLocked = computed(() => props.note?.cwReplyRequired === true && props.note?.canRevealCw === false);
+const hasRegularCw = computed(() => props.note?.cw != null && props.note?.cwReplyRequired !== true);
 const replies = ref<Misskey.entities.Note[]>([]);
 
 if (props.detail && props.note) {

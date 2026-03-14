@@ -59,6 +59,16 @@ export class MiNoteDraft {
 	})
 	public cw: string | null;
 
+	@Column('boolean', {
+		default: false,
+	})
+	public cwReplyRequired: boolean;
+
+	@Column('text', {
+		nullable: true,
+	})
+	public replyLockedText: string | null;
+
 	@Index('IDX_NOTE_DRAFT_USER_ID')
 	@Column({
 		...id(),

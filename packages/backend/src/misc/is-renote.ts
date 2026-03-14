@@ -17,6 +17,8 @@ type Quote =
 	Renote & ({
 		text: NonNullable<MiNote['text']>
 	} | {
+		replyLockedText: NonNullable<MiNote['replyLockedText']>
+	} | {
 		cw: NonNullable<MiNote['cw']>
 	} | {
 		replyId: NonNullable<MiNote['replyId']>
@@ -32,6 +34,7 @@ export function isRenote(note: MiNote): note is Renote {
 export function isQuote(note: Renote): note is Quote {
 	// NOTE: SYNC WITH NoteCreateService.isQuote
 	return note.text != null ||
+		note.replyLockedText != null ||
 		note.cw != null ||
 		note.replyId != null ||
 		note.hasPoll ||
@@ -46,6 +49,8 @@ type PackedRenote =
 type PackedQuote =
 	PackedRenote & ({
 		text: NonNullable<Packed<'Note'>['text']>
+	} | {
+		replyLockedText: NonNullable<Packed<'Note'>['replyLockedText']>
 	} | {
 		cw: NonNullable<Packed<'Note'>['cw']>
 	} | {
@@ -62,6 +67,7 @@ export function isRenotePacked(note: Packed<'Note'>): note is PackedRenote {
 
 export function isQuotePacked(note: PackedRenote): note is PackedQuote {
 	return note.text != null ||
+		note.replyLockedText != null ||
 		note.cw != null ||
 		note.replyId != null ||
 		note.poll != null ||

@@ -4409,7 +4409,10 @@ export type components = {
             /** Format: date-time */
             deletedAt?: string | null;
             text: string | null;
+            replyLockedText?: string | null;
             cw?: string | null;
+            cwReplyRequired?: boolean;
+            canRevealCw?: boolean;
             /** Format: id */
             userId: string;
             user: components['schemas']['UserLite'];
@@ -4487,7 +4490,9 @@ export type components = {
             /** Format: date-time */
             createdAt: string;
             text: string | null;
+            replyLockedText: string | null;
             cw: string | null;
+            cwReplyRequired: boolean;
             /** Format: id */
             userId: string;
             user: components['schemas']['UserLite'];
@@ -29221,7 +29226,10 @@ export interface operations {
                      */
                     visibility?: 'public' | 'home' | 'followers' | 'specified';
                     visibleUserIds?: string[];
+                    replyLockedText?: string | null;
                     cw?: string | null;
+                    /** @default false */
+                    cwReplyRequired?: boolean;
                     /** @default false */
                     localOnly?: boolean;
                     /**
@@ -29461,7 +29469,10 @@ export interface operations {
                      */
                     visibility?: 'public' | 'home' | 'followers' | 'specified';
                     visibleUserIds?: string[];
+                    replyLockedText?: string | null;
                     cw?: string | null;
+                    /** @default false */
+                    cwReplyRequired?: boolean;
                     hashtag?: string | null;
                     /** @default false */
                     localOnly?: boolean;
@@ -29703,7 +29714,9 @@ export interface operations {
                     /** @enum {string} */
                     visibility?: 'public' | 'home' | 'followers' | 'specified';
                     visibleUserIds?: string[];
+                    replyLockedText?: string | null;
                     cw?: string | null;
+                    cwReplyRequired?: boolean;
                     hashtag?: string | null;
                     localOnly?: boolean;
                     /** @enum {string|null} */
@@ -36896,4 +36909,3 @@ export interface operations {
         };
     };
 }
-

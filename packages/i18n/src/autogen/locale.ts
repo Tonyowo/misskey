@@ -2613,6 +2613,26 @@ export interface Locale extends ILocale {
      */
     "useCw": string;
     /**
+     * 返信した人だけに表示
+     */
+    "cwReplyRequired": string;
+    /**
+     * 返信可視の内容はローカルのみに投稿され、リモートには連合されません
+     */
+    "cwReplyRequiredLocalOnly": string;
+    /**
+     * 隠し内容のタイトル（任意）
+     */
+    "replyLockedTitle": string;
+    /**
+     * 返信後に表示する内容
+     */
+    "replyLockedText": string;
+    /**
+     * このノートに返信すると隠し内容を表示できます
+     */
+    "replyToSeeCw": string;
+    /**
      * プレイヤーを開く
      */
     "enablePlayer": string;

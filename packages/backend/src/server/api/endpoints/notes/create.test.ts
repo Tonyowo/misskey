@@ -61,6 +61,16 @@ describe('api:notes/create', () => {
 					.toBe(VALID);
 			});
 
+			test('cw with reply-required reveal', () => {
+				expect(v({ text: 'Public body', replyLockedText: 'Hidden body', cw: 'Spoiler', cwReplyRequired: true }))
+					.toBe(VALID);
+			});
+
+			test('reply-required reveal without title', () => {
+				expect(v({ replyLockedText: 'Hidden body', cwReplyRequired: true }))
+					.toBe(VALID);
+			});
+
 			test('null cw', () => {
 				expect(v({ text: 'Body', cw: null }))
 					.toBe(VALID);
