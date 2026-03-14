@@ -87,10 +87,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 	</div>
 	<div :class="[$style.textOuter, { [$style.withCw]: useCw }]">
 		<div v-if="targetChannel" :class="$style.colorBar" :style="{ background: targetChannel.color }"></div>
-		<div v-if="showCustomEmojiPreview" :class="$style.textPreview" aria-hidden="true">
-			<MkCustomEmojiTextPreview :class="$style.textPreviewContent" :style="textPreviewStyle" :text="text"/>
-		</div>
-		<textarea ref="textareaEl" v-model="text" :class="[$style.text, { [$style.textWithCustomEmojiPreview]: showCustomEmojiPreview }]" :disabled="posting || posted" :readonly="textAreaReadOnly" :placeholder="placeholder" data-cy-post-form-text @scroll="syncTextPreviewScroll" @keydown="onKeydown" @keyup="onKeyup" @paste="onPaste" @compositionstart="onTextCompositionStart" @compositionupdate="onCompositionUpdate" @compositionend="onTextCompositionEnd"></textarea>
+		<textarea ref="textareaEl" v-model="text" :class="[$style.text]" :disabled="posting || posted" :readonly="textAreaReadOnly" :placeholder="placeholder" data-cy-post-form-text @keydown="onKeydown" @keyup="onKeyup" @paste="onPaste" @compositionupdate="onCompositionUpdate" @compositionend="onCompositionEnd"></textarea>
 		<div v-if="maxTextLength - textLength < 100" :class="['_acrylic', $style.textCount, { [$style.textOver]: textLength > maxTextLength }]">{{ maxTextLength - textLength }}</div>
 	</div>
 	<input v-show="withHashtags" ref="hashtagsInputEl" v-model="hashtags" :class="$style.hashtags" :placeholder="i18n.ts.hashtags" list="hashtags">
@@ -142,7 +139,6 @@ import type { UploaderItem } from '@/composables/use-uploader.js';
 import MkNotePreview from '@/components/MkNotePreview.vue';
 import XPostFormAttaches from '@/components/MkPostFormAttaches.vue';
 import XTextCounter from '@/components/MkPostForm.TextCounter.vue';
-import MkCustomEmojiTextPreview from '@/components/MkCustomEmojiTextPreview.vue';
 import MkPollEditor from '@/components/MkPollEditor.vue';
 import MkNoteSimple from '@/components/MkNoteSimple.vue';
 import MkSwitch from '@/components/MkSwitch.vue';
@@ -237,7 +233,6 @@ const imeText = ref('');
 const showingOptions = ref(false);
 const textAreaReadOnly = ref(false);
 const justEndedComposition = ref(false);
-const textCompositionActive = ref(false);
 const renoteTargetNote: ShallowRef<PostFormProps['renote'] | null> = shallowRef(props.renote);
 const replyTargetNote: ShallowRef<PostFormProps['reply'] | null> = shallowRef(props.reply);
 const targetChannel = shallowRef(props.channel);
@@ -266,14 +261,6 @@ const postFormActions = getPluginHandlers('post_form_action');
 let textAutocomplete: Autocomplete | null = null;
 let cwAutocomplete: Autocomplete | null = null;
 let hashtagAutocomplete: Autocomplete | null = null;
-const customEmojiPreviewRegex = /:([a-zA-Z0-9_+\-]+(?:@[a-zA-Z0-9.\-]+)?):/;
-const textPreviewScrollTop = ref(0);
-const textPreviewScrollLeft = ref(0);
-
-const showCustomEmojiPreview = computed(() => !textCompositionActive.value && text.value !== '' && customEmojiPreviewRegex.test(text.value));
-const textPreviewStyle = computed(() => ({
-	transform: `translate(${-textPreviewScrollLeft.value}px, ${-textPreviewScrollTop.value}px)`,
-}));
 
 watch(cwInputEl, (el, oldEl) => {
 	if (oldEl && cwAutocomplete) {
@@ -393,16 +380,7 @@ const hashtags = store.model('postFormHashtags');
 
 watch(text, () => {
 	checkMissingMention();
-	nextTick(() => {
-		syncTextPreviewScroll();
-	});
 }, { immediate: true });
-
-watch(showCustomEmojiPreview, () => {
-	nextTick(() => {
-		syncTextPreviewScroll();
-	});
-});
 
 watch(visibility, () => {
 	checkMissingMention();
@@ -587,12 +565,6 @@ function focus() {
 		textareaEl.value.focus();
 		textareaEl.value.setSelectionRange(textareaEl.value.value.length, textareaEl.value.value.length);
 	}
-}
-
-function syncTextPreviewScroll() {
-	if (textareaEl.value == null) return;
-	textPreviewScrollTop.value = textareaEl.value.scrollTop;
-	textPreviewScrollLeft.value = textareaEl.value.scrollLeft;
 }
 
 function chooseFileFromPc(ev: PointerEvent) {
@@ -842,19 +814,9 @@ function onCompositionUpdate(ev: CompositionEvent) {
 	imeText.value = ev.data;
 }
 
-function onTextCompositionStart() {
-	textCompositionActive.value = true;
-	justEndedComposition.value = false;
-}
-
 function onCompositionEnd(ev: CompositionEvent) {
 	imeText.value = '';
 	justEndedComposition.value = true;
-}
-
-function onTextCompositionEnd(ev: CompositionEvent) {
-	textCompositionActive.value = false;
-	onCompositionEnd(ev);
 }
 
 const pastedFileName = 'yyyy-MM-dd HH-mm-ss [{{number}}]';
@@ -1534,7 +1496,6 @@ onMounted(() => {
 
 		nextTick(() => {
 			focus();
-			syncTextPreviewScroll();
 		});
 	}
 
@@ -1599,7 +1560,6 @@ onMounted(() => {
 		}
 
 		nextTick(() => watchForDraft());
-		nextTick(() => syncTextPreviewScroll());
 	});
 });
 
@@ -1835,15 +1795,13 @@ html[data-color-scheme=light] .preview {
 
 .cw,
 .hashtags,
-.text,
-.textPreviewContent {
+.text {
 	display: block;
 	box-sizing: border-box;
 	padding: 0 24px;
 	margin: 0;
 	width: 100%;
 	font-size: 110%;
-	line-height: 1.5;
 	border: none;
 	border-radius: 0;
 	background: transparent;
@@ -1920,43 +1878,13 @@ html[data-color-scheme=light] .preview {
 	}
 }
 
-.textPreview {
-	position: absolute;
-	inset: 0;
-	overflow: hidden;
-	pointer-events: none;
-}
-
 .text {
-	position: relative;
-	z-index: 1;
 	max-width: 100%;
 	min-width: 100%;
 	width: 100%;
 	min-height: 90px;
 	max-height: 500px;
 	field-sizing: content;
-}
-
-.textPreviewContent {
-	min-height: 90px;
-}
-
-.textWithCustomEmojiPreview {
-	color: transparent;
-	-webkit-text-fill-color: transparent;
-	caret-color: var(--MI_THEME-fg);
-
-	&::selection {
-		color: transparent;
-		-webkit-text-fill-color: transparent;
-		background-color: color(from var(--MI_THEME-accent) srgb r g b / 0.35);
-	}
-
-	&::-moz-selection {
-		color: transparent;
-		background-color: color(from var(--MI_THEME-accent) srgb r g b / 0.35);
-	}
 }
 
 .textCount {
@@ -2047,8 +1975,7 @@ html[data-color-scheme=light] .preview {
 	}
 	.cw,
 	.hashtags,
-	.text,
-	.textPreviewContent {
+	.text {
 		padding: 0 16px;
 	}
 
