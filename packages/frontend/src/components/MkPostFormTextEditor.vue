@@ -60,6 +60,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 <script lang="ts" setup>
 import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, useAttrs, useTemplateRef, watch } from 'vue';
+import * as mfm from 'mfm-js';
 import { toASCII } from 'punycode.js';
 import type { Ref } from 'vue';
 import type { CompleteInfo } from '@/components/MkAutocomplete.vue';
@@ -121,7 +122,6 @@ const text = ref(props.modelValue ?? '');
 const focused = ref(false);
 const isComposing = ref(false);
 const lastSelection = ref<SelectionRange>({ start: text.value.length, end: text.value.length });
-const customEmojiRegex = /:([a-zA-Z0-9_+\-]+(?:@[a-zA-Z0-9.\-]+)?):/g;
 
 let currentAutocompleteType: keyof CompleteInfo | undefined;
 let autocompleteOpening = false;
@@ -137,52 +137,89 @@ const segments = computed<Segment[]>(() => {
 	if (value === '') return [];
 
 	const result: Segment[] = [];
-	let lastIndex = 0;
+	let currentText = '';
+	let cursor = 0;
+	let tokens: ReturnType<typeof mfm.parseSimple>;
 
-	for (const match of value.matchAll(customEmojiRegex)) {
-		const matchIndex = match.index ?? -1;
-		if (matchIndex < 0) continue;
-
-		if (matchIndex > lastIndex) {
-			result.push({
-				type: 'text',
-				value: value.slice(lastIndex, matchIndex),
-				start: lastIndex,
-				end: matchIndex,
-			});
-		}
-
-		const emojiName = match[1];
-		if (!emojiName.includes('@') && !customEmojisMap.has(emojiName)) {
-			result.push({
-				type: 'text',
-				value: match[0],
-				start: matchIndex,
-				end: matchIndex + match[0].length,
-			});
-			lastIndex = matchIndex + match[0].length;
-			continue;
-		}
-
-		result.push({
-			type: 'customEmoji',
-			name: emojiName,
-			code: match[0],
-			start: matchIndex,
-			end: matchIndex + match[0].length,
-		});
-
-		lastIndex = matchIndex + match[0].length;
+	try {
+		tokens = mfm.parseSimple(value);
+	} catch {
+		return [{
+			type: 'text',
+			value,
+			start: 0,
+			end: value.length,
+		}];
 	}
 
-	if (lastIndex < value.length) {
+	const flushText = () => {
+		if (currentText === '') return;
 		result.push({
 			type: 'text',
-			value: value.slice(lastIndex),
-			start: lastIndex,
-			end: value.length,
+			value: currentText,
+			start: cursor,
+			end: cursor + currentText.length,
 		});
+		cursor += currentText.length;
+		currentText = '';
+	};
+
+	const appendText = (chunk: string) => {
+		if (chunk === '') return;
+		currentText += chunk;
+	};
+
+	for (const token of tokens) {
+		switch (token.type) {
+			case 'text': {
+				appendText(token.props.text);
+				break;
+			}
+
+			case 'unicodeEmoji': {
+				appendText(token.props.emoji);
+				break;
+			}
+
+			case 'mention': {
+				appendText(`@${token.props.username}${token.props.host ? `@${toASCII(token.props.host)}` : ''}`);
+				break;
+			}
+
+			case 'hashtag': {
+				appendText(`#${token.props.hashtag}`);
+				break;
+			}
+
+			case 'url': {
+				appendText(token.props.url);
+				break;
+			}
+
+			case 'emojiCode': {
+				const emojiName = token.props.name;
+				const emojiCode = `:${emojiName}:`;
+
+				if (!emojiName.includes('@') && !customEmojisMap.has(emojiName)) {
+					appendText(emojiCode);
+					break;
+				}
+
+				flushText();
+				result.push({
+					type: 'customEmoji',
+					name: emojiName,
+					code: emojiCode,
+					start: cursor,
+					end: cursor + emojiCode.length,
+				});
+				cursor += emojiCode.length;
+				break;
+			}
+		}
 	}
+
+	flushText();
 
 	return result;
 });
