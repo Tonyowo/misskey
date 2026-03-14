@@ -62,7 +62,7 @@ describe('api:notes/create', () => {
 			});
 
 			test('cw with reply-required reveal', () => {
-				expect(v({ text: 'Public body', replyLockedText: 'Hidden body', cw: 'Spoiler', cwReplyRequired: true }))
+				expect(v({ text: 'Hidden body', cw: 'Spoiler', cwReplyRequired: true }))
 					.toBe(VALID);
 			});
 

@@ -77,7 +77,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 				</div>
 			</header>
 			<div :class="$style.noteContent">
-				<p v-if="hasRegularCw" :class="$style.cw">
+				<p v-if="hasCw" :class="$style.cw">
 					<Mfm
 						v-if="appearNote.cw != ''"
 						:text="appearNote.cw"
@@ -91,7 +91,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 						<i class="ti ti-lock" style="margin-right: 4px;"></i>{{ i18n.ts.replyToSeeCw }}
 					</div>
 				</p>
-				<div v-show="!hasRegularCw || (!isCwReplyLocked && showContent)">
+				<div v-show="!hasCw || (!isCwReplyLocked && showContent)">
 					<span v-if="appearNote.isHidden" style="opacity: 0.5">({{ i18n.ts.private }})</span>
 					<MkA v-if="appearNote.replyId" :class="$style.noteReplyTarget" :to="`/notes/${appearNote.replyId}`"><i class="ti ti-arrow-back-up"></i></MkA>
 					<Mfm
@@ -113,17 +113,6 @@ SPDX-License-Identifier: AGPL-3.0-only
 							<Mfm :text="translation.text" :author="appearNote.user" :nyaize="'respect'" :emojiUrls="appearNote.emojis" class="_selectable"/>
 							</div>
 						</div>
-					<MkReplyLockedBlock
-						v-if="appearNote.cwReplyRequired"
-						:title="appearNote.cw"
-						:text="appearNote.replyLockedText"
-						:locked="isCwReplyLocked"
-						:user="appearNote.user"
-						:emojiUrls="appearNote.emojis"
-						:selectable="true"
-						:enableEmojiMenu="true"
-						:enableEmojiMenuReaction="true"
-					/>
 					<div v-if="appearNote.files && appearNote.files.length > 0">
 						<MkMediaList ref="galleryEl" :mediaList="appearNote.files"/>
 					</div>
@@ -259,7 +248,6 @@ import MkReactionsViewerDetails from '@/components/MkReactionsViewer.details.vue
 import MkMediaList from '@/components/MkMediaList.vue';
 import MkCwButton from '@/components/MkCwButton.vue';
 import MkPoll from '@/components/MkPoll.vue';
-import MkReplyLockedBlock from '@/components/MkReplyLockedBlock.vue';
 import MkUsersTooltip from '@/components/MkUsersTooltip.vue';
 import MkUrlPreview from '@/components/MkUrlPreview.vue';
 import MkInstanceTicker from '@/components/MkInstanceTicker.vue';
@@ -351,7 +339,7 @@ const conversation = ref<Misskey.entities.Note[]>([]);
 const replies = ref<Misskey.entities.Note[]>([]);
 const canRenote = computed(() => ['public', 'home'].includes(appearNote.visibility) || appearNote.userId === $i?.id);
 const isCwReplyLocked = computed(() => appearNote.cwReplyRequired === true && appearNote.canRevealCw === false);
-const hasRegularCw = computed(() => appearNote.cw != null && appearNote.cwReplyRequired !== true);
+const hasCw = computed(() => appearNote.cw != null);
 
 useGlobalEvent('noteDeleted', (noteId) => {
 	if (noteId === note.id || noteId === appearNote.id) {
@@ -377,7 +365,7 @@ const keymap = {
 		galleryEl.value?.openGallery();
 	},
 	'v|enter': () => {
-		if (hasRegularCw.value && !isCwReplyLocked.value) {
+		if (hasCw.value && !isCwReplyLocked.value) {
 			showContent.value = !showContent.value;
 		}
 	},

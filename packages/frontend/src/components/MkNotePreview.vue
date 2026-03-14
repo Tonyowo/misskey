@@ -11,13 +11,15 @@ SPDX-License-Identifier: AGPL-3.0-only
 			<MkUserName :user="user" :nowrap="true"/>
 		</div>
 		<div>
-			<p v-if="hasRegularCw" :class="$style.cw">
+			<p v-if="hasCw" :class="$style.cw">
 				<Mfm v-if="cw != null && cw != ''" :text="cw" :author="user" :nyaize="'respect'" :i="user" style="margin-right: 8px;"/>
-				<MkCwButton v-model="showContent" :text="text.trim()" :files="files" :poll="poll" style="margin: 4px 0;"/>
+				<MkCwButton v-if="!isCwReplyLocked" v-model="showContent" :text="text.trim()" :files="files" :poll="poll" style="margin: 4px 0;"/>
+				<div v-else style="margin: 4px 0; opacity: 0.8; font-size: 0.9em;">
+					<i class="ti ti-lock" style="margin-right: 4px;"></i>{{ i18n.ts.replyToSeeCw }}
+				</div>
 			</p>
-			<div v-show="!hasRegularCw || showContent">
+			<div v-show="!hasCw || (!isCwReplyLocked && showContent)">
 				<Mfm :text="text.trim()" :author="user" :nyaize="'respect'" :i="user"/>
-				<MkReplyLockedBlock v-if="cwReplyRequired && replyLockedText != null" :title="cw" :text="replyLockedText" :locked="false" :user="user" style="margin-top: 8px;"/>
 			</div>
 		</div>
 	</div>
@@ -29,7 +31,7 @@ import { computed, ref } from 'vue';
 import * as Misskey from 'misskey-js';
 import type { PollEditorModelValue } from '@/components/MkPollEditor.vue';
 import MkCwButton from '@/components/MkCwButton.vue';
-import MkReplyLockedBlock from '@/components/MkReplyLockedBlock.vue';
+import { i18n } from '@/i18n.js';
 
 const showContent = ref(false);
 
@@ -44,7 +46,8 @@ const props = defineProps<{
 	user: Misskey.entities.User;
 }>();
 
-const hasRegularCw = computed(() => props.useCw && props.cwReplyRequired !== true);
+const hasCw = computed(() => props.useCw);
+const isCwReplyLocked = computed(() => props.cwReplyRequired === true);
 </script>
 
 <style lang="scss" module>

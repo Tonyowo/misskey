@@ -52,7 +52,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 			<MkNoteHeader :note="appearNote" :mini="true"/>
 			<MkInstanceTicker v-if="showTicker" :host="appearNote.user.host" :instance="appearNote.user.instance"/>
 			<div style="container-type: inline-size;">
-				<p v-if="hasRegularCw" :class="$style.cw">
+				<p v-if="hasCw" :class="$style.cw">
 					<Mfm
 						v-if="appearNote.cw != ''"
 						:text="appearNote.cw"
@@ -66,7 +66,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 						<i class="ti ti-lock" style="margin-right: 4px;"></i>{{ i18n.ts.replyToSeeCw }}
 					</div>
 				</p>
-				<div v-show="!hasRegularCw || (!isCwReplyLocked && showContent)" :class="[{ [$style.contentCollapsed]: collapsed }]">
+				<div v-show="!hasCw || (!isCwReplyLocked && showContent)" :class="[{ [$style.contentCollapsed]: collapsed }]">
 					<div :class="$style.text">
 						<span v-if="appearNote.isHidden" style="opacity: 0.5">({{ i18n.ts.private }})</span>
 						<MkA v-if="appearNote.replyId" :class="$style.replyIcon" :to="`/notes/${appearNote.replyId}`"><i class="ti ti-arrow-back-up"></i></MkA>
@@ -89,17 +89,6 @@ SPDX-License-Identifier: AGPL-3.0-only
 							</div>
 						</div>
 					</div>
-					<MkReplyLockedBlock
-						v-if="appearNote.cwReplyRequired"
-						:title="appearNote.cw"
-						:text="appearNote.replyLockedText"
-						:locked="isCwReplyLocked"
-						:user="appearNote.user"
-						:emojiUrls="appearNote.emojis"
-						:selectable="true"
-						:enableEmojiMenu="true"
-						:enableEmojiMenuReaction="true"
-					/>
 					<div v-if="appearNote.files && appearNote.files.length > 0" style="margin-top: 8px;">
 						<MkMediaList ref="galleryEl" :mediaList="appearNote.files"/>
 					</div>
@@ -228,7 +217,6 @@ import MkReactionsViewerDetails from '@/components/MkReactionsViewer.details.vue
 import MkMediaList from '@/components/MkMediaList.vue';
 import MkCwButton from '@/components/MkCwButton.vue';
 import MkPoll from '@/components/MkPoll.vue';
-import MkReplyLockedBlock from '@/components/MkReplyLockedBlock.vue';
 import MkUsersTooltip from '@/components/MkUsersTooltip.vue';
 import MkUrlPreview from '@/components/MkUrlPreview.vue';
 import MkInstanceTicker from '@/components/MkInstanceTicker.vue';
@@ -330,8 +318,8 @@ const translating = ref(false);
 const showTicker = (prefer.s.instanceTicker === 'always') || (prefer.s.instanceTicker === 'remote' && appearNote.user.instance);
 const canRenote = computed(() => ['public', 'home'].includes(appearNote.visibility) || (appearNote.visibility === 'followers' && appearNote.userId === $i?.id));
 const isCwReplyLocked = computed(() => appearNote.cwReplyRequired === true && appearNote.canRevealCw === false);
-const hasRegularCw = computed(() => appearNote.cw != null && appearNote.cwReplyRequired !== true);
-const collapsed = ref(!hasRegularCw.value && isLong);
+const hasCw = computed(() => appearNote.cw != null);
+const collapsed = ref(!hasCw.value && isLong);
 const renoteCollapsed = ref(
 	prefer.s.collapseRenotes && isRenote && (
 		($i && ($i.id === note.userId || $i.id === appearNote.userId)) || // `||` must be `||`! See https://github.com/misskey-dev/misskey/issues/13131
@@ -406,7 +394,7 @@ const keymap = {
 	'v|enter': () => {
 		if (renoteCollapsed.value) {
 			renoteCollapsed.value = false;
-		} else if (hasRegularCw.value && !isCwReplyLocked.value) {
+		} else if (hasCw.value && !isCwReplyLocked.value) {
 			showContent.value = !showContent.value;
 		} else if (isLong) {
 			collapsed.value = !collapsed.value;

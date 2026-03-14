@@ -71,7 +71,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 		</I18n> - <button class="_textButton" @click="cancelSchedule()">{{ i18n.ts.cancel }}</button>
 	</MkInfo>
 	<MkInfo v-if="hasNotSpecifiedMentions" warn :class="$style.hasNotSpecifiedMentions">{{ i18n.ts.notSpecifiedMentionWarning }} - <button class="_textButton" @click="addMissingMention()">{{ i18n.ts.add }}</button></MkInfo>
-	<div v-if="useCw && !cwReplyRequired" :class="$style.cwOuter">
+	<div v-if="useCw" :class="$style.cwOuter">
 		<input ref="cwInputEl" v-model="cw" :class="$style.cw" :placeholder="cwInputPlaceholder" @keydown="onKeydown" @keyup="onKeyup" @compositionend="onCompositionEnd">
 		<div v-if="maxCwTextLength - cwTextLength < 20" :class="['_acrylic', $style.cwTextCount, { [$style.cwTextOver]: cwTextLength > maxCwTextLength }]">{{ maxCwTextLength - cwTextLength }}</div>
 	</div>
@@ -86,20 +86,9 @@ SPDX-License-Identifier: AGPL-3.0-only
 		</div>
 	</div>
 	<div :class="[$style.textOuter, { [$style.withCw]: useCw }]">
-		<div v-if="useCw && cwReplyRequired" :class="$style.fieldLabel">{{ i18n.ts.publicText }}</div>
 		<div v-if="targetChannel" :class="$style.colorBar" :style="{ background: targetChannel.color }"></div>
-		<textarea ref="textareaEl" v-model="text" :class="[$style.text]" :disabled="posting || posted" :readonly="textAreaReadOnly" :placeholder="textInputPlaceholder" data-cy-post-form-text @keydown="onKeydown" @keyup="onKeyup" @paste="onPaste" @compositionupdate="onCompositionUpdate" @compositionend="onCompositionEnd"></textarea>
+		<textarea ref="textareaEl" v-model="text" :class="[$style.text]" :disabled="posting || posted" :readonly="textAreaReadOnly" :placeholder="placeholder" data-cy-post-form-text @keydown="onKeydown" @keyup="onKeyup" @paste="onPaste" @compositionupdate="onCompositionUpdate" @compositionend="onCompositionEnd"></textarea>
 		<div v-if="maxTextLength - textLength < 100" :class="['_acrylic', $style.textCount, { [$style.textOver]: textLength > maxTextLength }]">{{ maxTextLength - textLength }}</div>
-	</div>
-	<div v-if="useCw && cwReplyRequired" :class="$style.cwOuter">
-		<div :class="$style.fieldLabel">{{ i18n.ts.replyLockedTitle }}</div>
-		<input ref="cwInputEl" v-model="cw" :class="$style.cw" :placeholder="cwInputPlaceholder" @keydown="onKeydown" @keyup="onKeyup" @compositionend="onCompositionEnd">
-		<div v-if="maxCwTextLength - cwTextLength < 20" :class="['_acrylic', $style.cwTextCount, { [$style.cwTextOver]: cwTextLength > maxCwTextLength }]">{{ maxCwTextLength - cwTextLength }}</div>
-	</div>
-	<div v-if="useCw && cwReplyRequired" :class="$style.replyLockedOuter">
-		<div :class="$style.fieldLabel">{{ i18n.ts.replyLockedText }}</div>
-		<textarea v-model="replyLockedText" :class="$style.replyLockedText" :disabled="posting || posted" :placeholder="i18n.ts.replyLockedText" @keydown="onKeydown" @keyup="onKeyup" @compositionupdate="onCompositionUpdate" @compositionend="onCompositionEnd"></textarea>
-		<div v-if="maxTextLength - replyLockedTextLength < 100" :class="['_acrylic', $style.replyLockedTextCount, { [$style.textOver]: replyLockedTextLength > maxTextLength }]">{{ maxTextLength - replyLockedTextLength }}</div>
 	</div>
 	<input v-show="withHashtags" ref="hashtagsInputEl" v-model="hashtags" :class="$style.hashtags" :placeholder="i18n.ts.hashtags" list="hashtags">
 	<XPostFormAttaches v-model="files" @detach="detachFile" @changeSensitive="updateFileSensitive" @changeName="updateFileName"/>
@@ -110,7 +99,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 		<MkUploaderItems :items="uploader.items.value" @showMenu="(item, ev) => showPerUploadItemMenu(item, ev)" @showMenuViaContextmenu="(item, ev) => showPerUploadItemMenuViaContextmenu(item, ev)"/>
 	</div>
 	<MkPollEditor v-if="poll" v-model="poll" @destroyed="poll = null"/>
-	<MkNotePreview v-if="showPreview" :class="$style.preview" :text="text" :replyLockedText="replyLockedText" :files="files" :poll="poll ?? undefined" :useCw="useCw" :cw="cw" :cwReplyRequired="cwReplyRequired" :user="postAccount ?? $i"/>
+	<MkNotePreview v-if="showPreview" :class="$style.preview" :text="text" :files="files" :poll="poll ?? undefined" :useCw="useCw" :cw="cw" :cwReplyRequired="cwReplyRequired" :user="postAccount ?? $i"/>
 	<div v-if="showingOptions" style="padding: 8px 16px;">
 	</div>
 	<footer ref="footerEl" :class="$style.footer">
@@ -323,8 +312,7 @@ const placeholder = computed((): string => {
 	}
 });
 
-const cwInputPlaceholder = computed(() => cwReplyRequired.value ? i18n.ts.replyLockedTitle : i18n.ts.annotation);
-const textInputPlaceholder = computed(() => useCw.value && cwReplyRequired.value ? i18n.ts.publicText : placeholder.value);
+const cwInputPlaceholder = computed(() => i18n.ts.annotation);
 
 const submitText = computed((): string => {
 	return scheduledAt.value != null
@@ -344,11 +332,6 @@ const textLength = computed((): number => {
 	return (text.value + imeText.value).length;
 });
 
-const replyLockedTextLength = computed((): number => {
-	return (replyLockedText.value ?? '').length;
-});
-const activeReplyLockedTextLength = computed(() => useCw.value && cwReplyRequired.value ? replyLockedTextLength.value : 0);
-
 const maxTextLength = computed((): number => {
 	return instance ? instance.maxNoteTextLength : 1000;
 });
@@ -363,7 +346,6 @@ const canPost = computed((): boolean => {
 	return !props.mock && !posting.value && !posted.value && !uploader.uploading.value && (uploader.items.value.length === 0 || uploader.readyForUpload.value) &&
 		(
 			1 <= textLength.value ||
-			1 <= activeReplyLockedTextLength.value ||
 			1 <= files.value.length ||
 			1 <= uploader.items.value.length ||
 			poll.value != null ||
@@ -371,12 +353,9 @@ const canPost = computed((): boolean => {
 			quoteId.value != null
 		) &&
 		(textLength.value <= maxTextLength.value) &&
-		(activeReplyLockedTextLength.value <= maxTextLength.value) &&
 		(
 			useCw.value
-				? cwReplyRequired.value
-					? cwTextLength.value <= maxCwTextLength && replyLockedText.value != null && replyLockedText.value.trim() !== ''
-					: cw.value != null && cw.value.trim() !== '' && cwTextLength.value <= maxCwTextLength
+				? cw.value != null && cw.value.trim() !== '' && cwTextLength.value <= maxCwTextLength
 				: true
 		) &&
 		(files.value.length <= 16) &&
@@ -385,7 +364,7 @@ const canPost = computed((): boolean => {
 
 // cannot save pure renote as draft
 const canSaveAsServerDraft = computed((): boolean => {
-	return canPost.value && (textLength.value > 0 || activeReplyLockedTextLength.value > 0 || files.value.length > 0 || poll.value != null);
+	return canPost.value && (textLength.value > 0 || files.value.length > 0 || poll.value != null);
 });
 
 const withHashtags = store.model('postFormWithHashtags');
@@ -536,33 +515,36 @@ function togglePoll() {
 	}
 }
 
+function migrateLegacyReplyLockedTextToCwModel() {
+	const legacyReplyLockedText = (replyLockedText.value ?? '').trim();
+	if (legacyReplyLockedText === '') {
+		replyLockedText.value = null;
+		return;
+	}
+
+	const currentText = text.value.trim();
+	const currentCw = (cw.value ?? '').trim();
+
+	if (currentText !== '' && currentCw !== '') {
+		text.value = replyLockedText.value ?? '';
+	} else if (currentText !== '' && currentCw === '') {
+		cw.value = text.value;
+		text.value = replyLockedText.value ?? '';
+	} else if (currentText === '') {
+		text.value = replyLockedText.value ?? '';
+	}
+
+	replyLockedText.value = null;
+}
+
 function onCwReplyRequiredChange(value: boolean) {
 	if (value === cwReplyRequired.value) return;
 
-	const currentCw = (cw.value ?? '').trim();
-	const currentText = text.value.trim();
-	const currentReplyLockedText = (replyLockedText.value ?? '').trim();
+	cwReplyRequired.value = value;
 
 	if (value) {
-		if (currentReplyLockedText === '' && currentText !== '') {
-			replyLockedText.value = text.value;
-			text.value = currentCw !== '' ? (cw.value ?? '') : '';
-			if (currentCw !== '') {
-				cw.value = null;
-			}
-		} else if (currentText === '' && currentCw !== '') {
-			text.value = cw.value ?? '';
-			cw.value = null;
-		}
-	} else {
-		if (currentCw === '' && currentReplyLockedText !== '') {
-			cw.value = currentText !== '' ? text.value : null;
-			text.value = replyLockedText.value ?? '';
-			replyLockedText.value = null;
-		}
+		migrateLegacyReplyLockedTextToCwModel();
 	}
-
-	cwReplyRequired.value = value;
 }
 
 function addTag(tag: string) {
@@ -977,7 +959,7 @@ function saveDraft() {
 		updatedAt: new Date().toISOString(),
 		data: {
 			text: text.value,
-			replyLockedText: useCw.value && cwReplyRequired.value ? replyLockedText.value : null,
+			replyLockedText: null,
 			useCw: useCw.value,
 			cw: cw.value,
 			cwReplyRequired: useCw.value ? cwReplyRequired.value : false,
@@ -1009,7 +991,7 @@ async function saveServerDraft(options: {
 	return await os.apiWithDialog(serverDraftId.value == null ? 'notes/drafts/create' : 'notes/drafts/update', {
 		...(serverDraftId.value == null ? {} : { draftId: serverDraftId.value }),
 		text: text.value,
-		replyLockedText: useCw.value && cwReplyRequired.value ? replyLockedText.value || null : null,
+		replyLockedText: null,
 		cw: useCw.value ? cw.value || null : null,
 		cwReplyRequired: useCw.value ? cwReplyRequired.value : false,
 		visibility: visibility.value,
@@ -1113,7 +1095,7 @@ async function post(ev?: PointerEvent) {
 
 	let postData = {
 		text: text.value === '' ? null : text.value,
-		replyLockedText: useCw.value && cwReplyRequired.value ? replyLockedText.value || null : null,
+		replyLockedText: null,
 		fileIds: files.value.length > 0 ? files.value.map(f => f.id) : undefined,
 		replyId: replyTargetNote.value ? replyTargetNote.value.id : undefined,
 		renoteId: renoteTargetNote.value ? renoteTargetNote.value.id : quoteId.value ? quoteId.value : undefined,
@@ -1358,6 +1340,7 @@ async function openAccountMenu(ev: PointerEvent) {
 				useCw.value = draft.cw != null || draft.cwReplyRequired === true;
 				cw.value = draft.cw ?? null;
 				cwReplyRequired.value = draft.cwReplyRequired ?? false;
+				if (cwReplyRequired.value) migrateLegacyReplyLockedTextToCwModel();
 				visibility.value = draft.visibility;
 				localOnly.value = draft.localOnly ?? false;
 				files.value = draft.files ?? [];
@@ -1522,6 +1505,7 @@ onMounted(() => {
 				useCw.value = draft.data.useCw || draft.data.cwReplyRequired === true;
 				cw.value = draft.data.cw;
 				cwReplyRequired.value = draft.data.cwReplyRequired ?? false;
+				if (cwReplyRequired.value) migrateLegacyReplyLockedTextToCwModel();
 				visibility.value = draft.data.visibility;
 				localOnly.value = draft.data.localOnly;
 				files.value = (draft.data.files || []).filter(draftFile => draftFile);
@@ -1547,6 +1531,7 @@ onMounted(() => {
 			useCw.value = init.cw != null || init.cwReplyRequired === true;
 			cw.value = init.cw ?? null;
 			cwReplyRequired.value = init.cwReplyRequired ?? false;
+			if (cwReplyRequired.value) migrateLegacyReplyLockedTextToCwModel();
 			visibility.value = init.visibility;
 			localOnly.value = init.localOnly ?? false;
 			files.value = init.files ?? [];

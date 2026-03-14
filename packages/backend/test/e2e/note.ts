@@ -109,8 +109,7 @@ describe('Note', () => {
 
 	test('返信可視CWは返信前に隠れ、返信後に見える', async () => {
 		const res = await api('notes/create', {
-			text: 'public body',
-			replyLockedText: 'secret body',
+			text: 'secret body',
 			cw: 'spoiler',
 			cwReplyRequired: true,
 		}, alice);
@@ -126,7 +125,7 @@ describe('Note', () => {
 
 		assert.strictEqual(hiddenForBob.status, 200);
 		assert.strictEqual(hiddenForBob.body.cw, 'spoiler');
-		assert.strictEqual(hiddenForBob.body.text, 'public body');
+		assert.strictEqual(hiddenForBob.body.text, null);
 		assert.strictEqual(hiddenForBob.body.replyLockedText, undefined);
 		assert.strictEqual(hiddenForBob.body.cwReplyRequired, true);
 		assert.strictEqual(hiddenForBob.body.canRevealCw, false);
@@ -143,16 +142,16 @@ describe('Note', () => {
 		}, bob);
 
 		assert.strictEqual(visibleForBob.status, 200);
-		assert.strictEqual(visibleForBob.body.text, 'public body');
-		assert.strictEqual(visibleForBob.body.replyLockedText, 'secret body');
+		assert.strictEqual(visibleForBob.body.text, 'secret body');
+		assert.strictEqual(visibleForBob.body.replyLockedText, undefined);
 		assert.strictEqual(visibleForBob.body.cwReplyRequired, true);
 		assert.strictEqual(visibleForBob.body.canRevealCw, true);
 	});
 
 	test('返信可視CWは自動的にローカルのみにされる', async () => {
 		const res = await api('notes/create', {
-			text: 'public body',
-			replyLockedText: 'secret body',
+			text: 'secret body',
+			cw: 'spoiler',
 			cwReplyRequired: true,
 			localOnly: false,
 		}, alice);

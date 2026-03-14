@@ -531,8 +531,12 @@ export class NoteCreateService implements OnApplicationShutdown {
 			data.replyLockedText = null;
 		}
 
-		if (data.cwReplyRequired && data.replyLockedText == null) {
-			throw new IdentifiableError('49870a66-f7d8-4a58-a45a-7b85c9dfdbe4', 'Reply locked text required');
+		if (data.cwReplyRequired && data.replyLockedText != null) {
+			if (data.text != null && data.cw == null) {
+				data.cw = data.text;
+			}
+			data.text = data.replyLockedText;
+			data.replyLockedText = null;
 		}
 
 		if (data.text == null && data.replyLockedText == null && data.poll == null && (data.files == null || data.files.length === 0) && data.renote == null) {

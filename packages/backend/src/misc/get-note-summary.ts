@@ -21,7 +21,7 @@ export const getNoteSummary = (note: Packed<'Note'>): string => {
 	let summary = '';
 
 	// 本文
-	if (note.cw != null && !note.cwReplyRequired) {
+	if (note.cw != null) {
 		summary += note.cw;
 	} else {
 		summary += note.text ? note.text : note.cw ? note.cw : note.replyLockedText ? note.replyLockedText : '';

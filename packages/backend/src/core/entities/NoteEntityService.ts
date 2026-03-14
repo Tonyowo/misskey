@@ -220,7 +220,12 @@ export class NoteEntityService implements OnModuleInit {
 
 	@bindThis
 	private hideReplyRequiredCwContent(packedNote: Packed<'Note'>): void {
+		packedNote.text = null;
 		packedNote.replyLockedText = undefined;
+		packedNote.fileIds = [];
+		packedNote.files = [];
+		packedNote.poll = undefined;
+		packedNote.renote = undefined;
 	}
 
 	@bindThis
@@ -409,9 +414,12 @@ export class NoteEntityService implements OnModuleInit {
 		const reactionAndUserPairCache = note.reactionAndUserPairCache.concat(bufferedReactions.pairs.map(x => x.join('/')));
 
 		let text = note.text;
+		if (note.cwReplyRequired && text == null && note.replyLockedText != null) {
+			text = note.replyLockedText;
+		}
 
 		if (note.name && (note.url ?? note.uri)) {
-			text = `【${note.name}】\n${(note.text ?? '').trim()}\n\n${note.url ?? note.uri}`;
+			text = `【${note.name}】\n${(text ?? '').trim()}\n\n${note.url ?? note.uri}`;
 		}
 
 		const channel = note.channelId
