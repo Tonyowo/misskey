@@ -539,16 +539,24 @@ function togglePoll() {
 function onCwReplyRequiredChange(value: boolean) {
 	if (value === cwReplyRequired.value) return;
 
+	const currentCw = (cw.value ?? '').trim();
 	const currentText = text.value.trim();
 	const currentReplyLockedText = (replyLockedText.value ?? '').trim();
 
 	if (value) {
 		if (currentReplyLockedText === '' && currentText !== '') {
 			replyLockedText.value = text.value;
-			text.value = '';
+			text.value = currentCw !== '' ? (cw.value ?? '') : '';
+			if (currentCw !== '') {
+				cw.value = null;
+			}
+		} else if (currentText === '' && currentCw !== '') {
+			text.value = cw.value ?? '';
+			cw.value = null;
 		}
 	} else {
-		if (currentText === '' && currentReplyLockedText !== '') {
+		if (currentCw === '' && currentReplyLockedText !== '') {
+			cw.value = currentText !== '' ? text.value : null;
 			text.value = replyLockedText.value ?? '';
 			replyLockedText.value = null;
 		}
