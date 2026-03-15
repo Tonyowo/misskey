@@ -356,7 +356,7 @@ function showFileMenu(file: Misskey.entities.DriveFile, ev: MouseEvent | Pointer
 	background: transparent;
 	color: rgba(255, 255, 255, 0.96);
 	box-shadow: none;
-	opacity: 0.72;
+	opacity: 0.58;
 	transition: transform 0.16s ease, opacity 0.16s ease;
 
 	> i {
