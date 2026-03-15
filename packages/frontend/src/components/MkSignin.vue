@@ -218,7 +218,7 @@ async function onTotpSubmitted(token: string) {
 	}
 }
 
-async function tryLogin(req: Partial<Misskey.entities.SigninFlowRequest>): Promise<Misskey.entities.SigninFlowResponse> {
+async function tryLogin(req: Partial<Misskey.entities.SigninFlowRequest>): Promise<Misskey.entities.SigninFlowResponse | null> {
 	const _req = {
 		username: req.username ?? signinId.value,
 		...req,
@@ -280,7 +280,7 @@ async function tryLogin(req: Partial<Misskey.entities.SigninFlowRequest>): Promi
 		return res;
 	}).catch((err) => {
 		onSigninApiError(err);
-		return Promise.reject(err);
+		return null;
 	});
 }
 
