@@ -106,6 +106,18 @@ function getTokenBoundaries() {
 	return boundaries;
 }
 
+function rangeIntersectsCustomEmoji(start: number, end: number) {
+	return getTokenBoundaries().some(segment => segment.type === 'customEmoji' && start < segment.end && end > segment.start);
+}
+
+function getCustomEmojiBefore(offset: number) {
+	return getTokenBoundaries().find(segment => segment.type === 'customEmoji' && segment.end === offset);
+}
+
+function getCustomEmojiAfter(offset: number) {
+	return getTokenBoundaries().find(segment => segment.type === 'customEmoji' && segment.start === offset);
+}
+
 watch(() => props.modelValue, (value) => {
 	const next = value ?? '';
 	if (composing.value || next === renderedText.value) return;
@@ -208,6 +220,10 @@ function getPointOffset(container: Node, offset: number): number {
 }
 
 function getSelectionRange(): SelectionRange {
+	if (skipInputNormalizationUntilRender) {
+		return lastSelectionRange.value;
+	}
+
 	const selection = window.getSelection();
 	if (selection == null || selection.rangeCount === 0 || editorEl.value == null) {
 		return lastSelectionRange.value;
@@ -357,7 +373,7 @@ function deleteBackward(options: ApplyTextUpdateOptions = {}) {
 	}
 	if (start === 0) return;
 
-	const token = getTokenBoundaries().find(segment => segment.end === start && segment.type === 'customEmoji');
+	const token = getCustomEmojiBefore(start);
 	const deleteStart = token?.start ?? Math.max(0, start - 1);
 	replaceRange(deleteStart, end, '', options);
 }
@@ -370,7 +386,7 @@ function deleteForward(options: ApplyTextUpdateOptions = {}) {
 	}
 	if (end >= renderedText.value.length) return;
 
-	const token = getTokenBoundaries().find(segment => segment.start === end && segment.type === 'customEmoji');
+	const token = getCustomEmojiAfter(end);
 	const deleteEnd = token?.end ?? Math.min(renderedText.value.length, end + 1);
 	replaceRange(start, deleteEnd, '', options);
 }
@@ -397,13 +413,13 @@ function getSelectedText() {
 function getAutocompleteTarget(): AutocompleteTarget {
 	return {
 		get value() {
-			return getCurrentText();
+			return skipInputNormalizationUntilRender ? renderedText.value : getCurrentText();
 		},
 		get selectionStart() {
-			return getSelectionRange().start;
+			return skipInputNormalizationUntilRender ? lastSelectionRange.value.start : getSelectionRange().start;
 		},
 		get selectionEnd() {
-			return getSelectionRange().end;
+			return skipInputNormalizationUntilRender ? lastSelectionRange.value.end : getSelectionRange().end;
 		},
 		get scrollLeft() {
 			return editorEl.value?.scrollLeft ?? 0;
@@ -474,11 +490,17 @@ function onInput() {
 function onBeforeInput(ev: InputEvent) {
 	if (props.disabled || props.readonly || composing.value) return;
 
+	const selection = getSelectionRange();
+	const start = Math.min(selection.start, selection.end);
+	const end = Math.max(selection.start, selection.end);
+
 	switch (ev.inputType) {
 		case 'insertText':
 		case 'insertReplacementText':
-			ev.preventDefault();
-			replaceSelection(ev.data ?? '', { skipNextInputNormalization: true });
+			if (start !== end && rangeIntersectsCustomEmoji(start, end)) {
+				ev.preventDefault();
+				replaceRange(start, end, ev.data ?? '', { skipNextInputNormalization: true });
+			}
 			return;
 
 		case 'insertParagraph':
@@ -488,13 +510,17 @@ function onBeforeInput(ev: InputEvent) {
 			return;
 
 		case 'deleteContentBackward':
-			ev.preventDefault();
-			deleteBackward({ skipNextInputNormalization: true });
+			if ((start !== end && rangeIntersectsCustomEmoji(start, end)) || getCustomEmojiBefore(start) != null) {
+				ev.preventDefault();
+				deleteBackward({ skipNextInputNormalization: true });
+			}
 			return;
 
 		case 'deleteContentForward':
-			ev.preventDefault();
-			deleteForward({ skipNextInputNormalization: true });
+			if ((start !== end && rangeIntersectsCustomEmoji(start, end)) || getCustomEmojiAfter(end) != null) {
+				ev.preventDefault();
+				deleteForward({ skipNextInputNormalization: true });
+			}
 			return;
 
 		case 'historyUndo':
