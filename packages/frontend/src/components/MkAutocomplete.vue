@@ -51,6 +51,7 @@ import { emojilist, getEmojiName } from '@@/js/emojilist.js';
 import { char2twemojiFilePath, char2fluentEmojiFilePath } from '@@/js/emoji-base.js';
 import { MFM_TAGS, MFM_PARAMS } from '@@/js/const.js';
 import type { EmojiDef } from '@/utility/search-emoji.js';
+import type { AutocompleteTarget } from '@/utility/autocomplete.js';
 import { elementContains } from '@/utility/element-contains.js';
 import { acct } from '@/filters/user.js';
 import * as os from '@/os.js';
@@ -166,8 +167,7 @@ export default {
 type PropsType<T extends keyof CompleteInfo> = {
 	type: T;
 	q: CompleteInfo[T]['query'];
-	// なぜかわからないけど HTMLTextAreaElement | HTMLInputElement だと addEventListener/removeEventListenerがエラー
-	textarea: (HTMLTextAreaElement | HTMLInputElement) & HTMLElement;
+	textarea: AutocompleteTarget;
 	close: () => void;
 	x: number;
 	y: number;

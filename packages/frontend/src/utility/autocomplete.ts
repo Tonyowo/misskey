@@ -11,6 +11,19 @@ import type { CompleteInfo } from '@/components/MkAutocomplete.vue';
 import { popup } from '@/os.js';
 
 export type SuggestionType = 'user' | 'hashtag' | 'emoji' | 'mfmTag' | 'mfmParam';
+export type AutocompleteTarget = {
+	value: string;
+	selectionStart: number | null;
+	selectionEnd: number | null;
+	scrollLeft: number;
+	scrollTop: number;
+	addEventListener: HTMLElement['addEventListener'];
+	removeEventListener: HTMLElement['removeEventListener'];
+	getBoundingClientRect: HTMLElement['getBoundingClientRect'];
+	focus: () => void;
+	setSelectionRange: (start: number, end: number) => void;
+	getCaretCoordinates?: () => { left: number; top: number };
+};
 
 type CompleteProps<T extends keyof CompleteInfo> = {
 	type: T;
@@ -28,7 +41,7 @@ export class Autocomplete {
 		q: Ref<any>;
 		close: () => void;
 	} | null;
-	private textarea: HTMLInputElement | HTMLTextAreaElement;
+	private textarea: AutocompleteTarget;
 	private currentType: keyof CompleteInfo | undefined;
 	private textRef: Ref<string | number | null>;
 	private opening: boolean;
@@ -49,7 +62,7 @@ export class Autocomplete {
 	/**
 	 * 対象のテキストエリアを与えてインスタンスを初期化します。
 	 */
-	constructor(textarea: HTMLInputElement | HTMLTextAreaElement, textRef: Ref<string | number | null>, onlyType?: SuggestionType[]) {
+	constructor(textarea: AutocompleteTarget, textRef: Ref<string | number | null>, onlyType?: SuggestionType[]) {
 		//#region BIND
 		this.onInput = this.onInput.bind(this);
 		this.complete = this.complete.bind(this);
@@ -203,7 +216,7 @@ export class Autocomplete {
 		this.currentType = type;
 
 		//#region サジェストを表示すべき位置を計算
-		const caretPosition = getCaretCoordinates(this.textarea, this.textarea.selectionStart ?? 0);
+		const caretPosition = this.textarea.getCaretCoordinates?.() ?? getCaretCoordinates(this.textarea as HTMLInputElement | HTMLTextAreaElement, this.textarea.selectionStart ?? 0);
 
 		const rect = this.textarea.getBoundingClientRect();
 

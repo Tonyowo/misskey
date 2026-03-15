@@ -82,12 +82,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 	</div>
 	<div :class="[$style.textOuter, { [$style.withCw]: useCw }]">
 		<div v-if="targetChannel" :class="$style.colorBar" :style="{ background: targetChannel.color }"></div>
-		<div :class="$style.textEditor">
-			<div ref="textOverlayEl" :class="[$style.textOverlay, { [$style.textOverlayDisabled]: posting || posted, [$style.textOverlayHidden]: imeText !== '' }]">
-				<MkPostFormTextOverlay :class="$style.textOverlayInner" :text="text"/>
-			</div>
-			<textarea ref="textareaEl" v-model="text" :class="[$style.text, $style.textInput, { [$style.textInputComposing]: imeText !== '' }]" :disabled="posting || posted" :readonly="textAreaReadOnly" :placeholder="placeholder" data-cy-post-form-text @keydown="onKeydown" @keyup="onKeyup" @paste="onPaste" @scroll="syncTextOverlayScroll" @compositionupdate="onCompositionUpdate" @compositionend="onCompositionEnd"></textarea>
-		</div>
+		<MkPostFormTextEditor ref="textEditorEl" v-model="text" :class="$style.text" :disabled="posting || posted" :readonly="textAreaReadOnly" :placeholder="placeholder" data-cy-post-form-text @keydown="onKeydown" @keyup="onKeyup" @paste="onPaste" @compositionupdate="onCompositionUpdate" @compositionend="onCompositionEnd"/>
 		<div v-if="maxTextLength - textLength < 100" :class="['_acrylic', $style.textCount, { [$style.textOver]: textLength > maxTextLength }]">{{ maxTextLength - textLength }}</div>
 	</div>
 	<input v-show="withHashtags" ref="hashtagsInputEl" v-model="hashtags" :class="$style.hashtags" :placeholder="i18n.ts.hashtags" list="hashtags">
@@ -127,7 +122,6 @@ SPDX-License-Identifier: AGPL-3.0-only
 import { watch, nextTick, onMounted, defineAsyncComponent, provide, shallowRef, ref, computed, useTemplateRef, onUnmounted, onBeforeUnmount } from 'vue';
 import * as mfm from 'mfm-js';
 import * as Misskey from 'misskey-js';
-import insertTextAtCursor from 'insert-text-at-cursor';
 import { toASCII } from 'punycode.js';
 import { host, url } from '@@/js/config.js';
 import MkUploaderItems from './MkUploaderItems.vue';
@@ -151,7 +145,7 @@ import { misskeyApi } from '@/utility/misskey-api.js';
 import { chooseDriveFile } from '@/utility/drive.js';
 import { store } from '@/store.js';
 import MkInfo from '@/components/MkInfo.vue';
-import MkPostFormTextOverlay from '@/components/MkPostFormTextOverlay.vue';
+import MkPostFormTextEditor from '@/components/MkPostFormTextEditor.vue';
 import { i18n } from '@/i18n.js';
 import { instance } from '@/instance.js';
 import { ensureSignin, notesCount, incNotesCount } from '@/i.js';
@@ -196,8 +190,7 @@ const emit = defineEmits<{
 	(ev: 'fileChangeSensitive', fileId: string, to: boolean): void;
 }>();
 
-const textareaEl = useTemplateRef('textareaEl');
-const textOverlayEl = useTemplateRef('textOverlayEl');
+const textEditorEl = useTemplateRef<InstanceType<typeof MkPostFormTextEditor>>('textEditorEl');
 const cwInputEl = useTemplateRef('cwInputEl');
 const hashtagsInputEl = useTemplateRef('hashtagsInputEl');
 const visibilityButton = useTemplateRef('visibilityButton');
@@ -557,22 +550,22 @@ function onCwReplyRequiredChange(value: boolean) {
 	}
 }
 
+function getTextSelectionRange() {
+	return textEditorEl.value?.getSelectionRange() ?? {
+		start: text.value.length,
+		end: text.value.length,
+	};
+}
+
 function addTag(tag: string) {
-	if (textareaEl.value == null) return;
-	insertTextAtCursor(textareaEl.value, ` #${tag} `);
+	textEditorEl.value?.replaceSelection(` #${tag} `);
 }
 
 function focus() {
-	if (textareaEl.value) {
-		textareaEl.value.focus();
-		textareaEl.value.setSelectionRange(textareaEl.value.value.length, textareaEl.value.value.length);
+	if (textEditorEl.value) {
+		textEditorEl.value.focus();
+		textEditorEl.value.setSelectionRange(text.value.length, text.value.length);
 	}
-}
-
-function syncTextOverlayScroll() {
-	if (textareaEl.value == null || textOverlayEl.value == null) return;
-	textOverlayEl.value.scrollTop = textareaEl.value.scrollTop;
-	textOverlayEl.value.scrollLeft = textareaEl.value.scrollLeft;
 }
 
 function chooseFileFromPc(ev: PointerEvent) {
@@ -862,7 +855,7 @@ async function onPaste(ev: ClipboardEvent) {
 		});
 
 		if (canceled) {
-			insertTextAtCursor(textareaEl.value, paste);
+			textEditorEl.value?.replaceSelection(paste);
 			return;
 		}
 
@@ -878,7 +871,7 @@ async function onPaste(ev: ClipboardEvent) {
 		});
 
 		if (canceled) {
-			insertTextAtCursor(textareaEl.value, paste);
+			textEditorEl.value?.replaceSelection(paste);
 			return;
 		}
 
@@ -1257,8 +1250,7 @@ function cancel() {
 
 function insertMention() {
 	os.selectUser({ localOnly: effectiveLocalOnly.value, includeSelf: true }).then(user => {
-		if (textareaEl.value == null) return;
-		insertTextAtCursor(textareaEl.value, '@' + Misskey.acct.toString(user) + ' ');
+		textEditorEl.value?.replaceSelection('@' + Misskey.acct.toString(user) + ' ');
 	});
 }
 
@@ -1267,14 +1259,15 @@ async function insertEmoji(ev: PointerEvent) {
 	const target = ev.currentTarget ?? ev.target;
 	if (target == null) return;
 
-	// emojiPickerはダイアログが閉じずにtextareaとやりとりするので、
-	// focustrapをかけているとinsertTextAtCursorが効かない
-	// そのため、投稿フォームのテキストに直接注入する
+	// emojiPickerはダイアログが閉じずに投稿フォームとやりとりするので、
+	// focustrapをかけているとエディタ側の選択範囲が変わりやすい
+	// そのため、投稿フォームの純テキストモデルに直接注入する
 	// See: https://github.com/misskey-dev/misskey/pull/14282
 	//      https://github.com/misskey-dev/misskey/issues/14274
 
-	let pos = textareaEl.value?.selectionStart ?? 0;
-	let posEnd = textareaEl.value?.selectionEnd ?? text.value.length;
+	const selection = getTextSelectionRange();
+	let pos = selection.start;
+	let posEnd = selection.end;
 	emojiPicker.show(
 		target as HTMLElement,
 		emoji => {
@@ -1287,9 +1280,9 @@ async function insertEmoji(ev: PointerEvent) {
 		() => {
 			textAreaReadOnly.value = false;
 			nextTick(() => {
-				if (textareaEl.value) {
-					textareaEl.value.focus();
-					textareaEl.value.setSelectionRange(pos, posEnd);
+				if (textEditorEl.value) {
+					textEditorEl.value.focus();
+					textEditorEl.value.setSelectionRange(pos, posEnd);
 				}
 			});
 		},
@@ -1297,9 +1290,10 @@ async function insertEmoji(ev: PointerEvent) {
 }
 
 async function insertMfmFunction(ev: PointerEvent) {
-	if (textareaEl.value == null) return;
-	let pos = textareaEl.value.selectionStart ?? 0;
-	let posEnd = textareaEl.value.selectionEnd ?? text.value.length;
+	if (textEditorEl.value == null) return;
+	const selection = getTextSelectionRange();
+	let pos = selection.start;
+	let posEnd = selection.end;
 	mfmFunctionPicker(
 		ev.currentTarget ?? ev.target,
 		(tag) => {
@@ -1315,9 +1309,9 @@ async function insertMfmFunction(ev: PointerEvent) {
 		},
 		() => {
 			nextTick(() => {
-				if (textareaEl.value) {
-					textareaEl.value.focus();
-					textareaEl.value.setSelectionRange(pos, posEnd);
+				if (textEditorEl.value) {
+					textEditorEl.value.focus();
+					textEditorEl.value.setSelectionRange(pos, posEnd);
 				}
 			});
 		},
@@ -1460,7 +1454,9 @@ function cancelSchedule() {
 }
 
 function showTour() {
-	if (textareaEl.value == null ||
+	const textEditorRoot = textEditorEl.value?.getRootEl?.() ?? textEditorEl.value?.rootEl ?? null;
+
+	if (textEditorRoot == null ||
 		footerEl.value == null ||
 		accountMenuEl.value == null ||
 		visibilityButton.value == null ||
@@ -1470,7 +1466,7 @@ function showTour() {
 	}
 
 	startTour([{
-		element: textareaEl.value,
+		element: textEditorRoot,
 		title: i18n.ts._postForm._howToUse.content_title,
 		description: i18n.ts._postForm._howToUse.content_description,
 	}, {
@@ -1507,9 +1503,8 @@ onMounted(() => {
 		});
 	}
 
-	if (textareaEl.value) textAutocomplete = new Autocomplete(textareaEl.value, text);
+	if (textEditorEl.value) textAutocomplete = new Autocomplete(textEditorEl.value.getAutocompleteTarget(), text);
 	if (hashtagsInputEl.value) hashtagAutocomplete = new Autocomplete(hashtagsInputEl.value, hashtags);
-	nextTick(() => syncTextOverlayScroll());
 
 	nextTick(() => {
 		// 書きかけの投稿を復元
@@ -1570,10 +1565,6 @@ onMounted(() => {
 
 		nextTick(() => watchForDraft());
 	});
-});
-
-watch(text, () => {
-	nextTick(() => syncTextOverlayScroll());
 });
 
 onBeforeUnmount(() => {
@@ -1882,62 +1873,13 @@ html[data-color-scheme=light] .preview {
 	}
 }
 
-.textEditor {
-	position: relative;
-}
-
 .text {
 	max-width: 100%;
 	min-width: 100%;
 	width: 100%;
 	min-height: 90px;
 	max-height: 500px;
-	field-sizing: content;
-}
-
-.textOverlay {
-	position: absolute;
-	inset: 0;
 	overflow: auto;
-	pointer-events: none;
-	user-select: none;
-	scrollbar-width: none;
-
-	&::-webkit-scrollbar {
-		display: none;
-	}
-}
-
-.textOverlayDisabled {
-	opacity: 0.5;
-}
-
-.textOverlayHidden {
-	opacity: 0;
-}
-
-.textOverlayInner {
-	box-sizing: border-box;
-	padding: 0 24px;
-	min-height: 90px;
-	font-size: 110%;
-	font-family: inherit;
-}
-
-.textInput {
-	position: relative;
-	z-index: 1;
-	resize: none;
-	color: transparent;
-	caret-color: var(--MI_THEME-fg);
-
-	&::placeholder {
-		color: color(from var(--MI_THEME-fg) srgb r g b / 0.5);
-	}
-}
-
-.textInputComposing {
-	color: var(--MI_THEME-fg);
 }
 
 .textCount {
@@ -2036,19 +1978,11 @@ html[data-color-scheme=light] .preview {
 		padding: 0 16px;
 	}
 
-	.textOverlayInner {
-		padding: 0 16px;
-	}
-
 	.cwReplyRequired {
 		padding: 10px 16px 4px;
 	}
 
 	.text {
-		min-height: 80px;
-	}
-
-	.textOverlayInner {
 		min-height: 80px;
 	}
 
