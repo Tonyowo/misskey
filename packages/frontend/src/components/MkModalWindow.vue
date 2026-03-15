@@ -5,7 +5,11 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 <template>
 <MkModal ref="modal" v-slot="{ type }" :preferType="deviceKind === 'smartphone' ? 'drawer' : 'dialog'" @click="onBgClick" @closed="emit('closed')" @esc="emit('esc')">
-	<div ref="rootEl" :class="[$style.root, type === 'drawer' ? $style.asDrawer : null]" :style="{ width: type === 'drawer' ? '' : `${width}px`, height: type === 'drawer' || height == null ? '' : `min(${height}px, 100%)` }">
+	<div
+		ref="rootEl"
+		:class="[$style.root, type === 'drawer' ? $style.asDrawer : null, type !== 'drawer' && height == null ? $style.autoHeight : null]"
+		:style="{ width: type === 'drawer' ? '' : `${width}px`, height: type === 'drawer' ? '' : height == null ? 'auto' : `min(${height}px, 100%)` }"
+	>
 		<div :class="$style.header">
 			<button v-if="withCloseButton && closeButtonPosition === 'left'" :class="$style.headerButton" class="_button" data-cy-modal-window-close @click="emit('close')"><i class="ti ti-x"></i></button>
 			<span :class="[$style.title, withCloseButton && closeButtonPosition === 'left' ? $style.titleWithLeadingButton : null]">
@@ -100,6 +104,12 @@ defineExpose({
 
 		.footer {
 			padding-bottom: max(12px, env(safe-area-inset-bottom, 0px));
+		}
+	}
+
+	&.autoHeight {
+		.body {
+			flex: 0 0 auto;
 		}
 	}
 }
