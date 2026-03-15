@@ -7,7 +7,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 <MkModalWindow
 	ref="dialog"
 	:width="370"
-	:height="400"
+	:height="320"
 	@close="dialog?.close()"
 	@closed="emit('closed')"
 >
@@ -16,19 +16,12 @@ SPDX-License-Identifier: AGPL-3.0-only
 	<div class="_spacer" style="--MI_SPACER-min: 20px; --MI_SPACER-max: 28px;">
 		<form v-if="instance.enableEmail" @submit.prevent="onSubmit">
 			<div class="_gaps_m">
-				<MkInput v-model="username" type="text" pattern="^[a-zA-Z0-9_]+$" :spellcheck="false" autofocus required>
-					<template #label>{{ i18n.ts.username }}</template>
-					<template #prefix>@</template>
-				</MkInput>
-
-				<MkInput v-model="email" type="email" :spellcheck="false" required>
+				<MkInput v-model="email" type="email" :spellcheck="false" autofocus required>
 					<template #label>{{ i18n.ts.emailAddress }}</template>
 					<template #caption>{{ i18n.ts._forgotPassword.enterEmail }}</template>
 				</MkInput>
 
 				<MkButton type="submit" rounded :disabled="processing" primary style="margin: 0 auto;">{{ i18n.ts.send }}</MkButton>
-
-				<MkInfo>{{ i18n.ts._forgotPassword.ifNoEmail }}</MkInfo>
 			</div>
 		</form>
 		<div v-else>
@@ -43,7 +36,6 @@ import { ref, useTemplateRef } from 'vue';
 import MkModalWindow from '@/components/MkModalWindow.vue';
 import MkButton from '@/components/MkButton.vue';
 import MkInput from '@/components/MkInput.vue';
-import MkInfo from '@/components/MkInfo.vue';
 import * as os from '@/os.js';
 import { instance } from '@/instance.js';
 import { i18n } from '@/i18n.js';
@@ -55,14 +47,12 @@ const emit = defineEmits<{
 
 const dialog = useTemplateRef('dialog');
 
-const username = ref('');
 const email = ref('');
 const processing = ref(false);
 
 async function onSubmit() {
 	processing.value = true;
 	await os.apiWithDialog('request-reset-password', {
-		username: username.value,
 		email: email.value,
 	});
 	emit('done');

@@ -83,6 +83,8 @@ import XTotp from '@/components/MkSignin.totp.vue';
 import XPasskey from '@/components/MkSignin.passkey.vue';
 import { login } from '@/accounts.js';
 
+type SigninInputMode = 'username' | 'email';
+
 const emit = defineEmits<{
 	(ev: 'login', v: Misskey.entities.SigninFlowResponse & { finished: true }): void;
 }>();
@@ -107,6 +109,7 @@ const needCaptcha = ref(false);
 
 const userInfo = ref<null | Misskey.entities.SigninFlowUser>(null);
 const signinId = ref(props.initialUsername ?? '');
+const signinMode = ref<SigninInputMode>(props.initialUsername?.includes('@') ? 'email' : 'username');
 const password = ref('');
 
 //#region Passkey Passwordless
@@ -163,9 +166,10 @@ function onUseTotp(): void {
 }
 //#endregion
 
-async function onIdentifierSubmitted(identifier: string) {
+async function onIdentifierSubmitted({ identifier, mode }: { identifier: string; mode: SigninInputMode }) {
 	waiting.value = true;
 	signinId.value = identifier;
+	signinMode.value = mode;
 	userInfo.value = null;
 
 	await tryLogin({
@@ -291,11 +295,10 @@ async function onLoginSucceeded(res: Misskey.entities.SigninFlowResponse & { fin
 }
 
 function showSigninIdentifierNotFoundError(): void {
-	const isEmailSignin = signinId.value.includes('@');
 	os.alert({
 		type: 'error',
 		title: i18n.ts.signinAccountNotFoundTitle,
-		text: isEmailSignin ? i18n.ts.signinEmailNotFound : i18n.ts.signinAccountNotFound,
+		text: signinMode.value === 'email' ? i18n.ts.signinEmailNotFound : i18n.ts.signinUsernameNotFound,
 	});
 }
 

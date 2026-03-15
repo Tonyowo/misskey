@@ -32864,7 +32864,6 @@ export interface operations {
         requestBody: {
             content: {
                 'application/json': {
-                    username: string;
                     email: string;
                 };
             };

@@ -35,10 +35,9 @@ export const meta = {
 export const paramDef = {
 	type: 'object',
 	properties: {
-		username: { type: 'string' },
 		email: { type: 'string' },
 	},
-	required: ['username', 'email'],
+	required: ['email'],
 } as const;
 
 @Injectable()
@@ -60,40 +59,42 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 		private emailService: EmailService,
 	) {
 		super(meta, paramDef, async (ps, me) => {
-			const user = await this.usersRepository.findOneBy({
-				usernameLower: ps.username.toLowerCase(),
-				host: IsNull(),
-			});
+			const emailAddress = ps.email.trim();
 
-			// 合致するユーザーが登録されていなかったら無視
-			if (user == null) {
+			if (emailAddress === '') {
 				return;
 			}
 
-			const profile = await this.userProfilesRepository.findOneByOrFail({ userId: user.id });
+			const profiles = await this.userProfilesRepository
+				.createQueryBuilder('profile')
+				.where('LOWER(profile.email) = :email', { email: emailAddress.toLowerCase() })
+				.andWhere('profile.emailVerified = true')
+				.getMany();
 
-			// 合致するメアドが登録されていなかったら無視
-			if (profile.email !== ps.email) {
-				return;
+			for (const profile of profiles) {
+				const user = await this.usersRepository.findOneBy({
+					id: profile.userId,
+					host: IsNull(),
+				});
+
+				// パスワードリセットの対象はローカルユーザーのみ
+				if (user == null) {
+					continue;
+				}
+
+				const token = secureRndstr(64, { chars: L_CHARS });
+
+				await this.passwordResetRequestsRepository.insert({
+					id: this.idService.gen(),
+					userId: profile.userId,
+					token,
+				});
+
+				const link = `${this.config.url}/reset-password/${token}`;
+				const email = createPasswordResetEmail(link, user.username);
+
+				this.emailService.sendEmail(emailAddress, email.subject, email.html, email.text);
 			}
-
-			// メアドが認証されていなかったら無視
-			if (!profile.emailVerified) {
-				return;
-			}
-
-			const token = secureRndstr(64, { chars: L_CHARS });
-
-			await this.passwordResetRequestsRepository.insert({
-				id: this.idService.gen(),
-				userId: profile.userId,
-				token,
-			});
-
-			const link = `${this.config.url}/reset-password/${token}`;
-			const email = createPasswordResetEmail(link);
-
-			this.emailService.sendEmail(ps.email, email.subject, email.html, email.text);
 		});
 	}
 }

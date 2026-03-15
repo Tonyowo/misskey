@@ -13,7 +13,6 @@ SPDX-License-Identifier: AGPL-3.0-only
 >
 	<header :class="$style.header">
 		<div :class="$style.headerLeft">
-			<button v-if="!fixed" :class="$style.cancel" class="_button" @click="cancel"><i class="ti ti-x"></i></button>
 			<button ref="accountMenuEl" v-click-anime v-tooltip="i18n.ts.account" class="_button" @click="openAccountMenu">
 				<img :class="$style.avatar" :src="(postAccount ?? $i).avatarUrl" style="border-radius: 100%;"/>
 			</button>
@@ -45,6 +44,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 					<i style="margin-left: 6px;" :class="submitIcon"></i>
 				</div>
 			</button>
+			<button v-if="!fixed" v-tooltip="i18n.ts.close" :class="[$style.headerRightItem, $style.closeButton]" class="_button" @click="cancel"><i class="ti ti-x"></i></button>
 		</div>
 	</header>
 	<MkNoteSimple v-if="replyTargetNote" :class="$style.targetNote" :note="replyTargetNote"/>
@@ -1616,10 +1616,6 @@ defineExpose({
 	padding-left: 12px;
 }
 
-.cancel {
-	padding: 8px;
-}
-
 .avatar {
 	display: block;
 	width: 28px;
@@ -1711,6 +1707,10 @@ defineExpose({
 	&.danger {
 		color: #ff2a2a;
 	}
+}
+
+.closeButton {
+	margin-right: 12px;
 }
 
 .headerRightButtonText {
@@ -1950,6 +1950,10 @@ html[data-color-scheme=light] .preview {
 
 	.submit {
 		margin: 8px 8px 8px 4px;
+	}
+
+	.closeButton {
+		margin-right: 8px;
 	}
 
 	.toSpecified {

@@ -105,14 +105,14 @@ const props = withDefaults(defineProps<{
 	initialUsername: undefined,
 });
 
+type SigninInputMode = 'username' | 'email';
+
 const emit = defineEmits<{
-	(ev: 'identifierSubmitted', v: string): void;
+	(ev: 'identifierSubmitted', v: { identifier: string; mode: SigninInputMode }): void;
 	(ev: 'passkeyClick', v: PointerEvent): void;
 }>();
 
 const host = toUnicode(configHost);
-
-type SigninInputMode = 'username' | 'email';
 
 const inputMode = ref<SigninInputMode>(props.initialUsername?.includes('@') ? 'email' : 'username');
 const identifier = ref(props.initialUsername ?? '');
@@ -124,10 +124,28 @@ function switchInputMode(mode: SigninInputMode): void {
 	}
 }
 
+function isValidEmailAddress(value: string): boolean {
+	const input = document.createElement('input');
+	input.type = 'email';
+	input.value = value;
+	return input.checkValidity();
+}
+
 function onSubmit(): void {
 	const value = identifier.value.trim();
 	if (value === '') return;
-	emit('identifierSubmitted', value);
+	if (inputMode.value === 'email' && !isValidEmailAddress(value)) {
+		os.alert({
+			type: 'error',
+			title: i18n.ts.signinInvalidEmailTitle,
+			text: i18n.ts.signinInvalidEmail,
+		});
+		return;
+	}
+	emit('identifierSubmitted', {
+		identifier: value,
+		mode: inputMode.value,
+	});
 }
 
 //#region Open on remote

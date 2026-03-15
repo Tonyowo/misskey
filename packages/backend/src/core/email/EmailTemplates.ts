@@ -63,11 +63,19 @@ export function createSignupEmail(link: string): RenderedEmail {
 	);
 }
 
-export function createPasswordResetEmail(link: string): RenderedEmail {
-	return buildLinkMail(
+export function createPasswordResetEmail(link: string, username?: string): RenderedEmail {
+	return renderEmail(
 		'密码重置请求',
-		'请点击下方链接重置密码：',
-		link,
+		[
+			username ? `账号：@${username}` : '',
+			'请点击下方链接重置密码：',
+			`<a href="${link}">${link}</a>`,
+		].filter(Boolean),
+		[
+			username ? `账号：@${username}` : '',
+			'请点击下方链接重置密码：',
+			link,
+		].filter(Boolean),
 	);
 }
 

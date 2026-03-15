@@ -43,7 +43,7 @@ withDefaults(defineProps<{
 }>(), {
 	withOkButton: false,
 	withCloseButton: true,
-	closeButtonPosition: 'left',
+	closeButtonPosition: 'right',
 	okButtonDisabled: false,
 	width: 400,
 	height: 500,
