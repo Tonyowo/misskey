@@ -5,22 +5,28 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 <template>
 <div class="omfetrab" :class="['s' + size, 'w' + width, 'h' + height, { asDrawer, asWindow }]" :style="{ maxHeight: maxHeight ? maxHeight + 'px' : undefined }">
-	<input
-		ref="searchEl"
-		:value="q"
-		class="search"
-		data-prevent-emoji-insert
-		:class="{ filled: q != null && q !== '' }"
-		:placeholder="i18n.ts.search"
-		type="search"
-		autocapitalize="off"
-		@input="input()"
-		@paste.stop="paste"
-		@keydown="onKeydown"
-	>
+	<div v-if="searchOpen || q !== ''" class="searchBar">
+		<input
+			ref="searchEl"
+			:value="q"
+			class="search"
+			data-prevent-emoji-insert
+			:placeholder="i18n.ts.search"
+			type="search"
+			autocapitalize="off"
+			@input="input()"
+			@paste.stop="paste"
+			@keydown="onKeydown"
+		>
+		<button class="_button searchClose" :title="i18n.ts.close" :aria-label="i18n.ts.close" @click="closeSearch">
+			<i class="ti ti-x"></i>
+		</button>
+	</div>
+
 	<!-- FirefoxのTabフォーカスが想定外の挙動となるためtabindex="-1"を追加 https://github.com/misskey-dev/misskey/issues/10744 -->
 	<div ref="emojisEl" class="emojis" tabindex="-1">
-		<section class="result">
+		<section v-if="q !== ''" class="resultSection">
+			<header class="sectionTitle">{{ i18n.ts.searchResult }}</header>
 			<div v-if="searchResultCustom.length > 0" class="body">
 				<button
 					v-for="emoji in searchResultCustom"
@@ -46,31 +52,13 @@ SPDX-License-Identifier: AGPL-3.0-only
 					<MkEmoji class="emoji" :emoji="emoji.char"/>
 				</button>
 			</div>
+			<div v-if="searchResultCustom.length === 0 && searchResultUnicode.length === 0" class="emptyState">{{ i18n.ts.search }}</div>
 		</section>
 
-		<div v-if="q === ''" class="group index">
-			<section v-if="showPinned && (pinned && pinned.length > 0)">
-				<div class="body">
-					<button
-						v-for="emoji in pinnedEmojisDef"
-						:key="getKey(emoji)"
-						:data-emoji="getKey(emoji)"
-						class="_button item"
-						:disabled="!canReact(emoji)"
-						tabindex="0"
-						@pointerenter="computeButtonTitle"
-						@click="chosen(emoji, $event)"
-					>
-						<MkCustomEmoji v-if="!emoji.hasOwnProperty('char')" class="emoji" :name="getKey(emoji)" :normal="true" :fallbackToImage="true"/>
-						<MkEmoji v-else class="emoji" :emoji="getKey(emoji)" :normal="true"/>
-					</button>
-					<button v-tooltip="i18n.ts.settings" class="_button config" @click="settings"><i class="ti ti-settings"></i></button>
-				</div>
-			</section>
-
-			<section>
-				<header class="_acrylic"><i class="ti ti-clock ti-fw"></i> {{ i18n.ts.recentUsed }}</header>
-				<div class="body">
+		<template v-else>
+			<section v-if="recentlyUsedEmojisDef.length > 0" class="contentSection">
+				<header class="sectionTitle">{{ i18n.ts.recentUsed }}</header>
+				<div class="body compact">
 					<button
 						v-for="emoji in recentlyUsedEmojisDef"
 						:key="getKey(emoji)"
@@ -85,73 +73,50 @@ SPDX-License-Identifier: AGPL-3.0-only
 					</button>
 				</div>
 			</section>
-		</div>
 
-		<div v-if="q === '' && tab === 'custom'" class="group browser">
-			<section>
-				<header class="_acrylic">{{ activeCustomSection?.title ?? i18n.ts.customEmojis }}</header>
-				<div v-if="activeCustomSection" class="body">
+			<section class="contentSection">
+				<header class="sectionTitle">{{ activeSection?.title ?? i18n.ts.emoji }}</header>
+				<div v-if="activeSection" class="body">
 					<button
-						v-for="emoji in activeCustomSection.emojis"
+						v-for="emoji in activeSection.emojis"
 						:key="emoji"
 						:data-emoji="emoji"
 						class="_button item"
-						:disabled="activeCustomSection.disabledEmojis.includes(emoji)"
+						:disabled="activeSection.disabledEmojis.includes(emoji)"
 						@pointerenter="computeButtonTitle"
 						@click="chosen(emoji, $event)"
 					>
-						<MkCustomEmoji class="emoji" :name="emoji" :normal="true" :fallbackToImage="true"/>
+						<MkCustomEmoji v-if="emoji.startsWith(':')" class="emoji" :name="emoji" :normal="true" :fallbackToImage="true"/>
+						<MkEmoji v-else class="emoji" :emoji="emoji" :normal="true"/>
 					</button>
 				</div>
 				<div v-else class="emptyState">{{ i18n.ts.noCustomEmojis }}</div>
 			</section>
-		</div>
-
-		<div v-if="q === '' && tab === 'unicode'" class="group browser">
-			<section>
-				<header class="_acrylic">{{ activeUnicodeSection?.title ?? i18n.ts.emoji }}</header>
-				<div class="body">
-					<button
-						v-for="emoji in activeUnicodeSection?.emojis ?? []"
-						:key="emoji"
-						:data-emoji="emoji"
-						class="_button item"
-						@pointerenter="computeButtonTitle"
-						@click="chosen(emoji, $event)"
-					>
-						<MkEmoji class="emoji" :emoji="emoji" :normal="true"/>
-					</button>
-				</div>
-			</section>
-		</div>
+		</template>
 	</div>
 
-	<div v-if="showCategoryRail" class="categoryRail">
+	<div class="bottomBar">
 		<button
-			v-for="section in currentSections"
-			:key="`${tab}:${section.key}`"
-			class="_button categoryTab"
-			:class="{ active: section.key === activeSectionKey }"
-			:title="section.title"
-			:aria-label="section.title"
-			@click="selectSection(section.key)"
+			v-for="item in bottomTabs"
+			:key="item.key"
+			class="_button bottomTab"
+			:class="{ active: item.active }"
+			:title="item.title"
+			:aria-label="item.title"
+			:disabled="item.disabled"
+			@click="activateBottomTab(item)"
 		>
-			<MkCustomEmoji v-if="section.icon?.startsWith(':')" class="emoji" :name="section.icon" :normal="true" :fallbackToImage="true"/>
-			<MkEmoji v-else-if="section.icon" class="emoji" :emoji="section.icon" :normal="true"/>
-			<span v-else class="categoryFallback">{{ section.label.slice(0, 1).toUpperCase() }}</span>
+			<i v-if="item.iconClass" :class="item.iconClass"></i>
+			<MkCustomEmoji v-else-if="item.icon?.startsWith(':')" class="emoji" :name="item.icon" :normal="true" :fallbackToImage="true"/>
+			<MkEmoji v-else-if="item.icon" class="emoji" :emoji="item.icon" :normal="true"/>
+			<span v-else class="categoryFallback">{{ item.title.slice(0, 1).toUpperCase() }}</span>
 		</button>
-	</div>
-
-	<div class="tabs">
-		<button class="_button tab" :class="{ active: tab === 'index' }" :title="i18n.ts.recentUsed" :aria-label="i18n.ts.recentUsed" @click="setTab('index')"><i class="ti ti-clock ti-fw"></i></button>
-		<button class="_button tab" :class="{ active: tab === 'custom' }" :title="i18n.ts.customEmojis" :aria-label="i18n.ts.customEmojis" :disabled="customSections.length === 0" @click="setTab('custom')"><i class="ti ti-mood-smile ti-fw"></i></button>
-		<button class="_button tab" :class="{ active: tab === 'unicode' }" :title="i18n.ts.emoji" :aria-label="i18n.ts.emoji" @click="setTab('unicode')"><i class="ti ti-icons ti-fw"></i></button>
 	</div>
 </div>
 </template>
 
 <script lang="ts" setup>
-import { ref, useTemplateRef, computed, watch, onMounted } from 'vue';
+import { ref, useTemplateRef, computed, watch, onMounted, nextTick } from 'vue';
 import * as Misskey from 'misskey-js';
 import {
 	emojilist,
@@ -171,7 +136,6 @@ import { customEmojiCategories, customEmojis, customEmojisMap } from '@/custom-e
 import { $i } from '@/i.js';
 import { checkReactionPermissions } from '@/utility/check-reaction-permissions.js';
 import { prefer } from '@/preferences.js';
-import { useRouter } from '@/router.js';
 import { haptic } from '@/utility/haptic.js';
 
 type PickerSection = {
@@ -183,9 +147,18 @@ type PickerSection = {
 	icon: string | null;
 };
 
-const OTHER_CUSTOM_CATEGORY_KEY = '__other__';
+type BottomTabItem = {
+	key: string;
+	title: string;
+	icon: string | null;
+	iconClass: string | null;
+	active: boolean;
+	disabled: boolean;
+	kind: 'search' | 'custom-all' | 'custom-section' | 'pinned' | 'unicode-switch' | 'unicode-section';
+};
 
-const router = useRouter();
+const OTHER_CUSTOM_CATEGORY_KEY = '__other__';
+const ALL_CUSTOM_SECTION_KEY = '__all_custom__';
 
 const props = withDefaults(defineProps<{
 	showPinned?: boolean;
@@ -218,20 +191,47 @@ const recentlyUsedEmojis = store.r.recentlyUsedEmojis;
 const recentlyUsedEmojisDef = computed(() => {
 	return recentlyUsedEmojis.value.map(getDef);
 });
+const pinned = computed(() => props.pinnedEmojis ?? []);
 const pinnedEmojisDef = computed(() => {
-	return pinned.value?.map(getDef);
+	return pinned.value.map(getDef);
 });
 
-const pinned = computed(() => props.pinnedEmojis);
 const size = computed(() => emojiPickerScale.value);
 const width = computed(() => emojiPickerWidth.value);
 const height = computed(() => emojiPickerHeight.value);
 const q = ref<string>('');
+const searchOpen = ref(false);
 const searchResultCustom = ref<Misskey.entities.EmojiSimple[]>([]);
 const searchResultUnicode = ref<UnicodeEmojiDef[]>([]);
-const tab = ref<'index' | 'custom' | 'unicode'>(customEmojis.value.length > 0 ? 'custom' : 'unicode');
-const activeCustomSectionKey = ref<string | null>(null);
+const browser = ref<'custom' | 'unicode' | 'pinned'>(customEmojis.value.length > 0 ? 'custom' : 'unicode');
+const activeCustomSectionKey = ref<string>(ALL_CUSTOM_SECTION_KEY);
 const activeUnicodeSectionKey = ref<string | null>(categories[0] ?? null);
+
+const allCustomSection = computed<PickerSection | null>(() => {
+	if (customEmojis.value.length === 0) return null;
+
+	return {
+		key: ALL_CUSTOM_SECTION_KEY,
+		label: i18n.ts.all,
+		title: `${i18n.ts.all}${i18n.ts.customEmojis}`,
+		emojis: customEmojis.value.map(emoji => `:${emoji.name}:`),
+		disabledEmojis: customEmojis.value.filter(emoji => !canReact(emoji)).map(emoji => `:${emoji.name}:`),
+		icon: '🙂',
+	};
+});
+
+const pinnedSection = computed<PickerSection | null>(() => {
+	if (!props.showPinned || pinnedEmojisDef.value.length === 0) return null;
+
+	return {
+		key: '__pinned__',
+		label: i18n.ts.pinned,
+		title: i18n.ts.pinned,
+		emojis: pinnedEmojisDef.value.map(getKey),
+		disabledEmojis: pinnedEmojisDef.value.filter(emoji => !canReact(emoji)).map(getKey),
+		icon: null,
+	};
+});
 
 const customSections = computed<PickerSection[]>(() => {
 	return customEmojiCategories.value
@@ -243,7 +243,7 @@ const customSections = computed<PickerSection[]>(() => {
 			return {
 				key: getCustomCategoryKey(category),
 				label: getCustomCategoryLabel(category),
-				title: getCustomCategoryTitle(category),
+				title: getCustomCategoryLabel(category),
 				emojis: emojis.map(emoji => `:${emoji.name}:`),
 				disabledEmojis: emojis.filter(emoji => !canReact(emoji)).map(emoji => `:${emoji.name}:`),
 				icon: emojis[0] ? `:${emojis[0].name}:` : null,
@@ -267,43 +267,111 @@ const unicodeSections = computed<PickerSection[]>(() => {
 });
 
 const activeCustomSection = computed(() => {
-	return customSections.value.find(section => section.key === activeCustomSectionKey.value) ?? customSections.value[0] ?? null;
+	if (activeCustomSectionKey.value === ALL_CUSTOM_SECTION_KEY) {
+		return allCustomSection.value;
+	}
+	return customSections.value.find(section => section.key === activeCustomSectionKey.value) ?? allCustomSection.value;
 });
+
 const activeUnicodeSection = computed(() => {
 	return unicodeSections.value.find(section => section.key === activeUnicodeSectionKey.value) ?? unicodeSections.value[0] ?? null;
 });
-const currentSections = computed(() => {
-	if (tab.value === 'custom') return customSections.value;
-	if (tab.value === 'unicode') return unicodeSections.value;
-	return [];
+
+const activeSection = computed(() => {
+	if (browser.value === 'pinned') return pinnedSection.value;
+	if (browser.value === 'unicode') return activeUnicodeSection.value;
+	return activeCustomSection.value ?? activeUnicodeSection.value;
 });
-const activeSectionKey = computed(() => {
-	if (tab.value === 'custom') return activeCustomSection.value?.key ?? null;
-	if (tab.value === 'unicode') return activeUnicodeSection.value?.key ?? null;
-	return null;
+
+const bottomTabs = computed<BottomTabItem[]>(() => {
+	const items: BottomTabItem[] = [{
+		key: 'search',
+		title: i18n.ts.search,
+		icon: null,
+		iconClass: 'ti ti-search',
+		active: searchOpen.value || q.value !== '',
+		disabled: false,
+		kind: 'search',
+	}];
+
+	if (allCustomSection.value) {
+		items.push({
+			key: allCustomSection.value.key,
+			title: allCustomSection.value.title,
+			icon: allCustomSection.value.icon,
+			iconClass: null,
+			active: browser.value === 'custom' && activeCustomSectionKey.value === ALL_CUSTOM_SECTION_KEY,
+			disabled: false,
+			kind: 'custom-all',
+		});
+	}
+
+	if (pinnedSection.value) {
+		items.push({
+			key: pinnedSection.value.key,
+			title: pinnedSection.value.title,
+			icon: null,
+			iconClass: 'ti ti-heart',
+			active: browser.value === 'pinned',
+			disabled: false,
+			kind: 'pinned',
+		});
+	}
+
+	if (browser.value === 'unicode') {
+		items.push(...unicodeSections.value.map(section => ({
+			key: section.key,
+			title: section.title,
+			icon: section.icon,
+			iconClass: null,
+			active: activeUnicodeSectionKey.value === section.key,
+			disabled: false,
+			kind: 'unicode-section',
+		} satisfies BottomTabItem)));
+	} else {
+		items.push(...customSections.value.map(section => ({
+			key: section.key,
+			title: section.title,
+			icon: section.icon,
+			iconClass: null,
+			active: browser.value === 'custom' && activeCustomSectionKey.value === section.key,
+			disabled: false,
+			kind: 'custom-section',
+		} satisfies BottomTabItem)));
+
+		if (unicodeSections.value.length > 0) {
+			items.push({
+				key: '__unicode_switch__',
+				title: i18n.ts.emoji,
+				icon: '😀',
+				iconClass: null,
+				active: false,
+				disabled: false,
+				kind: 'unicode-switch',
+			});
+		}
+	}
+
+	return items;
 });
-const showCategoryRail = computed(() => q.value === '' && currentSections.value.length > 0);
 
 watch(customSections, (sections) => {
 	if (sections.length === 0) {
-		activeCustomSectionKey.value = null;
-		if (tab.value === 'custom') {
-			tab.value = unicodeSections.value.length > 0 ? 'unicode' : 'index';
+		activeCustomSectionKey.value = ALL_CUSTOM_SECTION_KEY;
+		if (browser.value === 'custom') {
+			browser.value = unicodeSections.value.length > 0 ? 'unicode' : 'pinned';
 		}
 		return;
 	}
 
-	if (!activeCustomSectionKey.value || !sections.some(section => section.key === activeCustomSectionKey.value)) {
-		activeCustomSectionKey.value = sections[0].key;
+	if (activeCustomSectionKey.value !== ALL_CUSTOM_SECTION_KEY && !sections.some(section => section.key === activeCustomSectionKey.value)) {
+		activeCustomSectionKey.value = ALL_CUSTOM_SECTION_KEY;
 	}
 }, { immediate: true });
 
 watch(unicodeSections, (sections) => {
 	if (sections.length === 0) {
 		activeUnicodeSectionKey.value = null;
-		if (tab.value === 'unicode') {
-			tab.value = customSections.value.length > 0 ? 'custom' : 'index';
-		}
 		return;
 	}
 
@@ -331,10 +399,9 @@ watch(q, () => {
 		const exactMatch = emojis.find(emoji => emoji.name === newQ);
 		if (exactMatch) matches.add(exactMatch);
 
-		if (newQ.includes(' ')) { // AND検索
+		if (newQ.includes(' ')) {
 			const keywords = newQ.split(' ');
 
-			// 名前にキーワードが含まれている
 			for (const emoji of emojis) {
 				if (keywords.every(keyword => emoji.name.includes(keyword))) {
 					matches.add(emoji);
@@ -343,7 +410,6 @@ watch(q, () => {
 			}
 			if (matches.size >= max) return matches;
 
-			// 名前またはエイリアスにキーワードが含まれている
 			for (const emoji of emojis) {
 				if (keywords.every(keyword => emoji.name.includes(keyword) || emoji.aliases.some(alias => alias.includes(keyword)))) {
 					matches.add(emoji);
@@ -407,7 +473,7 @@ watch(q, () => {
 		const exactMatch = emojis.find(emoji => emoji.name === newQ);
 		if (exactMatch) matches.add(exactMatch);
 
-		if (newQ.includes(' ')) { // AND検索
+		if (newQ.includes(' ')) {
 			const keywords = newQ.split(' ');
 
 			for (const emoji of emojis) {
@@ -467,6 +533,7 @@ watch(q, () => {
 
 	searchResultCustom.value = Array.from(searchCustom());
 	searchResultUnicode.value = Array.from(searchUnicode());
+	searchOpen.value = true;
 });
 
 function canReact(emoji: Misskey.entities.EmojiSimple | UnicodeEmojiDef | string): boolean {
@@ -487,34 +554,50 @@ function getCustomCategoryLabel(category: string): string {
 	return parts.at(-1) ?? i18n.ts.other;
 }
 
-function getCustomCategoryTitle(category: string): string {
-	return category === '' ? i18n.ts.other : category;
-}
-
 function humanizeUnicodeCategory(category: string): string {
 	return category.replaceAll('_', ' ');
 }
 
-function setTab(nextTab: 'index' | 'custom' | 'unicode') {
-	if (nextTab === 'custom' && customSections.value.length === 0) return;
-	if (nextTab === 'unicode' && unicodeSections.value.length === 0) return;
-
-	tab.value = nextTab;
-	if (emojisEl.value) emojisEl.value.scrollTop = 0;
-}
-
-function selectSection(key: string) {
-	if (tab.value === 'custom') {
-		activeCustomSectionKey.value = key;
+function activateBottomTab(item: BottomTabItem) {
+	switch (item.kind) {
+		case 'search':
+			if (searchOpen.value || q.value !== '') {
+				nextTick(() => focus());
+			} else {
+				searchOpen.value = true;
+				nextTick(() => focus());
+			}
+			break;
+		case 'custom-all':
+			browser.value = 'custom';
+			activeCustomSectionKey.value = ALL_CUSTOM_SECTION_KEY;
+			closeSearch();
+			break;
+		case 'custom-section':
+			browser.value = 'custom';
+			activeCustomSectionKey.value = item.key;
+			closeSearch();
+			break;
+		case 'pinned':
+			browser.value = 'pinned';
+			closeSearch();
+			break;
+		case 'unicode-switch':
+			browser.value = 'unicode';
+			closeSearch();
+			break;
+		case 'unicode-section':
+			browser.value = 'unicode';
+			activeUnicodeSectionKey.value = item.key;
+			closeSearch();
+			break;
 	}
-	if (tab.value === 'unicode') {
-		activeUnicodeSectionKey.value = key;
-	}
+
 	if (emojisEl.value) emojisEl.value.scrollTop = 0;
 }
 
 function focus() {
-	if (!['smartphone', 'tablet'].includes(deviceKind) && !isTouchUsing) {
+	if (!['smartphone', 'tablet'].includes(deviceKind) && !isTouchUsing && (searchOpen.value || q.value !== '')) {
 		searchEl.value?.focus({
 			preventScroll: true,
 		});
@@ -524,6 +607,12 @@ function focus() {
 function reset() {
 	if (emojisEl.value) emojisEl.value.scrollTop = 0;
 	q.value = '';
+	searchOpen.value = false;
+}
+
+function closeSearch(clear = true) {
+	if (clear) q.value = '';
+	searchOpen.value = false;
 }
 
 function getKey(emoji: string | Misskey.entities.EmojiSimple | UnicodeEmojiDef): string {
@@ -532,8 +621,6 @@ function getKey(emoji: string | Misskey.entities.EmojiSimple | UnicodeEmojiDef):
 
 function getDef(emoji: string): string | Misskey.entities.EmojiSimple | UnicodeEmojiDef {
 	if (emoji.includes(':')) {
-		// カスタム絵文字が存在する場合はその情報を持つオブジェクトを返し、
-		// サーバの管理画面から削除された等で情報が見つからない場合は名前の文字列をそのまま返しておく（undefinedを返すとエラーになるため）
 		const name = emoji.replaceAll(':', '');
 		return customEmojisMap.get(name) ?? emoji;
 	} else {
@@ -541,7 +628,6 @@ function getDef(emoji: string): string | Misskey.entities.EmojiSimple | UnicodeE
 	}
 }
 
-/** @see MkEmojiPicker.section.vue */
 function computeButtonTitle(ev: PointerEvent): void {
 	const elm = ev.target as HTMLElement;
 	const emoji = elm.dataset.emoji as string;
@@ -564,8 +650,7 @@ function chosen(emoji: string | Misskey.entities.EmojiSimple | UnicodeEmojiDef, 
 
 	haptic();
 
-	// 最近使った絵文字更新
-	if (!pinned.value?.includes(key)) {
+	if (!pinned.value.includes(key)) {
 		let recents = store.s.recentlyUsedEmojis;
 		recents = recents.filter((emoji) => emoji !== key);
 		recents.unshift(key);
@@ -574,9 +659,6 @@ function chosen(emoji: string | Misskey.entities.EmojiSimple | UnicodeEmojiDef, 
 }
 
 function input(): void {
-	// Using custom input event instead of v-model to respond immediately on
-	// Android, where composition happens on all languages
-	// (v-model does not update during composition)
 	q.value = searchEl.value?.value.trim() ?? '';
 }
 
@@ -597,6 +679,10 @@ function onKeydown(ev: KeyboardEvent) {
 	if (ev.key === 'Escape') {
 		ev.preventDefault();
 		ev.stopPropagation();
+		if (q.value !== '' || searchOpen.value) {
+			closeSearch();
+			return;
+		}
 		emit('esc');
 	}
 }
@@ -626,13 +712,10 @@ function done(query?: string): boolean | void {
 	}
 }
 
-function settings() {
-	emit('esc');
-	router.push('/settings/emoji-palette');
-}
-
 onMounted(() => {
-	focus();
+	if (browser.value === 'pinned' && pinnedSection.value == null) {
+		browser.value = allCustomSection.value ? 'custom' : 'unicode';
+	}
 });
 
 defineExpose({
@@ -707,124 +790,47 @@ defineExpose({
 	width: calc((var(--eachSize) * var(--columns)) + (#{$pad} * 2));
 	height: calc((var(--eachSize) * var(--rows)) + (#{$pad} * 2));
 
-	&.asDrawer {
-		width: 100% !important;
+	> .searchBar {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		padding: 10px 12px;
+		border-bottom: solid 0.5px var(--MI_THEME-divider);
 
-		> .emojis {
-			::v-deep(section) {
-				> header {
-					height: 32px;
-					line-height: 32px;
-					padding: 0 12px;
-					font-size: 15px;
-				}
+		> .search {
+			flex: 1;
+			min-width: 0;
+			padding: 0;
+			box-sizing: border-box;
+			font-size: 1em;
+			outline: none;
+			border: none;
+			background: transparent;
+			color: var(--MI_THEME-fg);
+		}
 
-				> .body {
-					display: grid;
-					grid-template-columns: repeat(var(--columns), 1fr);
-					font-size: 30px;
-
-					> .config {
-						aspect-ratio: 1 / 1;
-						width: auto;
-						height: auto;
-						min-width: 0;
-						font-size: 14px;
-					}
-
-					> .item {
-						aspect-ratio: 1 / 1;
-						width: auto;
-						height: auto;
-						min-width: 0;
-
-						&:disabled {
-							cursor: not-allowed;
-							background: linear-gradient(-45deg, transparent 0% 48%, light-dark(rgba(0, 0, 0, 0.25), rgba(255, 255, 255, 0.15)) 48% 52%, transparent 52% 100%);
-							opacity: 1;
-
-							> .emoji {
-								filter: grayscale(1);
-								mix-blend-mode: exclusion;
-								opacity: 0.8;
-							}
-						}
-					}
-				}
-			}
+		> .searchClose {
+			flex: 0 0 auto;
+			width: 32px;
+			height: 32px;
+			border-radius: 999px;
+			color: var(--MI_THEME-fgTransparentStrong);
 		}
 	}
 
-	&.asWindow {
-		width: 100% !important;
-		height: 100% !important;
-
-		> .emojis {
-			::v-deep(section) {
-				> .body {
-					display: grid;
-					grid-template-columns: repeat(var(--columns), 1fr);
-					font-size: 30px;
-
-					> .item {
-						aspect-ratio: 1 / 1;
-						width: auto;
-						height: auto;
-						min-width: 0;
-						padding: 0;
-
-						&:disabled {
-							cursor: not-allowed;
-							background: linear-gradient(-45deg, transparent 0% 48%, light-dark(rgba(0, 0, 0, 0.25), rgba(255, 255, 255, 0.15)) 48% 52%, transparent 52% 100%);
-							opacity: 1;
-
-							> .emoji {
-								filter: grayscale(1);
-								mix-blend-mode: exclusion;
-								opacity: 0.8;
-							}
-						}
-					}
-				}
-			}
-		}
-	}
-
-	> .search {
-		width: 100%;
-		padding: 12px;
-		box-sizing: border-box;
-		font-size: 1em;
-		outline: none;
-		border: none;
-		background: transparent;
-		color: var(--MI_THEME-fg);
-
-		&:not(:focus):not(.filled) {
-			margin-bottom: env(safe-area-inset-bottom, 0px);
-		}
-
-		&:not(.filled) {
-			order: 1;
-			z-index: 2;
-			box-shadow: 0px -1px 0 0px var(--MI_THEME-divider);
-		}
-	}
-
-	> .categoryRail {
+	> .bottomBar {
 		display: flex;
 		gap: 8px;
 		padding: 8px;
 		overflow-x: auto;
 		scrollbar-width: none;
 		border-top: solid 0.5px var(--MI_THEME-divider);
-		order: 2;
 
 		&::-webkit-scrollbar {
 			display: none;
 		}
 
-		> .categoryTab {
+		> .bottomTab {
 			flex: 0 0 auto;
 			display: inline-flex;
 			align-items: center;
@@ -834,8 +840,9 @@ defineExpose({
 			min-width: 0;
 			padding: 0;
 			border-radius: 12px;
-			background: var(--MI_THEME-panel);
+			background: transparent;
 			border: 1px solid transparent;
+			color: var(--MI_THEME-fg);
 			transition: background-color 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
 
 			&:hover {
@@ -843,8 +850,9 @@ defineExpose({
 			}
 
 			&.active {
-				background: color-mix(in srgb, var(--MI_THEME-accent) 14%, var(--MI_THEME-panel));
+				background: color-mix(in srgb, var(--MI_THEME-accent) 12%, var(--MI_THEME-panel));
 				border-color: color-mix(in srgb, var(--MI_THEME-accent) 40%, transparent);
+				color: var(--MI_THEME-accent);
 			}
 
 			&:active {
@@ -861,136 +869,102 @@ defineExpose({
 		}
 	}
 
-	> .tabs {
-		display: flex;
-		order: 3;
-
-		> .tab {
-			flex: 1;
-			height: 42px;
-			border-top: solid 0.5px var(--MI_THEME-divider);
-
-			&.active {
-				border-top: solid 1px var(--MI_THEME-accent);
-				color: var(--MI_THEME-accent);
-			}
-
-			&:disabled {
-				opacity: 0.4;
-				cursor: default;
-			}
-		}
-	}
-
 	> .emojis {
 		height: 100%;
 		overflow-y: auto;
 		overflow-x: hidden;
 		scrollbar-width: none;
 
-		> .group {
-			&:not(.index) {
-				padding: 4px 0 8px 0;
-				border-top: solid 0.5px var(--MI_THEME-divider);
-			}
-
-			> header {
-				height: 32px;
-				line-height: 32px;
-				z-index: 2;
-				padding: 0 8px;
-				font-size: 12px;
-			}
+		> .contentSection,
+		> .resultSection {
+			padding: 8px 0;
 		}
 
-		> .browser {
-			> .emptyState {
-				padding: 24px 16px;
-				text-align: center;
-				color: var(--MI_THEME-fgTransparentWeak);
-			}
-		}
+		.body {
+			position: relative;
+			display: grid;
+			grid-template-columns: repeat(var(--columns), 1fr);
+			padding: $pad;
+			font-size: 30px;
 
-		::v-deep(section) {
-			> header {
-				position: sticky;
-				top: 0;
-				left: 0;
-				line-height: 28px;
-				z-index: 1;
-				padding: 0 8px;
-				font-size: 12px;
+			&.compact {
+				padding-top: 0;
 			}
 
-			> .body {
+			> .item {
 				position: relative;
-				padding: $pad;
+				padding: 0 3px;
+				width: var(--eachSize);
+				height: var(--eachSize);
+				contain: strict;
+				border-radius: 8px;
+				font-size: 24px;
 
-				> .config {
-					position: relative;
-					padding: 0 3px;
-					width: var(--eachSize);
-					height: var(--eachSize);
-					contain: strict;
-					opacity: 0.5;
+				&:hover {
+					background: rgba(0, 0, 0, 0.05);
 				}
 
-				> .item {
-					position: relative;
-					padding: 0 3px;
-					width: var(--eachSize);
-					height: var(--eachSize);
-					contain: strict;
-					border-radius: 4px;
-					font-size: 24px;
+				&:active {
+					background: var(--MI_THEME-accent);
+					box-shadow: inset 0 0.15em 0.3em rgba(27, 31, 35, 0.15);
+				}
 
-					&:hover {
-						background: rgba(0, 0, 0, 0.05);
-					}
-
-					&:active {
-						background: var(--MI_THEME-accent);
-						box-shadow: inset 0 0.15em 0.3em rgba(27, 31, 35, 0.15);
-					}
-
-					&:disabled {
-						cursor: not-allowed;
-						background: linear-gradient(-45deg, transparent 0% 48%, light-dark(rgba(0, 0, 0, 0.25), rgba(255, 255, 255, 0.15)) 48% 52%, transparent 52% 100%);
-						opacity: 1;
-
-						> .emoji {
-							filter: grayscale(1);
-							mix-blend-mode: exclusion;
-							opacity: 0.8;
-						}
-					}
+				&:disabled {
+					cursor: not-allowed;
+					background: linear-gradient(-45deg, transparent 0% 48%, light-dark(rgba(0, 0, 0, 0.25), rgba(255, 255, 255, 0.15)) 48% 52%, transparent 52% 100%);
+					opacity: 1;
 
 					> .emoji {
-						height: 1.25em;
-						vertical-align: -.25em;
-						pointer-events: none;
-						width: 100%;
-						object-fit: contain;
+						filter: grayscale(1);
+						mix-blend-mode: exclusion;
+						opacity: 0.8;
 					}
 				}
-			}
 
-			&.result {
-				border-bottom: solid 0.5px var(--MI_THEME-divider);
-
-				&:empty {
-					display: none;
+				> .emoji {
+					height: 1.25em;
+					vertical-align: -.25em;
+					pointer-events: none;
+					width: 100%;
+					object-fit: contain;
 				}
 			}
 		}
 	}
+
+	&.asDrawer,
+	&.asWindow {
+		width: 100% !important;
+
+		> .emojis {
+			.body {
+				> .item {
+					aspect-ratio: 1 / 1;
+					width: auto;
+					height: auto;
+					min-width: 0;
+				}
+			}
+		}
+	}
+
+	&.asWindow {
+		height: 100% !important;
+	}
+}
+
+.sectionTitle {
+	padding: 0 12px;
+	font-size: 12px;
+	font-weight: 700;
+	color: var(--MI_THEME-fgTransparentStrong);
 }
 
 .categoryFallback {
 	font-size: 13px;
 	font-weight: 700;
 	letter-spacing: 0.04em;
-	color: var(--MI_THEME-fg);
+	color: currentColor;
 }
 
 .emptyState {
