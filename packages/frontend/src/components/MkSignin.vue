@@ -290,16 +290,21 @@ async function onLoginSucceeded(res: Misskey.entities.SigninFlowResponse & { fin
 	}
 }
 
+function showSigninIdentifierNotFoundError(): void {
+	const isEmailSignin = signinId.value.includes('@');
+	os.alert({
+		type: 'error',
+		title: i18n.ts.signinAccountNotFoundTitle,
+		text: isEmailSignin ? i18n.ts.signinEmailNotFound : i18n.ts.signinAccountNotFound,
+	});
+}
+
 function onSigninApiError(err?: any): void {
 	const id = err?.id ?? null;
 
 	switch (id) {
 		case '6cc579cc-885d-43d8-95c2-b8c7fc963280': {
-			os.alert({
-				type: 'error',
-				title: i18n.ts.loginFailed,
-				text: i18n.ts.noSuchUser,
-			});
+			showSigninIdentifierNotFoundError();
 			break;
 		}
 		case '932c904e-9460-45b7-9ce6-7ed33be7eb2c': {
@@ -364,11 +369,17 @@ function onSigninApiError(err?: any): void {
 		}
 		default: {
 			console.error(err);
-			os.alert({
-				type: 'error',
-				title: i18n.ts.loginFailed,
-				text: JSON.stringify(err),
-			});
+			const isGenericServerError = (typeof err === 'string' && err === 'Internal Server Error') || err?.message === 'Internal Server Error' || err?.code === 'INTERNAL_ERROR';
+			const isIdentifierStep = signinId.value !== '' && password.value === '';
+			if (isGenericServerError && isIdentifierStep) {
+				showSigninIdentifierNotFoundError();
+			} else {
+				os.alert({
+					type: 'error',
+					title: i18n.ts.loginFailed,
+					text: i18n.ts.tryAgain,
+				});
+			}
 		}
 	}
 

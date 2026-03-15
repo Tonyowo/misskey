@@ -1141,6 +1141,18 @@ export interface Locale extends ILocale {
      */
     "noSuchUser": string;
     /**
+     * アカウントが見つかりません
+     */
+    "signinAccountNotFoundTitle": string;
+    /**
+     * 入力されたユーザー名またはメールアドレスに対応するアカウントが見つかりません
+     */
+    "signinAccountNotFound": string;
+    /**
+     * 入力されたメールアドレスに対応するアカウントが見つかりません
+     */
+    "signinEmailNotFound": string;
+    /**
      * 照会
      */
     "lookup": string;
