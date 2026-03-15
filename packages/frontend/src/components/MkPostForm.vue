@@ -588,8 +588,22 @@ function focus() {
 	}
 }
 
-function notifyFileLimit(nextCount: number) {
-	os.toast(`${i18n.tsx.limitTo({ x: MAX_NOTE_FILES })} · ${nextCount}/${MAX_NOTE_FILES} · ${i18n.tsx.remainingN({ n: MAX_NOTE_FILES - nextCount })}`);
+let showingFileLimitWarning = false;
+
+async function notifyFileLimit(nextCount: number) {
+	if (showingFileLimitWarning) return;
+
+	showingFileLimitWarning = true;
+
+	try {
+		await os.alert({
+			type: 'warning',
+			title: i18n.tsx.limitTo({ x: MAX_NOTE_FILES }),
+			text: `${nextCount}/${MAX_NOTE_FILES}\n${i18n.tsx.remainingN({ n: MAX_NOTE_FILES - nextCount })}`,
+		});
+	} finally {
+		showingFileLimitWarning = false;
+	}
 }
 
 function limitAdditionalAttachments<T>(items: T[]): T[] {
