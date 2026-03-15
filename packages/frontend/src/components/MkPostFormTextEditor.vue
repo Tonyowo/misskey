@@ -29,21 +29,15 @@ SPDX-License-Identifier: AGPL-3.0-only
 	@compositionstart="onCompositionStart"
 	@compositionupdate="onCompositionUpdate"
 	@compositionend="onCompositionEnd"
->
-	<template v-for="(segment, index) in segments" :key="`${segment.type}:${index}:${segment.value}`">
-		<span v-if="segment.type === 'text'">{{ segment.value }}</span>
-		<span v-else :class="$style.customEmoji" :data-raw="segment.value" contenteditable="false">
-			<MkCustomEmoji :name="segment.name" :normal="true" :fallbackToImage="true"/>
-		</span>
-	</template>
-</div>
+></div>
 </template>
 
 <script lang="ts" setup>
-import { computed, nextTick, ref, useAttrs, useTemplateRef, watch } from 'vue';
+import { nextTick, onMounted, ref, useAttrs, useCssModule, useTemplateRef, watch } from 'vue';
 import type { AutocompleteTarget } from '@/utility/autocomplete.js';
-import MkCustomEmoji from '@/components/global/MkCustomEmoji.vue';
-import { customEmojisMap } from '@/custom-emojis.js';
+import { customEmojis, customEmojisMap } from '@/custom-emojis.js';
+import { getProxiedImageUrl, getStaticImageUrl } from '@/utility/media-proxy.js';
+import { prefer } from '@/preferences.js';
 import { tokenizePostFormCustomEmojis } from '@/utility/post-form-custom-emojis.js';
 
 defineOptions({
@@ -80,6 +74,7 @@ const emit = defineEmits<{
 }>();
 
 const attrs = useAttrs();
+const cssModule = useCssModule();
 const editorEl = useTemplateRef<HTMLDivElement>('editorEl');
 const renderedText = ref(props.modelValue ?? '');
 const composing = ref(false);
@@ -87,13 +82,15 @@ const focused = ref(false);
 const lastSelectionRange = ref<SelectionRange>({ start: renderedText.value.length, end: renderedText.value.length });
 let skipInputNormalizationUntilRender = false;
 
-const segments = computed(() => tokenizePostFormCustomEmojis(renderedText.value, (name) => customEmojisMap.has(name)));
+function getSegments() {
+	return tokenizePostFormCustomEmojis(renderedText.value, (name) => customEmojisMap.has(name));
+}
 
 function getTokenBoundaries() {
 	const boundaries: Array<{ start: number; end: number; type: 'text' | 'customEmoji' }> = [];
 	let cursor = 0;
 
-	for (const segment of segments.value) {
+	for (const segment of getSegments()) {
 		const length = segment.value.length;
 		boundaries.push({
 			start: cursor,
@@ -125,12 +122,76 @@ watch(() => props.modelValue, (value) => {
 	const selection = focused.value ? getSelectionRange() : null;
 	renderedText.value = next;
 
-	if (selection != null) {
-		nextTick(() => {
-			setSelectionRange(selection.start, selection.end);
-		});
-	}
+	nextTick(() => {
+		renderEditorContent(selection);
+	});
 });
+
+watch(customEmojis, () => {
+	if (composing.value) return;
+	const selection = focused.value ? getSelectionRange() : null;
+	nextTick(() => {
+		renderEditorContent(selection);
+	});
+});
+
+onMounted(() => {
+	renderEditorContent();
+});
+
+function getCustomEmojiImageUrl(name: string): string {
+	const rawUrl = customEmojisMap.get(name)?.url ?? `/emoji/${name}.webp`;
+	const proxiedUrl = rawUrl.startsWith('/emoji/')
+		? rawUrl
+		: getProxiedImageUrl(rawUrl, 'emoji', false, true);
+
+	return prefer.s.disableShowingAnimatedImages
+		? getStaticImageUrl(proxiedUrl)
+		: proxiedUrl;
+}
+
+function createCustomEmojiNode(name: string, raw: string): HTMLSpanElement {
+	const span = document.createElement('span');
+	span.className = cssModule.customEmoji;
+	span.dataset.raw = raw;
+	span.contentEditable = 'false';
+
+	const img = document.createElement('img');
+	img.className = cssModule.customEmojiImage;
+	img.src = getCustomEmojiImageUrl(name);
+	img.alt = raw;
+	img.title = raw;
+	img.decoding = 'async';
+	img.draggable = false;
+	img.style.webkitUserDrag = 'none';
+
+	span.append(img);
+	return span;
+}
+
+function renderEditorContent(selection: SelectionRange | null = focused.value ? lastSelectionRange.value : null) {
+	if (editorEl.value == null || composing.value) return;
+
+	const fragment = document.createDocumentFragment();
+	for (const segment of getSegments()) {
+		if (segment.type === 'text') {
+			fragment.append(document.createTextNode(segment.value));
+			continue;
+		}
+
+		fragment.append(createCustomEmojiNode(segment.name, segment.value));
+	}
+
+	const scrollLeft = editorEl.value.scrollLeft;
+	const scrollTop = editorEl.value.scrollTop;
+	editorEl.value.replaceChildren(fragment);
+	editorEl.value.scrollLeft = scrollLeft;
+	editorEl.value.scrollTop = scrollTop;
+
+	if (selection != null && focused.value) {
+		setSelectionRange(selection.start, selection.end);
+	}
+}
 
 function serializeNode(node: Node): string {
 	if (node.nodeType === Node.TEXT_NODE) {
@@ -346,6 +407,7 @@ function applyTextUpdate(value: string, selectionStart: number, selectionEnd = s
 	lastSelectionRange.value = { start: selectionStart, end: selectionEnd };
 
 	nextTick(() => {
+		renderEditorContent({ start: selectionStart, end: selectionEnd });
 		focus();
 		setSelectionRange(selectionStart, selectionEnd);
 		if (options.skipNextInputNormalization) {
@@ -398,9 +460,7 @@ function normalizeFromDom() {
 	emit('update:modelValue', nextText);
 
 	nextTick(() => {
-		if (focused.value) {
-			setSelectionRange(selection.start, selection.end);
-		}
+		renderEditorContent(selection);
 	});
 }
 
@@ -450,10 +510,10 @@ function getAutocompleteTarget(): AutocompleteTarget {
 			const rect = range.getClientRects()[0] ?? range.getBoundingClientRect();
 			const editorRect = editorEl.value.getBoundingClientRect();
 			if (rect == null || (rect.width === 0 && rect.height === 0 && editorEl.value.childNodes.length === 0)) {
-				const style = window.getComputedStyle(editorEl.value);
+				const computedStyle = window.getComputedStyle(editorEl.value);
 				return {
-					left: parseFloat(style.paddingLeft || '0'),
-					top: parseFloat(style.paddingTop || '0'),
+					left: parseFloat(computedStyle.paddingLeft || '0'),
+					top: parseFloat(computedStyle.paddingTop || '0'),
 				};
 			}
 
@@ -634,5 +694,10 @@ defineExpose({
 	pointer-events: none;
 	user-select: text;
 	-webkit-user-select: text;
+}
+
+.customEmojiImage {
+	height: 1.25em;
+	vertical-align: -0.25em;
 }
 </style>
