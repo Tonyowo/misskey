@@ -398,7 +398,7 @@ export const store = markRaw(new Pizzax('base', {
 	},
 	keepOriginalFilename: {
 		where: 'device',
-		default: true,
+		default: false,
 	},
 	alwaysConfirmFollow: {
 		where: 'device',

@@ -361,7 +361,7 @@ export const PREF_DEF = definePreferences({
 		default: false,
 	},
 	keepOriginalFilename: {
-		default: true,
+		default: false,
 	},
 	alwaysConfirmFollow: {
 		default: true,
