@@ -82,7 +82,12 @@ SPDX-License-Identifier: AGPL-3.0-only
 	</div>
 	<div :class="[$style.textOuter, { [$style.withCw]: useCw }]">
 		<div v-if="targetChannel" :class="$style.colorBar" :style="{ background: targetChannel.color }"></div>
-		<textarea ref="textareaEl" v-model="text" :class="[$style.text]" :disabled="posting || posted" :readonly="textAreaReadOnly" :placeholder="placeholder" data-cy-post-form-text @keydown="onKeydown" @keyup="onKeyup" @paste="onPaste" @compositionupdate="onCompositionUpdate" @compositionend="onCompositionEnd"></textarea>
+		<div :class="$style.textEditor">
+			<div ref="textOverlayEl" :class="[$style.textOverlay, { [$style.textOverlayDisabled]: posting || posted, [$style.textOverlayHidden]: imeText !== '' }]">
+				<MkPostFormTextOverlay :class="$style.textOverlayInner" :text="text"/>
+			</div>
+			<textarea ref="textareaEl" v-model="text" :class="[$style.text, $style.textInput, { [$style.textInputComposing]: imeText !== '' }]" :disabled="posting || posted" :readonly="textAreaReadOnly" :placeholder="placeholder" data-cy-post-form-text @keydown="onKeydown" @keyup="onKeyup" @paste="onPaste" @scroll="syncTextOverlayScroll" @compositionupdate="onCompositionUpdate" @compositionend="onCompositionEnd"></textarea>
+		</div>
 		<div v-if="maxTextLength - textLength < 100" :class="['_acrylic', $style.textCount, { [$style.textOver]: textLength > maxTextLength }]">{{ maxTextLength - textLength }}</div>
 	</div>
 	<input v-show="withHashtags" ref="hashtagsInputEl" v-model="hashtags" :class="$style.hashtags" :placeholder="i18n.ts.hashtags" list="hashtags">
@@ -146,6 +151,7 @@ import { misskeyApi } from '@/utility/misskey-api.js';
 import { chooseDriveFile } from '@/utility/drive.js';
 import { store } from '@/store.js';
 import MkInfo from '@/components/MkInfo.vue';
+import MkPostFormTextOverlay from '@/components/MkPostFormTextOverlay.vue';
 import { i18n } from '@/i18n.js';
 import { instance } from '@/instance.js';
 import { ensureSignin, notesCount, incNotesCount } from '@/i.js';
@@ -191,6 +197,7 @@ const emit = defineEmits<{
 }>();
 
 const textareaEl = useTemplateRef('textareaEl');
+const textOverlayEl = useTemplateRef('textOverlayEl');
 const cwInputEl = useTemplateRef('cwInputEl');
 const hashtagsInputEl = useTemplateRef('hashtagsInputEl');
 const visibilityButton = useTemplateRef('visibilityButton');
@@ -560,6 +567,12 @@ function focus() {
 		textareaEl.value.focus();
 		textareaEl.value.setSelectionRange(textareaEl.value.value.length, textareaEl.value.value.length);
 	}
+}
+
+function syncTextOverlayScroll() {
+	if (textareaEl.value == null || textOverlayEl.value == null) return;
+	textOverlayEl.value.scrollTop = textareaEl.value.scrollTop;
+	textOverlayEl.value.scrollLeft = textareaEl.value.scrollLeft;
 }
 
 function chooseFileFromPc(ev: PointerEvent) {
@@ -1496,6 +1509,7 @@ onMounted(() => {
 
 	if (textareaEl.value) textAutocomplete = new Autocomplete(textareaEl.value, text);
 	if (hashtagsInputEl.value) hashtagAutocomplete = new Autocomplete(hashtagsInputEl.value, hashtags);
+	nextTick(() => syncTextOverlayScroll());
 
 	nextTick(() => {
 		// 書きかけの投稿を復元
@@ -1556,6 +1570,10 @@ onMounted(() => {
 
 		nextTick(() => watchForDraft());
 	});
+});
+
+watch(text, () => {
+	nextTick(() => syncTextOverlayScroll());
 });
 
 onBeforeUnmount(() => {
@@ -1864,6 +1882,10 @@ html[data-color-scheme=light] .preview {
 	}
 }
 
+.textEditor {
+	position: relative;
+}
+
 .text {
 	max-width: 100%;
 	min-width: 100%;
@@ -1871,6 +1893,51 @@ html[data-color-scheme=light] .preview {
 	min-height: 90px;
 	max-height: 500px;
 	field-sizing: content;
+}
+
+.textOverlay {
+	position: absolute;
+	inset: 0;
+	overflow: auto;
+	pointer-events: none;
+	user-select: none;
+	scrollbar-width: none;
+
+	&::-webkit-scrollbar {
+		display: none;
+	}
+}
+
+.textOverlayDisabled {
+	opacity: 0.5;
+}
+
+.textOverlayHidden {
+	opacity: 0;
+}
+
+.textOverlayInner {
+	box-sizing: border-box;
+	padding: 0 24px;
+	min-height: 90px;
+	font-size: 110%;
+	font-family: inherit;
+}
+
+.textInput {
+	position: relative;
+	z-index: 1;
+	resize: none;
+	color: transparent;
+	caret-color: var(--MI_THEME-fg);
+
+	&::placeholder {
+		color: color(from var(--MI_THEME-fg) srgb r g b / 0.5);
+	}
+}
+
+.textInputComposing {
+	color: var(--MI_THEME-fg);
 }
 
 .textCount {
@@ -1969,11 +2036,19 @@ html[data-color-scheme=light] .preview {
 		padding: 0 16px;
 	}
 
+	.textOverlayInner {
+		padding: 0 16px;
+	}
+
 	.cwReplyRequired {
 		padding: 10px 16px 4px;
 	}
 
 	.text {
+		min-height: 80px;
+	}
+
+	.textOverlayInner {
 		min-height: 80px;
 	}
 
