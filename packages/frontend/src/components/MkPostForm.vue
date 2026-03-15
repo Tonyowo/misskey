@@ -1517,7 +1517,7 @@ async function openAccountMenu(ev: PointerEvent) {
 	}, { type: 'divider' }, ...items], (ev.currentTarget ?? ev.target ?? undefined) as HTMLElement | undefined);
 }
 
-function showPerUploadItemMenu(item: UploaderItem, ev: MouseEvent | KeyboardEvent) {
+function showPerUploadItemMenu(item: UploaderItem, ev: MouseEvent | PointerEvent | KeyboardEvent) {
 	const menu = uploader.getMenu(item);
 	os.popupMenu(menu, ev.currentTarget ?? ev.target);
 }

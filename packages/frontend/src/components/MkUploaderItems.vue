@@ -9,9 +9,10 @@ SPDX-License-Identifier: AGPL-3.0-only
 		:modelValue="props.items"
 		:class="$style.items"
 		direction="horizontal"
+		:manualDragStart="isTouchDevice"
 		@update:modelValue="items => emit('update:items', items)"
 	>
-		<template #default="{ item }">
+		<template #default="{ item, dragStart }">
 			<div
 				v-panel
 				:class="[$style.item, { [$style.itemWaiting]: item.preprocessing, [$style.itemCompleted]: item.uploaded, [$style.itemFailed]: item.uploadFailed }]"
@@ -23,6 +24,11 @@ SPDX-License-Identifier: AGPL-3.0-only
 				role="button"
 				tabindex="0"
 				@click="onActivate(item, $event)"
+				@pointerdown="onPointerdown(item, $event)"
+				@pointerup="cancelLongPress"
+				@pointercancel="cancelLongPress"
+				@pointerleave="cancelLongPress"
+				@pointermove="onPointermove($event)"
 				@keydown.space.enter.prevent="onActivate(item, $event)"
 				@contextmenu.prevent.stop="onContextmenu(item, $event)"
 			>
@@ -37,6 +43,19 @@ SPDX-License-Identifier: AGPL-3.0-only
 						<MkCondensedLine :minScale="2 / 3">{{ item.name }}</MkCondensedLine>
 					</div>
 				</div>
+				<button
+					v-if="isTouchDevice"
+					type="button"
+					class="_button"
+					:class="$style.dragHandle"
+					data-drag-handle
+					tabindex="-1"
+					:draggable="true"
+					@click.stop.prevent
+					@dragstart.stop="dragStart"
+				>
+					<i class="ti ti-arrows-move"></i>
+				</button>
 			</div>
 		</template>
 		<template v-if="props.showAddButton && props.items.length > 0" #footer>
@@ -58,6 +77,7 @@ import { isLink } from '@@/js/is-link.js';
 import type { UploaderItem } from '@/composables/use-uploader.js';
 import MkDraggable from '@/components/MkDraggable.vue';
 import * as os from '@/os.js';
+import { isTouchUsing } from '@/utility/touch.js';
 
 const props = withDefaults(defineProps<{
 	items: UploaderItem[];
@@ -68,12 +88,59 @@ const props = withDefaults(defineProps<{
 
 const emit = defineEmits<{
 	(ev: 'update:items', items: UploaderItem[]): void;
-	(ev: 'showMenu', item: UploaderItem, event: MouseEvent | KeyboardEvent): void;
+	(ev: 'showMenu', item: UploaderItem, event: MouseEvent | PointerEvent | KeyboardEvent): void;
 	(ev: 'showMenuViaContextmenu', item: UploaderItem, event: PointerEvent): void;
 	(ev: 'selectMore', event: MouseEvent): void;
 }>();
 
+const isTouchDevice = isTouchUsing;
+const LONG_PRESS_MS = 420;
+const LONG_PRESS_CANCEL_DISTANCE = 12;
+
+let longPressTimer: number | null = null;
+let longPressStartPoint: { x: number; y: number } | null = null;
+let suppressNextActivation = false;
+let lastTouchMenuOpenedAt = 0;
+
+function clearLongPressTimer() {
+	if (longPressTimer != null) {
+		window.clearTimeout(longPressTimer);
+		longPressTimer = null;
+	}
+	longPressStartPoint = null;
+}
+
+function isDragHandleTarget(target: EventTarget | null) {
+	return target instanceof HTMLElement && target.closest('[data-drag-handle]') != null;
+}
+
+function onPointerdown(item: UploaderItem, ev: PointerEvent) {
+	if (!isTouchDevice || ev.pointerType !== 'touch' || isDragHandleTarget(ev.target)) return;
+
+	clearLongPressTimer();
+	longPressStartPoint = { x: ev.clientX, y: ev.clientY };
+	longPressTimer = window.setTimeout(() => {
+		suppressNextActivation = true;
+		lastTouchMenuOpenedAt = Date.now();
+		emit('showMenu', item, ev);
+		clearLongPressTimer();
+	}, LONG_PRESS_MS);
+}
+
+function onPointermove(ev: PointerEvent) {
+	if (!isTouchDevice || longPressTimer == null || longPressStartPoint == null) return;
+
+	if (Math.hypot(ev.clientX - longPressStartPoint.x, ev.clientY - longPressStartPoint.y) > LONG_PRESS_CANCEL_DISTANCE) {
+		clearLongPressTimer();
+	}
+}
+
+function cancelLongPress() {
+	clearLongPressTimer();
+}
+
 function onContextmenu(item: UploaderItem, ev: PointerEvent) {
+	if (isTouchDevice && Date.now() - lastTouchMenuOpenedAt < 500) return;
 	if (ev.target && isLink(ev.target as HTMLElement)) return;
 	if (window.getSelection()?.toString() !== '') return;
 
@@ -97,6 +164,11 @@ async function openPreview(item: UploaderItem) {
 }
 
 function onActivate(item: UploaderItem, ev: MouseEvent | KeyboardEvent) {
+	if (suppressNextActivation) {
+		suppressNextActivation = false;
+		return;
+	}
+
 	if (isPreviewableImage(item)) {
 		openPreview(item);
 		return;
@@ -190,6 +262,23 @@ function onActivate(item: UploaderItem, ev: MouseEvent | KeyboardEvent) {
 	&.itemFailed {
 		box-shadow: inset 0 0 0 1px color(from var(--MI_THEME-error) srgb r g b / 0.7);
 	}
+}
+
+.dragHandle {
+	position: absolute;
+	right: 8px;
+	bottom: 8px;
+	z-index: 2;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 30px;
+	height: 30px;
+	border-radius: 999px;
+	background: color(from var(--MI_THEME-panel) srgb r g b / 0.88);
+	color: var(--MI_THEME-fg);
+	box-shadow: 0 4px 12px color(from #000 srgb r g b / 0.18);
+	touch-action: none;
 }
 
 .itemThumbnail {
