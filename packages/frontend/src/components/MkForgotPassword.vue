@@ -7,7 +7,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 <MkModalWindow
 	ref="dialog"
 	:width="370"
-	:height="320"
+	:height="null"
 	@close="dialog?.close()"
 	@closed="emit('closed')"
 >
