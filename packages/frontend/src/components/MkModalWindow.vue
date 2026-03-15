@@ -7,13 +7,14 @@ SPDX-License-Identifier: AGPL-3.0-only
 <MkModal ref="modal" v-slot="{ type }" :preferType="deviceKind === 'smartphone' ? 'drawer' : 'dialog'" @click="onBgClick" @closed="emit('closed')" @esc="emit('esc')">
 	<div ref="rootEl" :class="[$style.root, type === 'drawer' ? $style.asDrawer : null]" :style="{ width: type === 'drawer' ? '' : `${width}px`, height: type === 'drawer' ? '' : `min(${height}px, 100%)` }">
 		<div :class="$style.header">
-			<button v-if="withCloseButton" :class="$style.headerButton" class="_button" data-cy-modal-window-close @click="emit('close')"><i class="ti ti-x"></i></button>
-			<span :class="$style.title">
+			<button v-if="withCloseButton && closeButtonPosition === 'left'" :class="$style.headerButton" class="_button" data-cy-modal-window-close @click="emit('close')"><i class="ti ti-x"></i></button>
+			<span :class="[$style.title, withCloseButton && closeButtonPosition === 'left' ? $style.titleWithLeadingButton : null]">
 				<slot name="header"></slot>
 			</span>
 			<div v-if="withOkButton" style="padding: 0 16px; place-content: center;">
 				<MkButton primary gradate small rounded :disabled="okButtonDisabled" @click="emit('ok')">{{ i18n.ts.done }} <i class="ti ti-check"></i></MkButton>
 			</div>
+			<button v-if="withCloseButton && closeButtonPosition === 'right'" :class="$style.headerButton" class="_button" data-cy-modal-window-close @click="emit('close')"><i class="ti ti-x"></i></button>
 		</div>
 		<div :class="$style.body">
 			<slot></slot>
@@ -26,21 +27,23 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script lang="ts" setup>
-import { onMounted, onUnmounted, useTemplateRef, ref } from 'vue';
+import { useTemplateRef } from 'vue';
 import MkModal from '@/components/MkModal.vue';
 import MkButton from '@/components/MkButton.vue';
 import { i18n } from '@/i18n';
 import { deviceKind } from '@/utility/device-kind.js';
 
-const props = withDefaults(defineProps<{
+withDefaults(defineProps<{
 	withOkButton?: boolean;
 	withCloseButton?: boolean;
+	closeButtonPosition?: 'left' | 'right';
 	okButtonDisabled?: boolean;
 	width?: number;
 	height?: number;
 }>(), {
 	withOkButton: false,
 	withCloseButton: true,
+	closeButtonPosition: 'left',
 	okButtonDisabled: false,
 	width: 400,
 	height: 500,
@@ -135,7 +138,7 @@ defineExpose({
 	}
 }
 
-.headerButton + .title {
+.titleWithLeadingButton {
 	padding-left: 0;
 }
 
