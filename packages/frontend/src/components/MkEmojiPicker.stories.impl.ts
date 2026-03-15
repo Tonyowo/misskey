@@ -36,13 +36,15 @@ export const Default = {
 	},
 	async play({ canvasElement }) {
 		const canvas = within(canvasElement);
-		const faceSection = canvas.getByText(/face/i);
-		await waitFor(() => userEvent.click(faceSection));
+		const unicodeTab = canvas.getByRole('button', { name: new RegExp(i18n.ts.emoji, 'i') });
+		await waitFor(() => userEvent.click(unicodeTab));
+		const faceCategory = canvas.getByRole('button', { name: /face/i });
+		await waitFor(() => userEvent.click(faceCategory));
 		const grinning = canvasElement.querySelector('[data-emoji="😀"]');
 		await expect(grinning).toBeInTheDocument();
 		if (grinning == null) throw new Error(); // NOTE: not called
 		await waitFor(() => userEvent.click(grinning));
-		const recentUsedSection = canvas.getByText(new RegExp(i18n.ts.recentUsed)).parentElement;
+		const recentUsedSection = canvas.getByText(new RegExp(i18n.ts.recentUsed)).closest('section');
 		await expect(recentUsedSection).toBeInTheDocument();
 		if (recentUsedSection == null) throw new Error(); // NOTE: not called
 		await expect(within(recentUsedSection).getByAltText('😀')).toBeInTheDocument();

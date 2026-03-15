@@ -10,7 +10,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 		:value="q"
 		class="search"
 		data-prevent-emoji-insert
-		:class="{ filled: q != null && q != '' }"
+		:class="{ filled: q != null && q !== '' }"
 		:placeholder="i18n.ts.search"
 		type="search"
 		autocapitalize="off"
@@ -48,7 +48,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 			</div>
 		</section>
 
-		<div v-if="tab === 'index'" class="group index">
+		<div v-if="q === ''" class="group index">
 			<section v-if="showPinned && (pinned && pinned.length > 0)">
 				<div class="body">
 					<button
@@ -61,7 +61,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 						@pointerenter="computeButtonTitle"
 						@click="chosen(emoji, $event)"
 					>
-						<MkCustomEmoji v-if="!emoji.hasOwnProperty('char')" class="emoji" :name="getKey(emoji)" :normal="true"/>
+						<MkCustomEmoji v-if="!emoji.hasOwnProperty('char')" class="emoji" :name="getKey(emoji)" :normal="true" :fallbackToImage="true"/>
 						<MkEmoji v-else class="emoji" :emoji="getKey(emoji)" :normal="true"/>
 					</button>
 					<button v-tooltip="i18n.ts.settings" class="_button config" @click="settings"><i class="ti ti-settings"></i></button>
@@ -80,37 +80,72 @@ SPDX-License-Identifier: AGPL-3.0-only
 						@pointerenter="computeButtonTitle"
 						@click="chosen(emoji, $event)"
 					>
-						<MkCustomEmoji v-if="!emoji.hasOwnProperty('char')" class="emoji" :name="getKey(emoji)" :normal="true"/>
+						<MkCustomEmoji v-if="!emoji.hasOwnProperty('char')" class="emoji" :name="getKey(emoji)" :normal="true" :fallbackToImage="true"/>
 						<MkEmoji v-else class="emoji" :emoji="getKey(emoji)" :normal="true"/>
 					</button>
 				</div>
 			</section>
 		</div>
-		<div v-once class="group">
-			<header class="_acrylic">{{ i18n.ts.customEmojis }}</header>
-			<XSection
-				v-for="child in customEmojiFolderRoot.children"
-				:key="`custom:${child.value}`"
-				:initialShown="false"
-				:emojis="computed(() => customEmojis.filter(e => filterCategory(e, child.value)).map(e => `:${e.name}:`))"
-				:disabledEmojis="computed(() => customEmojis.filter(e => filterCategory(e, child.value)).filter(e => !canReact(e)).map(e => `:${e.name}:`))"
-				:hasChildSection="child.children.length !== 0"
-				:customEmojiTree="child.children"
-				@chosen="chosen"
-			>
-				{{ child.value || i18n.ts.other }}
-			</XSection>
+
+		<div v-if="q === '' && tab === 'custom'" class="group browser">
+			<section>
+				<header class="_acrylic">{{ activeCustomSection?.title ?? i18n.ts.customEmojis }}</header>
+				<div v-if="activeCustomSection" class="body">
+					<button
+						v-for="emoji in activeCustomSection.emojis"
+						:key="emoji"
+						:data-emoji="emoji"
+						class="_button item"
+						:disabled="activeCustomSection.disabledEmojis.includes(emoji)"
+						@pointerenter="computeButtonTitle"
+						@click="chosen(emoji, $event)"
+					>
+						<MkCustomEmoji class="emoji" :name="emoji" :normal="true" :fallbackToImage="true"/>
+					</button>
+				</div>
+				<div v-else class="emptyState">{{ i18n.ts.noCustomEmojis }}</div>
+			</section>
 		</div>
-		<div v-once class="group">
-			<header class="_acrylic">{{ i18n.ts.emoji }}</header>
-			<XSection v-for="category in categories" :key="category" :emojis="emojiCharByCategory.get(category) ?? []" :hasChildSection="false" @chosen="chosen">{{ category }}</XSection>
+
+		<div v-if="q === '' && tab === 'unicode'" class="group browser">
+			<section>
+				<header class="_acrylic">{{ activeUnicodeSection?.title ?? i18n.ts.emoji }}</header>
+				<div class="body">
+					<button
+						v-for="emoji in activeUnicodeSection?.emojis ?? []"
+						:key="emoji"
+						:data-emoji="emoji"
+						class="_button item"
+						@pointerenter="computeButtonTitle"
+						@click="chosen(emoji, $event)"
+					>
+						<MkEmoji class="emoji" :emoji="emoji" :normal="true"/>
+					</button>
+				</div>
+			</section>
 		</div>
 	</div>
+
+	<div v-if="showCategoryRail" class="categoryRail">
+		<button
+			v-for="section in currentSections"
+			:key="`${tab}:${section.key}`"
+			class="_button categoryTab"
+			:class="{ active: section.key === activeSectionKey }"
+			:title="section.title"
+			:aria-label="section.title"
+			@click="selectSection(section.key)"
+		>
+			<MkCustomEmoji v-if="section.icon?.startsWith(':')" class="emoji" :name="section.icon" :normal="true" :fallbackToImage="true"/>
+			<MkEmoji v-else-if="section.icon" class="emoji" :emoji="section.icon" :normal="true"/>
+			<span v-else class="categoryFallback">{{ section.label.slice(0, 1).toUpperCase() }}</span>
+		</button>
+	</div>
+
 	<div class="tabs">
-		<button class="_button tab" :class="{ active: tab === 'index' }" @click="tab = 'index'"><i class="ti ti-asterisk ti-fw"></i></button>
-		<button class="_button tab" :class="{ active: tab === 'custom' }" @click="tab = 'custom'"><i class="ti ti-mood-happy ti-fw"></i></button>
-		<button class="_button tab" :class="{ active: tab === 'unicode' }" @click="tab = 'unicode'"><i class="ti ti-leaf ti-fw"></i></button>
-		<button class="_button tab" :class="{ active: tab === 'tags' }" @click="tab = 'tags'"><i class="ti ti-hash ti-fw"></i></button>
+		<button class="_button tab" :class="{ active: tab === 'index' }" :title="i18n.ts.recentUsed" :aria-label="i18n.ts.recentUsed" @click="setTab('index')"><i class="ti ti-clock ti-fw"></i></button>
+		<button class="_button tab" :class="{ active: tab === 'custom' }" :title="i18n.ts.customEmojis" :aria-label="i18n.ts.customEmojis" :disabled="customSections.length === 0" @click="setTab('custom')"><i class="ti ti-mood-smile ti-fw"></i></button>
+		<button class="_button tab" :class="{ active: tab === 'unicode' }" :title="i18n.ts.emoji" :aria-label="i18n.ts.emoji" @click="setTab('unicode')"><i class="ti ti-icons ti-fw"></i></button>
 	</div>
 </div>
 </template>
@@ -125,11 +160,7 @@ import {
 	getEmojiName,
 	getUnicodeEmoji,
 } from '@@/js/emojilist.js';
-import type {
-	UnicodeEmojiDef,
-	CustomEmojiFolderTree,
-} from '@@/js/emojilist.js';
-import XSection from '@/components/MkEmojiPicker.section.vue';
+import type { UnicodeEmojiDef } from '@@/js/emojilist.js';
 import MkRippleEffect from '@/components/MkRippleEffect.vue';
 import * as os from '@/os.js';
 import { isTouchUsing } from '@/utility/touch.js';
@@ -142,6 +173,17 @@ import { checkReactionPermissions } from '@/utility/check-reaction-permissions.j
 import { prefer } from '@/preferences.js';
 import { useRouter } from '@/router.js';
 import { haptic } from '@/utility/haptic.js';
+
+type PickerSection = {
+	key: string;
+	label: string;
+	title: string;
+	emojis: string[];
+	disabledEmojis: string[];
+	icon: string | null;
+};
+
+const OTHER_CUSTOM_CATEGORY_KEY = '__other__';
 
 const router = useRouter();
 
@@ -187,36 +229,88 @@ const height = computed(() => emojiPickerHeight.value);
 const q = ref<string>('');
 const searchResultCustom = ref<Misskey.entities.EmojiSimple[]>([]);
 const searchResultUnicode = ref<UnicodeEmojiDef[]>([]);
-const tab = ref<'index' | 'custom' | 'unicode' | 'tags'>('index');
+const tab = ref<'index' | 'custom' | 'unicode'>(customEmojis.value.length > 0 ? 'custom' : 'unicode');
+const activeCustomSectionKey = ref<string | null>(null);
+const activeUnicodeSectionKey = ref<string | null>(categories[0] ?? null);
 
-const customEmojiFolderRoot: CustomEmojiFolderTree = { value: '', category: '', children: [] };
+const customSections = computed<PickerSection[]>(() => {
+	return customEmojiCategories.value
+		.map(category => category ?? '')
+		.map(category => {
+			const emojis = customEmojis.value.filter(emoji => filterCategory(emoji, category));
+			if (emojis.length === 0) return null;
 
-function parseAndMergeCategories(input: string, root: CustomEmojiFolderTree): CustomEmojiFolderTree {
-	const parts = input.split('/').map(p => p.trim());
-	let currentNode: CustomEmojiFolderTree = root;
-
-	for (const part of parts) {
-		let existingNode = currentNode.children.find((node) => node.value === part);
-
-		if (!existingNode) {
-			const newNode: CustomEmojiFolderTree = { value: part, category: input, children: [] };
-			currentNode.children.push(newNode);
-			existingNode = newNode;
-		}
-
-		currentNode = existingNode;
-	}
-
-	return currentNode;
-}
-
-customEmojiCategories.value.forEach(ec => {
-	if (ec !== null) {
-		parseAndMergeCategories(ec, customEmojiFolderRoot);
-	}
+			return {
+				key: getCustomCategoryKey(category),
+				label: getCustomCategoryLabel(category),
+				title: getCustomCategoryTitle(category),
+				emojis: emojis.map(emoji => `:${emoji.name}:`),
+				disabledEmojis: emojis.filter(emoji => !canReact(emoji)).map(emoji => `:${emoji.name}:`),
+				icon: emojis[0] ? `:${emojis[0].name}:` : null,
+			} satisfies PickerSection;
+		})
+		.filter((section): section is PickerSection => section != null);
 });
 
-parseAndMergeCategories('', customEmojiFolderRoot);
+const unicodeSections = computed<PickerSection[]>(() => {
+	return categories.map(category => {
+		const emojis = emojiCharByCategory.get(category) ?? [];
+		return {
+			key: category,
+			label: humanizeUnicodeCategory(category),
+			title: humanizeUnicodeCategory(category),
+			emojis,
+			disabledEmojis: [],
+			icon: emojis[0] ?? null,
+		} satisfies PickerSection;
+	});
+});
+
+const activeCustomSection = computed(() => {
+	return customSections.value.find(section => section.key === activeCustomSectionKey.value) ?? customSections.value[0] ?? null;
+});
+const activeUnicodeSection = computed(() => {
+	return unicodeSections.value.find(section => section.key === activeUnicodeSectionKey.value) ?? unicodeSections.value[0] ?? null;
+});
+const currentSections = computed(() => {
+	if (tab.value === 'custom') return customSections.value;
+	if (tab.value === 'unicode') return unicodeSections.value;
+	return [];
+});
+const activeSectionKey = computed(() => {
+	if (tab.value === 'custom') return activeCustomSection.value?.key ?? null;
+	if (tab.value === 'unicode') return activeUnicodeSection.value?.key ?? null;
+	return null;
+});
+const showCategoryRail = computed(() => q.value === '' && currentSections.value.length > 0);
+
+watch(customSections, (sections) => {
+	if (sections.length === 0) {
+		activeCustomSectionKey.value = null;
+		if (tab.value === 'custom') {
+			tab.value = unicodeSections.value.length > 0 ? 'unicode' : 'index';
+		}
+		return;
+	}
+
+	if (!activeCustomSectionKey.value || !sections.some(section => section.key === activeCustomSectionKey.value)) {
+		activeCustomSectionKey.value = sections[0].key;
+	}
+}, { immediate: true });
+
+watch(unicodeSections, (sections) => {
+	if (sections.length === 0) {
+		activeUnicodeSectionKey.value = null;
+		if (tab.value === 'unicode') {
+			tab.value = customSections.value.length > 0 ? 'custom' : 'index';
+		}
+		return;
+	}
+
+	if (!activeUnicodeSectionKey.value || !sections.some(section => section.key === activeUnicodeSectionKey.value)) {
+		activeUnicodeSectionKey.value = sections[0].key;
+	}
+}, { immediate: true });
 
 watch(q, () => {
 	if (emojisEl.value) emojisEl.value.scrollTop = 0;
@@ -381,6 +475,42 @@ function canReact(emoji: Misskey.entities.EmojiSimple | UnicodeEmojiDef | string
 
 function filterCategory(emoji: Misskey.entities.EmojiSimple, category: string): boolean {
 	return category === '' ? (emoji.category === 'null' || !emoji.category) : emoji.category === category;
+}
+
+function getCustomCategoryKey(category: string): string {
+	return category === '' ? OTHER_CUSTOM_CATEGORY_KEY : category;
+}
+
+function getCustomCategoryLabel(category: string): string {
+	if (category === '') return i18n.ts.other;
+	const parts = category.split('/').map(part => part.trim()).filter(Boolean);
+	return parts.at(-1) ?? i18n.ts.other;
+}
+
+function getCustomCategoryTitle(category: string): string {
+	return category === '' ? i18n.ts.other : category;
+}
+
+function humanizeUnicodeCategory(category: string): string {
+	return category.replaceAll('_', ' ');
+}
+
+function setTab(nextTab: 'index' | 'custom' | 'unicode') {
+	if (nextTab === 'custom' && customSections.value.length === 0) return;
+	if (nextTab === 'unicode' && unicodeSections.value.length === 0) return;
+
+	tab.value = nextTab;
+	if (emojisEl.value) emojisEl.value.scrollTop = 0;
+}
+
+function selectSection(key: string) {
+	if (tab.value === 'custom') {
+		activeCustomSectionKey.value = key;
+	}
+	if (tab.value === 'unicode') {
+		activeUnicodeSectionKey.value = key;
+	}
+	if (emojisEl.value) emojisEl.value.scrollTop = 0;
 }
 
 function focus() {
@@ -681,18 +811,73 @@ defineExpose({
 		}
 	}
 
+	> .categoryRail {
+		display: flex;
+		gap: 8px;
+		padding: 8px;
+		overflow-x: auto;
+		scrollbar-width: none;
+		border-top: solid 0.5px var(--MI_THEME-divider);
+		order: 2;
+
+		&::-webkit-scrollbar {
+			display: none;
+		}
+
+		> .categoryTab {
+			flex: 0 0 auto;
+			display: inline-flex;
+			align-items: center;
+			justify-content: center;
+			width: calc(var(--eachSize) - 6px);
+			height: calc(var(--eachSize) - 6px);
+			min-width: 0;
+			padding: 0;
+			border-radius: 12px;
+			background: var(--MI_THEME-panel);
+			border: 1px solid transparent;
+			transition: background-color 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+
+			&:hover {
+				background: var(--MI_THEME-panelHighlight);
+			}
+
+			&.active {
+				background: color-mix(in srgb, var(--MI_THEME-accent) 14%, var(--MI_THEME-panel));
+				border-color: color-mix(in srgb, var(--MI_THEME-accent) 40%, transparent);
+			}
+
+			&:active {
+				transform: scale(0.96);
+			}
+
+			> .emoji {
+				height: 1.25em;
+				vertical-align: -.25em;
+				pointer-events: none;
+				width: 100%;
+				object-fit: contain;
+			}
+		}
+	}
+
 	> .tabs {
 		display: flex;
-		display: none;
+		order: 3;
 
 		> .tab {
 			flex: 1;
-			height: 38px;
+			height: 42px;
 			border-top: solid 0.5px var(--MI_THEME-divider);
 
 			&.active {
 				border-top: solid 1px var(--MI_THEME-accent);
 				color: var(--MI_THEME-accent);
+			}
+
+			&:disabled {
+				opacity: 0.4;
+				cursor: default;
 			}
 		}
 	}
@@ -710,14 +895,19 @@ defineExpose({
 			}
 
 			> header {
-				/*position: sticky;
-				top: 0;
-				left: 0;*/
 				height: 32px;
 				line-height: 32px;
 				z-index: 2;
 				padding: 0 8px;
 				font-size: 12px;
+			}
+		}
+
+		> .browser {
+			> .emptyState {
+				padding: 24px 16px;
+				text-align: center;
+				color: var(--MI_THEME-fgTransparentWeak);
 			}
 		}
 
@@ -730,11 +920,6 @@ defineExpose({
 				z-index: 1;
 				padding: 0 8px;
 				font-size: 12px;
-				cursor: pointer;
-
-				&:hover {
-					color: var(--MI_THEME-accent);
-				}
 			}
 
 			> .body {
@@ -799,5 +984,18 @@ defineExpose({
 			}
 		}
 	}
+}
+
+.categoryFallback {
+	font-size: 13px;
+	font-weight: 700;
+	letter-spacing: 0.04em;
+	color: var(--MI_THEME-fg);
+}
+
+.emptyState {
+	padding: 24px 16px;
+	text-align: center;
+	color: var(--MI_THEME-fgTransparentWeak);
 }
 </style>
