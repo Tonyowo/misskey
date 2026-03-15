@@ -110,6 +110,7 @@ defineExpose({
 	&.autoHeight {
 		.body {
 			flex: 0 0 auto;
+			container-type: inline-size;
 		}
 	}
 }
