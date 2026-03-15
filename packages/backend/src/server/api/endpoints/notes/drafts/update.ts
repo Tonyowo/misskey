@@ -215,7 +215,7 @@ export const paramDef = {
 			type: 'array',
 			uniqueItems: true,
 			minItems: 0,
-			maxItems: 16,
+			maxItems: 18,
 			items: { type: 'string', format: 'misskey:id' },
 		},
 		poll: {

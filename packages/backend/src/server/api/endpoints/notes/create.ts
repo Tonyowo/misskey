@@ -174,14 +174,14 @@ export const paramDef = {
 			type: 'array',
 			uniqueItems: true,
 			minItems: 1,
-			maxItems: 16,
+			maxItems: 18,
 			items: { type: 'string', format: 'misskey:id' },
 		},
 		mediaIds: {
 			type: 'array',
 			uniqueItems: true,
 			minItems: 1,
-			maxItems: 16,
+			maxItems: 18,
 			items: { type: 'string', format: 'misskey:id' },
 		},
 		poll: {

@@ -88,7 +88,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 	<input v-show="withHashtags" ref="hashtagsInputEl" v-model="hashtags" :class="$style.hashtags" :placeholder="i18n.ts.hashtags" list="hashtags">
 	<XPostFormAttaches
 		v-model="files"
-		:showAddButton="uploader.items.value.length === 0 && files.length > 0 && files.length < 16"
+		:maxFiles="MAX_NOTE_FILES"
+		:showAddButton="uploader.items.value.length === 0 && files.length > 0 && files.length < MAX_NOTE_FILES"
 		@add="chooseFileFromPc"
 		@detach="detachFile"
 		@changeSensitive="updateFileSensitive"
@@ -100,7 +101,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 		</MkTip>
 		<MkUploaderItems
 			:items="uploader.items.value"
-			:showAddButton="files.length + uploader.items.value.length < 16"
+			:showAddButton="files.length + uploader.items.value.length < MAX_NOTE_FILES"
 			@update:items="updateQueuedFiles"
 			@selectMore="chooseFileFromPc"
 			@showMenu="(item, ev) => showPerUploadItemMenu(item, ev)"
@@ -180,6 +181,7 @@ import { startTour } from '@/utility/tour.js';
 import { closeTip } from '@/tips.js';
 
 const $i = ensureSignin();
+const MAX_NOTE_FILES = 18;
 
 const props = withDefaults(defineProps<PostFormProps & {
 	fixed?: boolean;
@@ -375,7 +377,7 @@ const canPost = computed((): boolean => {
 				? cw.value != null && cw.value.trim() !== '' && cwTextLength.value <= maxCwTextLength
 				: true
 		) &&
-		(files.value.length <= 16) &&
+		(files.value.length <= MAX_NOTE_FILES) &&
 		(!poll.value || poll.value.choices.length >= 2);
 });
 
@@ -586,12 +588,40 @@ function focus() {
 	}
 }
 
+function notifyFileLimit(nextCount: number) {
+	os.toast(`${i18n.tsx.limitTo({ x: MAX_NOTE_FILES })} · ${nextCount}/${MAX_NOTE_FILES} · ${i18n.tsx.remainingN({ n: MAX_NOTE_FILES - nextCount })}`);
+}
+
+function limitAdditionalAttachments<T>(items: T[]): T[] {
+	const currentCount = files.value.length + uploader.items.value.length;
+	const remaining = Math.max(0, MAX_NOTE_FILES - currentCount);
+	if (items.length <= remaining) {
+		return items;
+	}
+
+	const accepted = items.slice(0, remaining);
+	notifyFileLimit(currentCount + accepted.length);
+	return accepted;
+}
+
+function enqueueLocalFiles(newFiles: File[]) {
+	const accepted = limitAdditionalAttachments(newFiles);
+	if (accepted.length === 0) return;
+	uploader.addFiles(accepted);
+}
+
+function attachDriveFiles(driveFiles: Misskey.entities.DriveFile[]) {
+	const accepted = limitAdditionalAttachments(driveFiles);
+	if (accepted.length === 0) return;
+	files.value.push(...accepted);
+}
+
 function chooseFileFromPc() {
 	if (props.mock) return;
 
 	os.chooseFileFromPc({ multiple: true }).then(files => {
 		if (files.length === 0) return;
-		uploader.addFiles(files);
+		enqueueLocalFiles(files);
 	});
 }
 
@@ -599,7 +629,7 @@ function chooseFileFromDrive() {
 	if (props.mock) return;
 
 	chooseDriveFile({ multiple: true }).then(driveFiles => {
-		files.value.push(...driveFiles);
+		attachDriveFiles(driveFiles);
 	});
 }
 
@@ -862,7 +892,7 @@ async function onPaste(ev: ClipboardEvent) {
 	}
 	if (pastedFiles.length > 0) {
 		ev.preventDefault();
-		uploader.addFiles(pastedFiles);
+		enqueueLocalFiles(pastedFiles);
 		return;
 	}
 
@@ -899,7 +929,7 @@ async function onPaste(ev: ClipboardEvent) {
 
 		const fileName = formatTimeString(new Date(), pastedFileName).replace(/{{number}}/g, '0');
 		const file = new File([paste], `${fileName}.txt`, { type: 'text/plain' });
-		uploader.addFiles([file]);
+		enqueueLocalFiles([file]);
 	}
 }
 
@@ -944,7 +974,7 @@ function onDrop(ev: DragEvent): void {
 	// ファイルだったら
 	if (ev.dataTransfer && ev.dataTransfer.files.length > 0) {
 		ev.preventDefault();
-		uploader.addFiles(Array.from(ev.dataTransfer.files));
+		enqueueLocalFiles(Array.from(ev.dataTransfer.files));
 		return;
 	}
 
@@ -952,7 +982,7 @@ function onDrop(ev: DragEvent): void {
 	{
 		const droppedData = getDragData(ev, 'driveFiles');
 		if (droppedData != null) {
-			files.value.push(...droppedData);
+			attachDriveFiles(droppedData);
 			ev.preventDefault();
 		}
 	}
@@ -1451,7 +1481,7 @@ async function openAccountMenu(ev: PointerEvent) {
 	}, { type: 'divider' }, ...items], (ev.currentTarget ?? ev.target ?? undefined) as HTMLElement | undefined);
 }
 
-function showPerUploadItemMenu(item: UploaderItem, ev: PointerEvent | KeyboardEvent) {
+function showPerUploadItemMenu(item: UploaderItem, ev: MouseEvent | KeyboardEvent) {
 	const menu = uploader.getMenu(item);
 	os.popupMenu(menu, ev.currentTarget ?? ev.target);
 }

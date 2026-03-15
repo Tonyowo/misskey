@@ -13,19 +13,22 @@ SPDX-License-Identifier: AGPL-3.0-only
 	@click="close"
 	@closed="emit('closed')"
 >
-	<template #header>{{ file.name }}</template>
+	<template #header>{{ title }}</template>
 	<div :class="$style.container">
-		<img :src="file.url" :alt="file.comment || file.name" :class="$style.img"/>
+		<img v-if="imageSrc != null" :src="imageSrc" :alt="altText" :class="$style.img"/>
 	</div>
 </MkModalWindow>
 </template>
 <script lang="ts" setup>
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import MkModalWindow from './MkModalWindow.vue';
 import type * as Misskey from 'misskey-js';
 
-defineProps<{
-	file: Misskey.entities.DriveFile;
+const props = defineProps<{
+	file?: Misskey.entities.DriveFile;
+	src?: string;
+	name?: string;
+	alt?: string | null;
 }>();
 
 const emit = defineEmits<{
@@ -33,6 +36,9 @@ const emit = defineEmits<{
 }>();
 
 const modal = ref<typeof MkModalWindow | null>(null);
+const imageSrc = computed(() => props.file?.url ?? props.src ?? null);
+const title = computed(() => props.file?.name ?? props.name ?? '');
+const altText = computed(() => props.file?.comment || props.alt || props.file?.name || props.name || '');
 
 function close() {
 	modal.value?.close();

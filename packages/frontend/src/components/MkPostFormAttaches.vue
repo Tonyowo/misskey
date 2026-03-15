@@ -17,7 +17,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 				:title="item.name"
 				role="button"
 				tabindex="0"
-				@keydown.space.enter.prevent="showFileMenu(item, $event)"
+				@click="onFileClick(item, $event)"
+				@keydown.space.enter.prevent="onFileClick(item, $event)"
 				@contextmenu.prevent.stop="showFileMenu(item, $event)"
 			>
 				<!-- pointer-eventsをnoneにしておかないとiOSなどでドラッグしたときに画像の方に判定が持ってかれる -->
@@ -39,10 +40,10 @@ SPDX-License-Identifier: AGPL-3.0-only
 	</MkDraggable>
 	<p
 		:class="[$style.remain, {
-			[$style.exceeded]: props.modelValue.length > 16,
+			[$style.exceeded]: props.modelValue.length > props.maxFiles,
 		}]"
 	>
-		{{ props.modelValue.length }}/16
+		{{ props.modelValue.length }}/{{ props.maxFiles }}
 	</p>
 </div>
 </template>
@@ -61,11 +62,14 @@ import { prefer } from '@/preferences.js';
 import { DI } from '@/di.js';
 import { globalEvents } from '@/events.js';
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
 	modelValue: Misskey.entities.DriveFile[];
 	detachMediaFn?: (id: string) => void;
 	showAddButton?: boolean;
-}>();
+	maxFiles?: number;
+}>(), {
+	maxFiles: 18,
+});
 
 const mock = inject(DI.mock, false);
 
@@ -159,7 +163,26 @@ async function describe(file: Misskey.entities.DriveFile) {
 	});
 }
 
-function showFileMenu(file: Misskey.entities.DriveFile, ev: PointerEvent | KeyboardEvent): void {
+async function openPreview(file: Misskey.entities.DriveFile) {
+	const { dispose } = await os.popupAsyncWithDialog(import('@/components/MkImgPreviewDialog.vue').then(x => x.default), {
+		file: file,
+	}, {
+		closed: () => dispose(),
+	});
+}
+
+function onFileClick(file: Misskey.entities.DriveFile, ev: MouseEvent | KeyboardEvent) {
+	if (file.type.startsWith('image/')) {
+		openPreview(file);
+		return;
+	}
+
+	if (ev instanceof KeyboardEvent) {
+		showFileMenu(file, ev);
+	}
+}
+
+function showFileMenu(file: Misskey.entities.DriveFile, ev: MouseEvent | PointerEvent | KeyboardEvent): void {
 	if (menuShowing) return;
 
 	const isImage = file.type.startsWith('image/');
@@ -184,13 +207,7 @@ function showFileMenu(file: Misskey.entities.DriveFile, ev: PointerEvent | Keybo
 		menuItems.push({
 			text: i18n.ts.preview,
 			icon: 'ti ti-photo-search',
-			action: async () => {
-				const { dispose } = await os.popupAsyncWithDialog(import('@/components/MkImgPreviewDialog.vue').then(x => x.default), {
-					file: file,
-				}, {
-					closed: () => dispose(),
-				});
-			},
+			action: () => { openPreview(file); },
 		});
 	}
 
@@ -217,8 +234,8 @@ function showFileMenu(file: Misskey.entities.DriveFile, ev: PointerEvent | Keybo
 		});
 	}
 
-	const openMenu = ev instanceof PointerEvent && ev.type === 'contextmenu'
-		? os.contextMenu(menuItems, ev)
+	const openMenu = ev.type === 'contextmenu'
+		? os.contextMenu(menuItems, ev as PointerEvent)
 		: os.popupMenu(menuItems, ev.currentTarget ?? ev.target);
 
 	openMenu.then(() => menuShowing = false);

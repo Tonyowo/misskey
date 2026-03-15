@@ -178,7 +178,7 @@ function updateItems(value: UploaderItem[]) {
 	items.value = value;
 }
 
-function showPerItemMenu(item: UploaderItem, ev: PointerEvent | KeyboardEvent) {
+function showPerItemMenu(item: UploaderItem, ev: MouseEvent | KeyboardEvent) {
 	const menu = uploader.getMenu(item);
 	os.popupMenu(menu, ev.currentTarget ?? ev.target);
 }

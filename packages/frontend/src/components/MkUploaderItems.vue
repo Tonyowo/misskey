@@ -22,7 +22,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 				:title="item.name"
 				role="button"
 				tabindex="0"
-				@keydown.space.enter.prevent="emit('showMenu', item, $event)"
+				@click="onActivate(item, $event)"
+				@keydown.space.enter.prevent="onActivate(item, $event)"
 				@contextmenu.prevent.stop="onContextmenu(item, $event)"
 			>
 				<div :class="$style.itemThumbnail" :style="item.thumbnail ? { backgroundImage: `url(${item.thumbnail})` } : undefined">
@@ -31,12 +32,6 @@ SPDX-License-Identifier: AGPL-3.0-only
 					</div>
 					<div v-if="item.isSensitive" :class="$style.itemSensitive">
 						<i class="ti ti-eye-exclamation"></i>
-					</div>
-					<div :class="$style.itemStatus">
-						<MkLoading v-if="item.preprocessing" inline em/>
-						<MkSystemIcon v-else-if="item.uploading" :class="$style.itemIcon" type="waiting"/>
-						<MkSystemIcon v-else-if="item.uploaded" :class="$style.itemIcon" type="success"/>
-						<MkSystemIcon v-else-if="item.uploadFailed" :class="$style.itemIcon" type="error"/>
 					</div>
 					<div :class="$style.itemName">
 						<MkCondensedLine :minScale="2 / 3">{{ item.name }}</MkCondensedLine>
@@ -62,6 +57,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 import { isLink } from '@@/js/is-link.js';
 import type { UploaderItem } from '@/composables/use-uploader.js';
 import MkDraggable from '@/components/MkDraggable.vue';
+import * as os from '@/os.js';
 
 const props = withDefaults(defineProps<{
 	items: UploaderItem[];
@@ -72,7 +68,7 @@ const props = withDefaults(defineProps<{
 
 const emit = defineEmits<{
 	(ev: 'update:items', items: UploaderItem[]): void;
-	(ev: 'showMenu', item: UploaderItem, event: PointerEvent | KeyboardEvent): void;
+	(ev: 'showMenu', item: UploaderItem, event: MouseEvent | KeyboardEvent): void;
 	(ev: 'showMenuViaContextmenu', item: UploaderItem, event: PointerEvent): void;
 	(ev: 'selectMore', event: MouseEvent): void;
 }>();
@@ -82,6 +78,33 @@ function onContextmenu(item: UploaderItem, ev: PointerEvent) {
 	if (window.getSelection()?.toString() !== '') return;
 
 	emit('showMenuViaContextmenu', item, ev);
+}
+
+function isPreviewableImage(item: UploaderItem): item is UploaderItem & { thumbnail: string } {
+	return item.file.type.startsWith('image/') && item.thumbnail != null;
+}
+
+async function openPreview(item: UploaderItem) {
+	if (!isPreviewableImage(item)) return;
+
+	const { dispose } = await os.popupAsyncWithDialog(import('@/components/MkImgPreviewDialog.vue').then(x => x.default), {
+		src: item.thumbnail,
+		name: item.name,
+		alt: item.caption ?? item.name,
+	}, {
+		closed: () => dispose(),
+	});
+}
+
+function onActivate(item: UploaderItem, ev: MouseEvent | KeyboardEvent) {
+	if (isPreviewableImage(item)) {
+		openPreview(item);
+		return;
+	}
+
+	if (ev instanceof KeyboardEvent) {
+		emit('showMenu', item, ev);
+	}
 }
 </script>
 
@@ -192,8 +215,7 @@ function onContextmenu(item: UploaderItem, ev: PointerEvent) {
 	pointer-events: none;
 }
 
-.itemSensitive,
-.itemStatus {
+.itemSensitive {
 	position: absolute;
 	top: 8px;
 	display: flex;
@@ -211,14 +233,6 @@ function onContextmenu(item: UploaderItem, ev: PointerEvent) {
 .itemSensitive {
 	left: 8px;
 	color: var(--MI_THEME-warn);
-}
-
-.itemStatus {
-	right: 8px;
-}
-
-.itemIcon {
-	width: 20px;
 }
 
 .itemName {

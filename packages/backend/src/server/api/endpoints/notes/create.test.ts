@@ -182,8 +182,13 @@ describe('api:notes/create', () => {
 					.toBe(INVALID);
 			});
 
-			test('reject over 17 files', () => {
+			test('allow 18 files', () => {
 				const valid = v({ text: 'Hello, world!', fileIds: ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14', '15', '16', '17', '18'] });
+				expect(valid).toBe(VALID);
+			});
+
+			test('reject over 18 files', () => {
+				const valid = v({ text: 'Hello, world!', fileIds: ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14', '15', '16', '17', '18', '19'] });
 				expect(valid).toBe(INVALID);
 			});
 		});
