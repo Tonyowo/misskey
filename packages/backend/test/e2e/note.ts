@@ -107,6 +107,39 @@ describe('Note', () => {
 		assert.strictEqual(res.body.createdNote.reply.text, bobPost.text);
 	});
 
+	test('返信本文にメンションがなくても返信先には通知され、元投稿のメンション先には通知されない', async () => {
+		const bobPost = await post(bob, {
+			text: '@root foo',
+		});
+
+		const res = await api('notes/create', {
+			text: 'plain reply',
+			replyId: bobPost.id,
+		}, alice);
+
+		assert.strictEqual(res.status, 200);
+
+		const noteDoc = await Notes.findOneBy({ id: res.body.createdNote.id });
+		assert.ok(noteDoc);
+		assert.deepStrictEqual(noteDoc.mentions, [bob.id]);
+
+		const bobNotifications = await api('i/notifications', {}, bob);
+		assert.strictEqual(bobNotifications.status, 200);
+		assert.strictEqual(Array.isArray(bobNotifications.body), true);
+		assert.strictEqual(bobNotifications.body.some(notification =>
+			notification.type === 'reply' &&
+			'note' in notification &&
+			notification.note.id === res.body.createdNote.id
+		), true);
+
+		const rootNotifications = await api('i/notifications', {}, root);
+		assert.strictEqual(rootNotifications.status, 200);
+		assert.strictEqual(Array.isArray(rootNotifications.body), true);
+		assert.strictEqual(rootNotifications.body.some(notification =>
+			'note' in notification && notification.note.id === res.body.createdNote.id
+		), false);
+	});
+
 	test('返信可視CWは返信前に隠れ、返信後に見える', async () => {
 		const res = await api('notes/create', {
 			text: 'secret body',

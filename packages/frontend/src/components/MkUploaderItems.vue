@@ -4,33 +4,39 @@ SPDX-License-Identifier: AGPL-3.0-only
 -->
 
 <template>
-<div :class="$style.root">
+<div ref="rootEl" :class="$style.root">
 	<MkDraggable
 		:modelValue="props.items"
 		:class="$style.items"
 		direction="horizontal"
-		:manualDragStart="isTouchDevice"
 		@update:modelValue="items => emit('update:items', items)"
 	>
-		<template #default="{ item, dragStart }">
+		<template #default="{ item }">
 			<div
 				v-panel
-				:class="[$style.item, { [$style.itemWaiting]: item.preprocessing, [$style.itemCompleted]: item.uploaded, [$style.itemFailed]: item.uploadFailed }]"
+				:data-grid-sort-id="item.id"
+				:class="[
+					$style.item,
+					{
+						[$style.itemWaiting]: item.preprocessing,
+						[$style.itemCompleted]: item.uploaded,
+						[$style.itemFailed]: item.uploadFailed,
+						[$style.itemTouchDragging]: touchDraggingItemId === item.id,
+						[$style.itemTouchDropTarget]: touchDropTargetItemId === item.id,
+					},
+				]"
 				:style="{
 					'--p': item.progress != null ? `${item.progress.value / item.progress.max * 100}%` : '0%',
 					'--pp': item.preprocessProgress != null ? `${item.preprocessProgress * 100}%` : '100%',
+					...getTouchDragStyle(item.id),
 				}"
 				:title="item.name"
 				role="button"
 				tabindex="0"
 				@click="onActivate(item, $event)"
-				@pointerdown="onPointerdown(item, $event)"
-				@pointerup="cancelLongPress"
-				@pointercancel="cancelLongPress"
-				@pointerleave="cancelLongPress"
-				@pointermove="onPointermove($event)"
 				@keydown.space.enter.prevent="onActivate(item, $event)"
 				@contextmenu.prevent.stop="onContextmenu(item, $event)"
+				@touchstart="onItemTouchStart(item, $event)"
 			>
 				<div :class="$style.itemThumbnail" :style="item.thumbnail ? { backgroundImage: `url(${item.thumbnail})` } : undefined">
 					<div v-if="!item.thumbnail" :class="$style.itemFallback">
@@ -44,17 +50,16 @@ SPDX-License-Identifier: AGPL-3.0-only
 					</div>
 				</div>
 				<button
-					v-if="isTouchDevice"
 					type="button"
 					class="_button"
-					:class="$style.dragHandle"
-					data-drag-handle
-					tabindex="-1"
-					:draggable="true"
-					@click.stop.prevent
-					@dragstart.stop="dragStart"
+					:class="$style.menuButton"
+					:aria-label="i18n.ts.menu"
+					draggable="false"
+					@touchstart.stop
+					@pointerdown.stop
+					@click.stop.prevent="emit('showMenu', item, $event)"
 				>
-					<i class="ti ti-arrows-move"></i>
+					<i class="ti ti-settings"></i>
 				</button>
 			</div>
 		</template>
@@ -73,11 +78,13 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script lang="ts" setup>
+import { ref } from 'vue';
 import { isLink } from '@@/js/is-link.js';
 import type { UploaderItem } from '@/composables/use-uploader.js';
+import { useLongPressGridSort } from '@/composables/use-long-press-grid-sort.js';
 import MkDraggable from '@/components/MkDraggable.vue';
 import * as os from '@/os.js';
-import { isTouchUsing } from '@/utility/touch.js';
+import { i18n } from '@/i18n.js';
 
 const props = withDefaults(defineProps<{
 	items: UploaderItem[];
@@ -93,54 +100,20 @@ const emit = defineEmits<{
 	(ev: 'selectMore', event: MouseEvent): void;
 }>();
 
-const isTouchDevice = isTouchUsing;
-const LONG_PRESS_MS = 420;
-const LONG_PRESS_CANCEL_DISTANCE = 12;
-
-let longPressTimer: number | null = null;
-let longPressStartPoint: { x: number; y: number } | null = null;
-let suppressNextActivation = false;
-let lastTouchMenuOpenedAt = 0;
-
-function clearLongPressTimer() {
-	if (longPressTimer != null) {
-		window.clearTimeout(longPressTimer);
-		longPressTimer = null;
-	}
-	longPressStartPoint = null;
-}
-
-function isDragHandleTarget(target: EventTarget | null) {
-	return target instanceof HTMLElement && target.closest('[data-drag-handle]') != null;
-}
-
-function onPointerdown(item: UploaderItem, ev: PointerEvent) {
-	if (!isTouchDevice || ev.pointerType !== 'touch' || isDragHandleTarget(ev.target)) return;
-
-	clearLongPressTimer();
-	longPressStartPoint = { x: ev.clientX, y: ev.clientY };
-	longPressTimer = window.setTimeout(() => {
-		suppressNextActivation = true;
-		lastTouchMenuOpenedAt = Date.now();
-		emit('showMenu', item, ev);
-		clearLongPressTimer();
-	}, LONG_PRESS_MS);
-}
-
-function onPointermove(ev: PointerEvent) {
-	if (!isTouchDevice || longPressTimer == null || longPressStartPoint == null) return;
-
-	if (Math.hypot(ev.clientX - longPressStartPoint.x, ev.clientY - longPressStartPoint.y) > LONG_PRESS_CANCEL_DISTANCE) {
-		clearLongPressTimer();
-	}
-}
-
-function cancelLongPress() {
-	clearLongPressTimer();
-}
+const rootEl = ref<HTMLElement | null>(null);
+const {
+	touchDraggingItemId,
+	touchDropTargetItemId,
+	onItemTouchStart,
+	shouldSuppressActivation,
+	getTouchDragStyle,
+} = useLongPressGridSort({
+	rootEl,
+	getItems: () => props.items,
+	onReorder: items => emit('update:items', items),
+});
 
 function onContextmenu(item: UploaderItem, ev: PointerEvent) {
-	if (isTouchDevice && Date.now() - lastTouchMenuOpenedAt < 500) return;
 	if (ev.target && isLink(ev.target as HTMLElement)) return;
 	if (window.getSelection()?.toString() !== '') return;
 
@@ -164,8 +137,7 @@ async function openPreview(item: UploaderItem) {
 }
 
 function onActivate(item: UploaderItem, ev: MouseEvent | KeyboardEvent) {
-	if (suppressNextActivation) {
-		suppressNextActivation = false;
+	if (shouldSuppressActivation()) {
 		return;
 	}
 
@@ -212,6 +184,8 @@ function onActivate(item: UploaderItem, ev: MouseEvent | KeyboardEvent) {
 	overflow: clip;
 	cursor: grab;
 	background: var(--MI_THEME-panel);
+	-webkit-touch-callout: none;
+	user-select: none;
 
 	&:active {
 		cursor: grabbing;
@@ -264,10 +238,23 @@ function onActivate(item: UploaderItem, ev: MouseEvent | KeyboardEvent) {
 	}
 }
 
-.dragHandle {
+.item.itemTouchDragging {
+	z-index: 4;
+	cursor: grabbing;
+	pointer-events: none;
+	transform: translate(var(--grid-drag-x, 0), var(--grid-drag-y, 0)) scale(1.04);
+	transition: none;
+	box-shadow: 0 16px 36px color(from #000 srgb r g b / 0.28);
+}
+
+.item.itemTouchDropTarget {
+	box-shadow: inset 0 0 0 2px color(from var(--MI_THEME-accent) srgb r g b / 0.7);
+}
+
+.menuButton {
 	position: absolute;
 	right: 8px;
-	bottom: 8px;
+	top: 8px;
 	z-index: 2;
 	display: flex;
 	align-items: center;
@@ -275,10 +262,9 @@ function onActivate(item: UploaderItem, ev: MouseEvent | KeyboardEvent) {
 	width: 30px;
 	height: 30px;
 	border-radius: 999px;
-	background: color(from var(--MI_THEME-panel) srgb r g b / 0.88);
+	background: color(from var(--MI_THEME-panel) srgb r g b / 0.72);
 	color: var(--MI_THEME-fg);
 	box-shadow: 0 4px 12px color(from #000 srgb r g b / 0.18);
-	touch-action: none;
 }
 
 .itemThumbnail {

@@ -4,28 +4,31 @@ SPDX-License-Identifier: AGPL-3.0-only
 -->
 
 <template>
-<div v-show="props.modelValue.length !== 0" :class="$style.root">
+<div ref="rootEl" v-show="props.modelValue.length !== 0" :class="$style.root">
 	<MkDraggable
 		:modelValue="props.modelValue"
 		:class="$style.files"
 		direction="horizontal"
-		:manualDragStart="isTouchDevice"
 		@update:modelValue="v => emit('update:modelValue', v)"
 	>
-		<template #default="{ item, dragStart }">
+		<template #default="{ item }">
 			<div
-				:class="$style.file"
+				:data-grid-sort-id="item.id"
+				:class="[
+					$style.file,
+					{
+						[$style.fileTouchDragging]: touchDraggingItemId === item.id,
+						[$style.fileTouchDropTarget]: touchDropTargetItemId === item.id,
+					},
+				]"
+				:style="getTouchDragStyle(item.id)"
 				:title="item.name"
 				role="button"
 				tabindex="0"
 				@click="onFileClick(item, $event)"
-				@pointerdown="onPointerdown(item, $event)"
-				@pointerup="cancelLongPress"
-				@pointercancel="cancelLongPress"
-				@pointerleave="cancelLongPress"
-				@pointermove="onPointermove($event)"
 				@keydown.space.enter.prevent="onFileClick(item, $event)"
 				@contextmenu.prevent.stop="showFileMenu(item, $event)"
+				@touchstart="onItemTouchStart(item, $event)"
 			>
 				<!-- pointer-eventsをnoneにしておかないとiOSなどでドラッグしたときに画像の方に判定が持ってかれる -->
 				<MkDriveFileThumbnail style="pointer-events: none;" :data-id="item.id" :class="$style.thumbnail" :file="item" fit="cover"/>
@@ -33,17 +36,16 @@ SPDX-License-Identifier: AGPL-3.0-only
 					<i class="ti ti-eye-exclamation" style="margin: auto;"></i>
 				</div>
 				<button
-					v-if="isTouchDevice"
 					type="button"
 					class="_button"
-					:class="$style.dragHandle"
-					data-drag-handle
-					tabindex="-1"
-					:draggable="true"
-					@click.stop.prevent
-					@dragstart.stop="dragStart"
+					:class="$style.menuButton"
+					:aria-label="i18n.ts.menu"
+					draggable="false"
+					@touchstart.stop
+					@pointerdown.stop
+					@click.stop.prevent="showFileMenu(item, $event)"
 				>
-					<i class="ti ti-arrows-move"></i>
+					<i class="ti ti-settings"></i>
 				</button>
 			</div>
 		</template>
@@ -68,9 +70,10 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script lang="ts" setup>
-import { inject } from 'vue';
+import { inject, ref } from 'vue';
 import * as Misskey from 'misskey-js';
 import type { MenuItem } from '@/types/menu';
+import { useLongPressGridSort } from '@/composables/use-long-press-grid-sort.js';
 import { copyToClipboard } from '@/utility/copy-to-clipboard';
 import MkDriveFileThumbnail from '@/components/MkDriveFileThumbnail.vue';
 import MkDraggable from '@/components/MkDraggable.vue';
@@ -80,7 +83,6 @@ import { i18n } from '@/i18n.js';
 import { prefer } from '@/preferences.js';
 import { DI } from '@/di.js';
 import { globalEvents } from '@/events.js';
-import { isTouchUsing } from '@/utility/touch.js';
 
 const props = withDefaults(defineProps<{
 	modelValue: Misskey.entities.DriveFile[];
@@ -92,6 +94,7 @@ const props = withDefaults(defineProps<{
 });
 
 const mock = inject(DI.mock, false);
+const rootEl = ref<HTMLElement | null>(null);
 
 const emit = defineEmits<{
 	(ev: 'update:modelValue', value: Misskey.entities.DriveFile[]): void;
@@ -102,51 +105,18 @@ const emit = defineEmits<{
 }>();
 
 let menuShowing = false;
-const isTouchDevice = isTouchUsing;
-const LONG_PRESS_MS = 420;
-const LONG_PRESS_CANCEL_DISTANCE = 12;
 
-let longPressTimer: number | null = null;
-let longPressStartPoint: { x: number; y: number } | null = null;
-let suppressNextActivation = false;
-let lastTouchMenuOpenedAt = 0;
-
-function clearLongPressTimer() {
-	if (longPressTimer != null) {
-		window.clearTimeout(longPressTimer);
-		longPressTimer = null;
-	}
-	longPressStartPoint = null;
-}
-
-function isDragHandleTarget(target: EventTarget | null) {
-	return target instanceof HTMLElement && target.closest('[data-drag-handle]') != null;
-}
-
-function onPointerdown(file: Misskey.entities.DriveFile, ev: PointerEvent) {
-	if (!isTouchDevice || ev.pointerType !== 'touch' || isDragHandleTarget(ev.target)) return;
-
-	clearLongPressTimer();
-	longPressStartPoint = { x: ev.clientX, y: ev.clientY };
-	longPressTimer = window.setTimeout(() => {
-		suppressNextActivation = true;
-		lastTouchMenuOpenedAt = Date.now();
-		showFileMenu(file, ev);
-		clearLongPressTimer();
-	}, LONG_PRESS_MS);
-}
-
-function onPointermove(ev: PointerEvent) {
-	if (!isTouchDevice || longPressTimer == null || longPressStartPoint == null) return;
-
-	if (Math.hypot(ev.clientX - longPressStartPoint.x, ev.clientY - longPressStartPoint.y) > LONG_PRESS_CANCEL_DISTANCE) {
-		clearLongPressTimer();
-	}
-}
-
-function cancelLongPress() {
-	clearLongPressTimer();
-}
+const {
+	touchDraggingItemId,
+	touchDropTargetItemId,
+	onItemTouchStart,
+	shouldSuppressActivation,
+	getTouchDragStyle,
+} = useLongPressGridSort({
+	rootEl,
+	getItems: () => props.modelValue,
+	onReorder: value => emit('update:modelValue', value),
+});
 
 function detachMedia(id: string) {
 	if (mock) return;
@@ -237,8 +207,7 @@ async function openPreview(file: Misskey.entities.DriveFile) {
 }
 
 function onFileClick(file: Misskey.entities.DriveFile, ev: MouseEvent | KeyboardEvent) {
-	if (suppressNextActivation) {
-		suppressNextActivation = false;
+	if (shouldSuppressActivation()) {
 		return;
 	}
 
@@ -254,7 +223,6 @@ function onFileClick(file: Misskey.entities.DriveFile, ev: MouseEvent | Keyboard
 
 function showFileMenu(file: Misskey.entities.DriveFile, ev: MouseEvent | PointerEvent | KeyboardEvent): void {
 	if (menuShowing) return;
-	if (isTouchDevice && ev.type === 'contextmenu' && Date.now() - lastTouchMenuOpenedAt < 500) return;
 
 	const isImage = file.type.startsWith('image/');
 
@@ -347,6 +315,8 @@ function showFileMenu(file: Misskey.entities.DriveFile, ev: MouseEvent | Pointer
 	overflow: hidden;
 	cursor: grab;
 	background: var(--MI_THEME-panel);
+	-webkit-touch-callout: none;
+	user-select: none;
 
 	&:active {
 		cursor: grabbing;
@@ -358,10 +328,23 @@ function showFileMenu(file: Misskey.entities.DriveFile, ev: MouseEvent | Pointer
 	}
 }
 
-.dragHandle {
+.file.fileTouchDragging {
+	z-index: 4;
+	cursor: grabbing;
+	pointer-events: none;
+	transform: translate(var(--grid-drag-x, 0), var(--grid-drag-y, 0)) scale(1.04);
+	transition: none;
+	box-shadow: 0 16px 36px color(from #000 srgb r g b / 0.28);
+}
+
+.file.fileTouchDropTarget {
+	box-shadow: inset 0 0 0 2px color(from var(--MI_THEME-accent) srgb r g b / 0.7);
+}
+
+.menuButton {
 	position: absolute;
 	right: 8px;
-	bottom: 8px;
+	top: 8px;
 	z-index: 2;
 	display: flex;
 	align-items: center;
@@ -369,10 +352,9 @@ function showFileMenu(file: Misskey.entities.DriveFile, ev: MouseEvent | Pointer
 	width: 30px;
 	height: 30px;
 	border-radius: 999px;
-	background: color(from var(--MI_THEME-panel) srgb r g b / 0.88);
+	background: color(from var(--MI_THEME-panel) srgb r g b / 0.72);
 	color: var(--MI_THEME-fg);
 	box-shadow: 0 4px 12px color(from #000 srgb r g b / 0.18);
-	touch-action: none;
 }
 
 .thumbnail {

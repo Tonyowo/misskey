@@ -138,7 +138,7 @@ import { watch, nextTick, onMounted, defineAsyncComponent, provide, shallowRef, 
 import * as mfm from 'mfm-js';
 import * as Misskey from 'misskey-js';
 import { toASCII } from 'punycode.js';
-import { host, lang, url } from '@@/js/config.js';
+import { lang, url } from '@@/js/config.js';
 import MkUploaderItems from './MkUploaderItems.vue';
 import type { ShallowRef } from 'vue';
 import type { PostFormProps } from '@/types/post-form.js';
@@ -406,31 +406,6 @@ watch(visibleUsers, () => {
 if (props.mention) {
 	text.value = props.mention.host ? `@${props.mention.username}@${toASCII(props.mention.host)}` : `@${props.mention.username}`;
 	text.value += ' ';
-}
-
-if (replyTargetNote.value && (replyTargetNote.value.user.username !== $i.username || (replyTargetNote.value.user.host != null && replyTargetNote.value.user.host !== host))) {
-	text.value = `@${replyTargetNote.value.user.username}${replyTargetNote.value.user.host != null ? '@' + toASCII(replyTargetNote.value.user.host) : ''} `;
-}
-
-if (replyTargetNote.value && replyTargetNote.value.text != null) {
-	const ast = mfm.parse(replyTargetNote.value.text);
-	const otherHost = replyTargetNote.value.user.host;
-
-	for (const x of extractMentions(ast)) {
-		const mention = x.host ?
-			`@${x.username}@${toASCII(x.host)}` :
-			(otherHost == null || otherHost === host) ?
-				`@${x.username}` :
-				`@${x.username}@${toASCII(otherHost)}`;
-
-		// 自分は除外
-		if ($i.username === x.username && (x.host == null || x.host === host)) continue;
-
-		// 重複は除外
-		if (text.value.includes(`${mention} `)) continue;
-
-		text.value += `${mention} `;
-	}
 }
 
 if ($i.isSilenced && visibility.value === 'public') {
