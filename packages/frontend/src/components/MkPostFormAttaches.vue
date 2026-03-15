@@ -343,18 +343,32 @@ function showFileMenu(file: Misskey.entities.DriveFile, ev: MouseEvent | Pointer
 
 .menuButton {
 	position: absolute;
-	right: 8px;
-	top: 8px;
-	z-index: 2;
+	right: 10px;
+	top: 10px;
+	z-index: 3;
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	width: 30px;
-	height: 30px;
+	width: 28px;
+	height: 28px;
+	padding: 0;
 	border-radius: 999px;
-	background: color(from var(--MI_THEME-panel) srgb r g b / 0.72);
-	color: var(--MI_THEME-fg);
-	box-shadow: 0 4px 12px color(from #000 srgb r g b / 0.18);
+	background: transparent;
+	color: rgba(255, 255, 255, 0.96);
+	box-shadow: none;
+	opacity: 0.94;
+	transition: transform 0.16s ease, opacity 0.16s ease;
+
+	> i {
+		font-size: 1.15rem;
+		filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.4));
+	}
+
+	&:hover,
+	&:focus-visible {
+		opacity: 1;
+		transform: scale(1.08);
+	}
 }
 
 .thumbnail {
