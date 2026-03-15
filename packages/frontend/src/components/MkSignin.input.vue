@@ -249,7 +249,7 @@ async function specifyHostAndOpenRemote(options: OpenOnRemoteOptions): Promise<v
 	cursor: pointer;
 	transition: background-color .2s ease, color .2s ease, transform .2s ease;
 
-	&:hover {
+	&:not(.loginMethodButtonActive):hover {
 		background: color-mix(in srgb, var(--MI_THEME-fg), transparent 92%);
 	}
 
