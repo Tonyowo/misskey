@@ -251,6 +251,10 @@ function menuEdit() {
 	}
 }
 
+.instance {
+	cursor: default;
+}
+
 .middle {
 	flex: 1;
 	direction: ltr;
