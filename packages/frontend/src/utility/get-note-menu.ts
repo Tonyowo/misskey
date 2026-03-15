@@ -17,7 +17,7 @@ import { copyToClipboard } from '@/utility/copy-to-clipboard.js';
 import { store } from '@/store.js';
 import { miLocalStorage } from '@/local-storage.js';
 import { getUserMenu } from '@/utility/get-user-menu.js';
-import { clipsCache, favoritedChannelsCache } from '@/cache.js';
+import { clipsCache } from '@/cache.js';
 import MkRippleEffect from '@/components/MkRippleEffect.vue';
 import { isSupportShare } from '@/utility/navigator.js';
 import { getAppearNote } from '@/utility/get-appear-note.js';
@@ -25,6 +25,7 @@ import { genEmbedCode } from '@/utility/get-embed-code.js';
 import { prefer } from '@/preferences.js';
 import { getPluginHandlers } from '@/plugin.js';
 import { globalEvents } from '@/events.js';
+import { fetchSelectableChannels } from '@/utility/selectable-channels.js';
 
 const isInBrowserTranslationAvailable = (
 	'LanguageDetector' in window &&
@@ -688,7 +689,7 @@ export function getRenoteMenu(props: {
 			icon: 'ti ti-repeat',
 			text: appearNote.channel ? i18n.ts.renoteToOtherChannel : i18n.ts.renoteToChannel,
 			children: async () => {
-				const channels = await favoritedChannelsCache.fetch();
+				const channels = await fetchSelectableChannels();
 				return channels.filter((channel) => {
 					if (!appearNote.channelId) return true;
 					return channel.id !== appearNote.channelId;
