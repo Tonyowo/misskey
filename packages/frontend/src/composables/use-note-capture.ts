@@ -15,6 +15,12 @@ import { misskeyApi } from '@/utility/misskey-api.js';
 import { prefer } from '@/preferences.js';
 import { globalEvents } from '@/events.js';
 
+type NoteUpdatedEventWithEdit = NoteUpdatedEvent | {
+	id: Misskey.entities.Note['id'];
+	type: 'updated';
+	body: Misskey.entities.Note;
+};
+
 export const noteEvents = new EventEmitter<{
 	[ev: `reacted:${string}`]: (ctx: { userId: Misskey.entities.User['id']; reaction: string; emoji?: { name: string; url: string; } | null; }) => void;
 	[ev: `unreacted:${string}`]: (ctx: { userId: Misskey.entities.User['id']; reaction: string; emoji?: { name: string; url: string; } | null; }) => void;
@@ -29,6 +35,18 @@ const pollingQueue = new Map<string, {
 	referenceCount: number;
 	lastAddedAt: number;
 }>();
+
+function normalizeReactions(reactions: Misskey.entities.Note['reactions']) {
+	return Object.entries(reactions).reduce((acc, [name, count]) => {
+		const normalizedName = name.replace(/^:(\w+):$/, ':$1@.:');
+		if (acc[normalizedName] == null) {
+			acc[normalizedName] = count;
+		} else {
+			acc[normalizedName] += count;
+		}
+		return acc;
+	}, {} as Misskey.entities.Note['reactions']);
+}
 
 function pollingEnqueue(note: Pick<Misskey.entities.Note, 'id' | 'createdAt'>) {
 	if (pollingQueue.has(note.id)) {
@@ -113,12 +131,13 @@ function pollingSubscribe(props: {
 }
 
 function realtimeSubscribe(props: {
-	note: Pick<Misskey.entities.Note, 'id' | 'createdAt'>;
+	note: Misskey.entities.Note;
+	$note: ReactiveNoteData;
 }): void {
-	const note = props.note;
+	const { note, $note } = props;
 	const connection = useStream();
 
-	function onStreamNoteUpdated(noteData: NoteUpdatedEvent): void {
+	function onStreamNoteUpdated(noteData: NoteUpdatedEventWithEdit): void {
 		const { type, id, body } = noteData;
 
 		if (id !== note.id) return;
@@ -151,6 +170,17 @@ function realtimeSubscribe(props: {
 
 			case 'deleted': {
 				globalEvents.emit('noteDeleted', id);
+				break;
+			}
+
+			case 'updated': {
+				Object.assign(note, body);
+				$note.reactions = normalizeReactions(body.reactions);
+				$note.reactionCount = body.reactionCount;
+				$note.reactionEmojis = body.reactionEmojis;
+				$note.myReaction = body.myReaction ?? null;
+				$note.pollChoices = body.poll?.choices ?? [];
+				globalEvents.emit('noteUpdated', body);
 				break;
 			}
 		}
@@ -200,16 +230,7 @@ export function useNoteCapture(props: {
 	const { note, parentNote, mock } = props;
 
 	const $note = reactive<ReactiveNoteData>({
-		reactions: Object.entries(note.reactions).reduce((acc, [name, count]) => {
-			// Normalize reactions
-			const normalizedName = name.replace(/^:(\w+):$/, ':$1@.:');
-			if (acc[normalizedName] == null) {
-				acc[normalizedName] = count;
-			} else {
-				acc[normalizedName] += count;
-			}
-			return acc;
-		}, {} as Misskey.entities.Note['reactions']),
+		reactions: normalizeReactions(note.reactions),
 		reactionCount: note.reactionCount,
 		reactionEmojis: note.reactionEmojis,
 		myReaction: note.myReaction,
@@ -289,6 +310,7 @@ export function useNoteCapture(props: {
 		if ($i && store.s.realtimeMode) {
 			realtimeSubscribe({
 				note,
+				$note,
 			});
 		} else {
 			pollingSubscribe({

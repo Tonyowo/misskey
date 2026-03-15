@@ -314,6 +314,9 @@ export type NoteUpdatedEvent = { id: Note['id'] } & ({
 		deletedAt: string;
 	};
 } | {
+	type: 'updated';
+	body: Note;
+} | {
 	type: 'pollVoted';
 	body: {
 		choice: number;

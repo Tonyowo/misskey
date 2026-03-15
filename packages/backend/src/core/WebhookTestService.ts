@@ -70,6 +70,7 @@ function generateDummyUser(override?: Partial<MiUser>): MiUser {
 function generateDummyNote(override?: Partial<MiNote>): MiNote {
 	return {
 		id: 'dummy-note-1',
+		updatedAt: null,
 		replyId: null,
 		reply: null,
 		renoteId: null,
@@ -368,6 +369,7 @@ export class WebhookTestService {
 		return {
 			id: note.id,
 			createdAt: new Date().toISOString(),
+			updatedAt: note.updatedAt?.toISOString() ?? null,
 			deletedAt: null,
 			text: note.text,
 			cw: note.cw,

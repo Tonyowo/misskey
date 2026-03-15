@@ -77,7 +77,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 				</div>
 			</header>
 			<div :class="$style.noteContent">
-				<p v-if="hasCw" :class="$style.cw">
+				<div v-if="hasCw" :class="$style.cw">
 					<Mfm
 						v-if="appearNote.cw != ''"
 						:text="appearNote.cw"
@@ -90,7 +90,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 					<div v-else style="margin-top: 4px; opacity: 0.8; font-size: 0.9em;">
 						<i class="ti ti-lock" style="margin-right: 4px;"></i>{{ i18n.ts.replyToSeeCw }}
 					</div>
-				</p>
+				</div>
 				<div v-show="!hasCw || (!isCwReplyLocked && showContent)">
 					<span v-if="appearNote.isHidden" style="opacity: 0.5">({{ i18n.ts.private }})</span>
 					<MkA v-if="appearNote.replyId" :class="$style.noteReplyTarget" :to="`/notes/${appearNote.replyId}`"><i class="ti ti-arrow-back-up"></i></MkA>
@@ -111,8 +111,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 						<div v-else-if="translation">
 							<b>{{ i18n.tsx.translatedFrom({ x: translation.sourceLang }) }}: </b>
 							<Mfm :text="translation.text" :author="appearNote.user" :nyaize="'respect'" :emojiUrls="appearNote.emojis" class="_selectable"/>
-							</div>
 						</div>
+					</div>
 					<div v-if="appearNote.files && appearNote.files.length > 0">
 						<MkMediaList ref="galleryEl" :mediaList="appearNote.files"/>
 					</div>
@@ -138,6 +138,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 					<MkA :to="notePage(appearNote)">
 						<MkTime :time="appearNote.createdAt" mode="detail" colored/>
 					</MkA>
+					<span v-if="appearNoteIsEdited" :class="$style.noteFooterEdited">{{ i18n.ts.edited }}</span>
 				</div>
 				<MkReactionsViewer
 					v-if="appearNote.reactionAcceptance !== 'likeOnly'"
@@ -234,7 +235,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script lang="ts" setup>
-import { computed, inject, markRaw, provide, ref, useTemplateRef } from 'vue';
+import { computed, inject, markRaw, provide, reactive, ref, useTemplateRef } from 'vue';
 import * as mfm from 'mfm-js';
 import * as Misskey from 'misskey-js';
 import { isLink } from '@@/js/is-link.js';
@@ -291,7 +292,7 @@ const props = withDefaults(defineProps<{
 
 const inChannel = inject('inChannel', null);
 
-let note = deepClone(props.note);
+const note = reactive(deepClone(props.note)) as Misskey.entities.Note;
 
 // plugin
 const noteViewInterruptors = getPluginHandlers('note_view_interruptor');
@@ -308,7 +309,7 @@ if (noteViewInterruptors.length > 0) {
 	if (result == null) {
 		hideByPlugin.value = true;
 	} else {
-		note = result as Misskey.entities.Note;
+		Object.assign(note, result as Misskey.entities.Note);
 	}
 }
 
@@ -332,18 +333,31 @@ const isDeleted = ref(false);
 const muted = ref($i ? checkWordMute(appearNote, $i, $i.mutedWords) : false);
 const translation = ref<Misskey.entities.NotesTranslateResponse | null>(null);
 const translating = ref(false);
-const parsed = appearNote.text ? mfm.parse(appearNote.text) : null;
-const urls = parsed ? extractUrlFromMfm(parsed).filter((url) => appearNote.renote?.url !== url && appearNote.renote?.uri !== url) : null;
+const parsed = computed(() => appearNote.text ? mfm.parse(appearNote.text) : null);
+const urls = computed(() => parsed.value ? extractUrlFromMfm(parsed.value).filter((url) => appearNote.renote?.url !== url && appearNote.renote?.uri !== url) : null);
 const showTicker = (prefer.s.instanceTicker === 'always') || (prefer.s.instanceTicker === 'remote' && appearNote.user.instance);
 const conversation = ref<Misskey.entities.Note[]>([]);
 const replies = ref<Misskey.entities.Note[]>([]);
 const canRenote = computed(() => ['public', 'home'].includes(appearNote.visibility) || appearNote.userId === $i?.id);
 const isCwReplyLocked = computed(() => appearNote.cwReplyRequired === true && appearNote.canRevealCw === false);
 const hasCw = computed(() => appearNote.cw != null);
+const appearNoteIsEdited = computed(() => appearNote.updatedAt != null && appearNote.updatedAt !== appearNote.createdAt);
 
 useGlobalEvent('noteDeleted', (noteId) => {
 	if (noteId === note.id || noteId === appearNote.id) {
 		isDeleted.value = true;
+	}
+});
+
+useGlobalEvent('noteUpdated', (updatedNote) => {
+	if (note.id === updatedNote.id) {
+		Object.assign(note, deepClone(updatedNote));
+	}
+	if (note.reply?.id === updatedNote.id) {
+		Object.assign(note.reply, deepClone(updatedNote));
+	}
+	if (note.renote?.id === updatedNote.id) {
+		Object.assign(note.renote, deepClone(updatedNote));
 	}
 });
 
@@ -845,6 +859,10 @@ function loadConversation() {
 	margin: 16px 0;
 	opacity: 0.7;
 	font-size: 0.9em;
+}
+
+.noteFooterEdited {
+	margin-left: 0.5em;
 }
 
 .noteFooterButton {

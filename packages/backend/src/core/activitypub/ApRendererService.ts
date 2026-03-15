@@ -482,6 +482,7 @@ export class ApRendererService {
 			_misskey_quote: quote,
 			quoteUrl: quote,
 			published: this.idService.parse(note.id).date.toISOString(),
+			updated: note.updatedAt?.toISOString(),
 			to,
 			cc,
 			inReplyTo,

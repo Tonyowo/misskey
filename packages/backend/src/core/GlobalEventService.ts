@@ -109,10 +109,7 @@ export interface NoteEventTypes {
 	deleted: {
 		deletedAt: Date;
 	};
-	updated: {
-		cw: string | null;
-		text: string;
-	};
+	updated: Packed<'Note'>;
 	reacted: {
 		reaction: string;
 		emoji?: {

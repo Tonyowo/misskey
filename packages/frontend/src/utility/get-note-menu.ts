@@ -209,25 +209,13 @@ export function getNoteMenu(props: {
 		});
 	}
 
-	function delEdit(): void {
-		os.confirm({
-			type: 'warning',
-			text: i18n.ts.deleteAndEditConfirm,
-		}).then(({ canceled }) => {
-			if (canceled) return;
-			if ($i == null) return;
-
-			misskeyApi('notes/delete', {
-				noteId: appearNote.id,
-			}).then(() => {
-				globalEvents.emit('noteDeleted', appearNote.id);
-			});
-
-			os.post({ initialNote: appearNote, renote: appearNote.renote, reply: appearNote.reply, channel: appearNote.channel });
-
-			if (Date.now() - new Date(appearNote.createdAt).getTime() < 1000 * 60 && appearNote.userId === $i.id) {
-				claimAchievement('noteDeletedWithin1min');
-			}
+	function edit(): void {
+		os.post({
+			initialNote: appearNote,
+			editNote: appearNote,
+			renote: appearNote.renote,
+			reply: appearNote.reply,
+			channel: appearNote.channel,
 		});
 	}
 
@@ -499,8 +487,8 @@ export function getNoteMenu(props: {
 			if (appearNote.userId === $i.id) {
 				menuItems.push({
 					icon: 'ti ti-edit',
-					text: i18n.ts.deleteAndEdit,
-					action: delEdit,
+					text: i18n.ts.edit,
+					action: edit,
 				});
 			}
 			menuItems.push({

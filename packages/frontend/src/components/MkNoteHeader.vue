@@ -23,6 +23,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 		<MkA v-else :to="notePage(note)">
 			<MkTime :time="note.createdAt" colored/>
 		</MkA>
+		<span v-if="isEdited" :class="$style.edited">{{ i18n.ts.edited }}</span>
 		<span v-if="note.visibility !== 'public'" style="margin-left: 0.5em;" :title="i18n.ts._visibility[note.visibility]">
 			<i v-if="note.visibility === 'home'" class="ti ti-home"></i>
 			<i v-else-if="note.visibility === 'followers'" class="ti ti-lock"></i>
@@ -35,18 +36,19 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script lang="ts" setup>
-import { inject } from 'vue';
+import { computed, inject } from 'vue';
 import * as Misskey from 'misskey-js';
 import { i18n } from '@/i18n.js';
 import { notePage } from '@/filters/note.js';
 import { userPage } from '@/filters/user.js';
 import { DI } from '@/di.js';
 
-defineProps<{
+const props = defineProps<{
 	note: Misskey.entities.Note;
 }>();
 
 const mock = inject(DI.mock, false);
+const isEdited = computed(() => props.note.updatedAt != null && props.note.updatedAt !== props.note.createdAt);
 </script>
 
 <style lang="scss" module>
@@ -93,6 +95,11 @@ const mock = inject(DI.mock, false);
 	flex-shrink: 0;
 	margin-left: auto;
 	font-size: 0.9em;
+}
+
+.edited {
+	margin-left: 0.5em;
+	opacity: 0.7;
 }
 
 .badgeRoles {

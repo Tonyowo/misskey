@@ -199,7 +199,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script lang="ts" setup>
-import { computed, inject, onMounted, ref, useTemplateRef, provide } from 'vue';
+import { computed, inject, onMounted, reactive, ref, useTemplateRef, provide } from 'vue';
 import * as mfm from 'mfm-js';
 import * as Misskey from 'misskey-js';
 import { isLink } from '@@/js/is-link.js';
@@ -246,7 +246,7 @@ import { getAppearNote } from '@/utility/get-appear-note.js';
 import { prefer } from '@/preferences.js';
 import { getPluginHandlers } from '@/plugin.js';
 import { DI } from '@/di.js';
-import { globalEvents } from '@/events.js';
+import { globalEvents, useGlobalEvent } from '@/events.js';
 
 const props = withDefaults(defineProps<{
 	note: Misskey.entities.Note;
@@ -269,7 +269,7 @@ const tl_withSensitive = inject<Ref<boolean>>('tl_withSensitive', ref(true));
 const inChannel = inject('inChannel', null);
 const currentClip = inject<Ref<Misskey.entities.Clip> | null>('currentClip', null);
 
-let note = deepClone(props.note);
+const note = reactive(deepClone(props.note)) as Misskey.entities.Note;
 
 // plugin
 const noteViewInterruptors = getPluginHandlers('note_view_interruptor');
@@ -286,7 +286,7 @@ if (noteViewInterruptors.length > 0) {
 	if (result == null) {
 		hideByPlugin.value = true;
 	} else {
-		note = result as Misskey.entities.Note;
+		Object.assign(note, result as Misskey.entities.Note);
 	}
 }
 
@@ -309,7 +309,7 @@ const isMyRenote = $i && ($i.id === note.userId);
 const showContent = ref(false);
 const parsed = computed(() => appearNote.text ? mfm.parse(appearNote.text) : null);
 const urls = computed(() => parsed.value ? extractUrlFromMfm(parsed.value).filter((url) => appearNote.renote?.url !== url && appearNote.renote?.uri !== url) : null);
-const isLong = shouldCollapsed(appearNote, urls.value ?? []);
+const isLong = computed(() => shouldCollapsed(appearNote, urls.value ?? []));
 const muted = ref(checkMute(appearNote, $i?.mutedWords));
 const hardMuted = ref(props.withHardMute && checkMute(appearNote, $i?.hardMutedWords, true));
 const showSoftWordMutedWord = computed(() => prefer.s.showSoftWordMutedWord);
@@ -319,7 +319,7 @@ const showTicker = (prefer.s.instanceTicker === 'always') || (prefer.s.instanceT
 const canRenote = computed(() => ['public', 'home'].includes(appearNote.visibility) || (appearNote.visibility === 'followers' && appearNote.userId === $i?.id));
 const isCwReplyLocked = computed(() => appearNote.cwReplyRequired === true && appearNote.canRevealCw === false);
 const hasCw = computed(() => appearNote.cw != null);
-const collapsed = ref(!hasCw.value && isLong);
+const collapsed = ref(!hasCw.value && isLong.value);
 const renoteCollapsed = ref(
 	prefer.s.collapseRenotes && isRenote && (
 		($i && ($i.id === note.userId || $i.id === appearNote.userId)) || // `||` must be `||`! See https://github.com/misskey-dev/misskey/issues/13131
@@ -331,6 +331,18 @@ const pleaseLoginContext = computed<OpenOnRemoteOptions>(() => ({
 	type: 'lookup',
 	url: `https://${host}/notes/${appearNote.id}`,
 }));
+
+useGlobalEvent('noteUpdated', (updatedNote) => {
+	if (note.id === updatedNote.id) {
+		Object.assign(note, deepClone(updatedNote));
+	}
+	if (note.reply?.id === updatedNote.id) {
+		Object.assign(note.reply, deepClone(updatedNote));
+	}
+	if (note.renote?.id === updatedNote.id) {
+		Object.assign(note.renote, deepClone(updatedNote));
+	}
+});
 
 /* eslint-disable no-redeclare */
 /** checkOnlyでは純粋なワードミュート結果をbooleanで返却する */
@@ -396,7 +408,7 @@ const keymap = {
 			renoteCollapsed.value = false;
 		} else if (hasCw.value && !isCwReplyLocked.value) {
 			showContent.value = !showContent.value;
-		} else if (isLong) {
+		} else if (isLong.value) {
 			collapsed.value = !collapsed.value;
 		}
 	},

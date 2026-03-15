@@ -4407,6 +4407,8 @@ export type components = {
             /** Format: date-time */
             createdAt: string;
             /** Format: date-time */
+            updatedAt: string | null;
+            /** Format: date-time */
             deletedAt?: string | null;
             text: string | null;
             replyLockedText?: string | null;

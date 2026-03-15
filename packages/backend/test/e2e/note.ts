@@ -1115,6 +1115,55 @@ describe('Note', () => {
 		});
 	});
 
+	describe('notes/update', () => {
+		test('edit a note without breaking replies and renotes', async () => {
+			const mainNoteRes = await api('notes/create', {
+				text: 'before edit',
+			}, alice);
+			const replyRes = await api('notes/create', {
+				text: 'reply',
+				replyId: mainNoteRes.body.createdNote.id,
+			}, bob);
+			const renoteRes = await api('notes/create', {
+				renoteId: mainNoteRes.body.createdNote.id,
+			}, bob);
+
+			const updateRes = await api('notes/update', {
+				noteId: mainNoteRes.body.createdNote.id,
+				text: 'after edit',
+				replyLockedText: null,
+				cw: null,
+				cwReplyRequired: false,
+				localOnly: false,
+				reactionAcceptance: null,
+				replyId: null,
+				renoteId: null,
+				channelId: null,
+				visibility: 'public',
+				visibleUserIds: [],
+				poll: null,
+			}, alice);
+
+			assert.strictEqual(updateRes.status, 200);
+			assert.strictEqual(updateRes.body.updatedNote.id, mainNoteRes.body.createdNote.id);
+			assert.strictEqual(updateRes.body.updatedNote.text, 'after edit');
+			assert.ok(updateRes.body.updatedNote.updatedAt);
+
+			const mainNote = await Notes.findOneBy({ id: mainNoteRes.body.createdNote.id });
+			const replyNote = await Notes.findOneBy({ id: replyRes.body.createdNote.id });
+			const renoteNote = await Notes.findOneBy({ id: renoteRes.body.createdNote.id });
+
+			assert.ok(mainNote);
+			assert.ok(replyNote);
+			assert.ok(renoteNote);
+			assert.ok(mainNote.updatedAt);
+			assert.strictEqual(mainNote.repliesCount, 1);
+			assert.strictEqual(mainNote.renoteCount, 1);
+			assert.strictEqual(replyNote.replyId, mainNote.id);
+			assert.strictEqual(renoteNote.renoteId, mainNote.id);
+		});
+	});
+
 	describe('notes/translate', () => {
 		describe('翻訳機能の利用が許可されていない場合', () => {
 			let cannotTranslateRole: misskey.entities.Role;

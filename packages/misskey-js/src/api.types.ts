@@ -5,8 +5,10 @@ import {
 	AdminRolesCreateResponse,
 	EmptyRequest,
 	EmptyResponse,
+	NotesCreateRequest,
 	UsersShowRequest,
 } from './autogen/entities.js';
+import { Note } from './autogen/models.js';
 import {
 	PartialRolePolicyOverride,
 	SigninFlowRequest,
@@ -116,6 +118,14 @@ export type Endpoints = Overwrite<
 		'clear-browser-cache': {
 			req: EmptyRequest;
 			res: EmptyResponse;
+		},
+		'notes/update': {
+			req: NotesCreateRequest & {
+				noteId: string;
+			};
+			res: {
+				updatedNote: Note;
+			};
 		},
 	}
 >;
