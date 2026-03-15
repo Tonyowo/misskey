@@ -138,7 +138,7 @@ import { watch, nextTick, onMounted, defineAsyncComponent, provide, shallowRef, 
 import * as mfm from 'mfm-js';
 import * as Misskey from 'misskey-js';
 import { toASCII } from 'punycode.js';
-import { host, url } from '@@/js/config.js';
+import { host, lang, url } from '@@/js/config.js';
 import MkUploaderItems from './MkUploaderItems.vue';
 import type { ShallowRef } from 'vue';
 import type { PostFormProps } from '@/types/post-form.js';
@@ -590,16 +590,38 @@ function focus() {
 
 let showingFileLimitWarning = false;
 
-async function notifyFileLimit(nextCount: number) {
+function getFileLimitWarningCopy() {
+	if (lang.startsWith('zh')) {
+		return {
+			title: '图片数量已达上限',
+			text: `单条内容最多可添加 ${MAX_NOTE_FILES} 张图片。`,
+		};
+	}
+
+	if (lang.startsWith('ja')) {
+		return {
+			title: '画像の追加上限に達しました',
+			text: `1件の投稿に添付できる画像は最大${MAX_NOTE_FILES}枚です。`,
+		};
+	}
+
+	return {
+		title: 'Image limit reached',
+		text: `You can attach up to ${MAX_NOTE_FILES} images to a single post.`,
+	};
+}
+
+async function notifyFileLimit() {
 	if (showingFileLimitWarning) return;
 
 	showingFileLimitWarning = true;
 
 	try {
+		const copy = getFileLimitWarningCopy();
 		await os.alert({
 			type: 'warning',
-			title: i18n.tsx.limitTo({ x: MAX_NOTE_FILES }),
-			text: `${nextCount}/${MAX_NOTE_FILES}\n${i18n.tsx.remainingN({ n: MAX_NOTE_FILES - nextCount })}`,
+			title: copy.title,
+			text: copy.text,
 		});
 	} finally {
 		showingFileLimitWarning = false;
@@ -614,7 +636,7 @@ function limitAdditionalAttachments<T>(items: T[]): T[] {
 	}
 
 	const accepted = items.slice(0, remaining);
-	notifyFileLimit(currentCount + accepted.length);
+	notifyFileLimit();
 	return accepted;
 }
 
