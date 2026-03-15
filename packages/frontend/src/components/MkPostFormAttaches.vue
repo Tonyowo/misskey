@@ -4,21 +4,20 @@ SPDX-License-Identifier: AGPL-3.0-only
 -->
 
 <template>
-<div v-show="props.modelValue.length != 0" :class="$style.root">
+<div v-show="props.modelValue.length !== 0" :class="$style.root">
 	<MkDraggable
 		:modelValue="props.modelValue"
 		:class="$style.files"
 		direction="horizontal"
-		withGaps
 		@update:modelValue="v => emit('update:modelValue', v)"
 	>
 		<template #default="{ item }">
 			<div
 				:class="$style.file"
+				:title="item.name"
 				role="button"
 				tabindex="0"
-				@click="showFileMenu(item, $event)"
-				@keydown.space.enter="showFileMenu(item, $event)"
+				@keydown.space.enter.prevent="showFileMenu(item, $event)"
 				@contextmenu.prevent.stop="showFileMenu(item, $event)"
 			>
 				<!-- pointer-eventsをnoneにしておかないとiOSなどでドラッグしたときに画像の方に判定が持ってかれる -->
@@ -27,6 +26,15 @@ SPDX-License-Identifier: AGPL-3.0-only
 					<i class="ti ti-eye-exclamation" style="margin: auto;"></i>
 				</div>
 			</div>
+		</template>
+		<template v-if="props.showAddButton && props.modelValue.length > 0" #footer>
+			<button
+				type="button"
+				:class="[$style.file, $style.addButton]"
+				@click="emit('add', $event)"
+			>
+				<i class="ti ti-plus"></i>
+			</button>
 		</template>
 	</MkDraggable>
 	<p
@@ -56,6 +64,7 @@ import { globalEvents } from '@/events.js';
 const props = defineProps<{
 	modelValue: Misskey.entities.DriveFile[];
 	detachMediaFn?: (id: string) => void;
+	showAddButton?: boolean;
 }>();
 
 const mock = inject(DI.mock, false);
@@ -65,6 +74,7 @@ const emit = defineEmits<{
 	(ev: 'detach', id: string): void;
 	(ev: 'changeSensitive', file: Misskey.entities.DriveFile, isSensitive: boolean): void;
 	(ev: 'changeName', file: Misskey.entities.DriveFile, newName: string): void;
+	(ev: 'add', event: MouseEvent): void;
 }>();
 
 let menuShowing = false;
@@ -207,32 +217,56 @@ function showFileMenu(file: Misskey.entities.DriveFile, ev: PointerEvent | Keybo
 		});
 	}
 
-	os.popupMenu(menuItems, ev.currentTarget ?? ev.target).then(() => menuShowing = false);
+	const openMenu = ev instanceof PointerEvent && ev.type === 'contextmenu'
+		? os.contextMenu(menuItems, ev)
+		: os.popupMenu(menuItems, ev.currentTarget ?? ev.target);
+
+	openMenu.then(() => menuShowing = false);
 	menuShowing = true;
 }
 </script>
 
 <style lang="scss" module>
 .root {
+	--tile-size: 104px;
+	--tile-gap: 8px;
 	padding: 8px 16px;
 	position: relative;
 }
 
 .files {
-	display: flex;
-	flex-wrap: wrap;
+	align-items: flex-start;
+	justify-content: flex-start;
+	margin: calc(var(--tile-gap) / -2);
+	max-width: min(100%, calc(var(--tile-size) * 3 + var(--tile-gap) * 3));
+
+	> * {
+		flex: 0 0 calc(100% / 3);
+		max-width: calc(100% / 3);
+		padding: calc(var(--tile-gap) / 2);
+		box-sizing: border-box;
+	}
 }
 
 .file {
 	position: relative;
-	width: 64px;
-	height: 64px;
-	border-radius: 4px;
+	display: block;
+	width: 100%;
+	aspect-ratio: 1;
+	padding: 0;
+	border: 0;
+	border-radius: 12px;
 	overflow: hidden;
-	cursor: move;
+	cursor: grab;
+	background: var(--MI_THEME-panel);
+
+	&:active {
+		cursor: grabbing;
+	}
 
 	&:focus-visible {
-		outline-offset: 4px;
+		outline: 2px solid var(--MI_THEME-focus);
+		outline-offset: 3px;
 	}
 }
 
@@ -246,13 +280,29 @@ function showFileMenu(file: Misskey.entities.DriveFile, ev: PointerEvent | Keybo
 .sensitive {
 	display: flex;
 	position: absolute;
-	width: 64px;
-	height: 64px;
+	inset: 0;
 	top: 0;
 	left: 0;
 	z-index: 2;
 	background: rgba(17, 17, 17, .7);
 	color: #fff;
+}
+
+.addButton {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	color: color(from var(--MI_THEME-fg) srgb r g b / 0.65);
+	background:
+		linear-gradient(var(--MI_THEME-panel), var(--MI_THEME-panel)) padding-box,
+		linear-gradient(135deg, color(from var(--MI_THEME-accent) srgb r g b / 0.4), color(from var(--MI_THEME-fg) srgb r g b / 0.15)) border-box;
+	border: 1px dashed transparent;
+	cursor: pointer;
+	font-size: 2rem;
+
+	&:hover {
+		color: var(--MI_THEME-accent);
+	}
 }
 
 .remain {

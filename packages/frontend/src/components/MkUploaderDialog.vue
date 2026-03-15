@@ -23,11 +23,14 @@ SPDX-License-Identifier: AGPL-3.0-only
 				{{ i18n.ts._uploader.tip }}
 			</MkTip>
 
-			<MkUploaderItems :items="items" @showMenu="(item, ev) => showPerItemMenu(item, ev)" @showMenuViaContextmenu="(item, ev) => showPerItemMenuViaContextmenu(item, ev)"/>
-
-			<div v-if="props.multiple">
-				<MkButton style="margin: auto;" :iconOnly="true" rounded @click="chooseFile($event)"><i class="ti ti-plus"></i></MkButton>
-			</div>
+			<MkUploaderItems
+				:items="items"
+				:showAddButton="props.multiple"
+				@update:items="updateItems"
+				@selectMore="chooseFile"
+				@showMenu="(item, ev) => showPerItemMenu(item, ev)"
+				@showMenuViaContextmenu="(item, ev) => showPerItemMenuViaContextmenu(item, ev)"
+			/>
 
 			<div>{{ i18n.tsx._uploader.maxFileSizeIsX({ x: $i.policies.maxFileSizeMb + 'MB' }) }}</div>
 
@@ -166,12 +169,16 @@ async function done() {
 	dialog.value?.close();
 }
 
-async function chooseFile(ev: PointerEvent) {
+async function chooseFile() {
 	const newFiles = await os.chooseFileFromPc({ multiple: true });
 	uploader.addFiles(newFiles);
 }
 
-function showPerItemMenu(item: UploaderItem, ev: PointerEvent) {
+function updateItems(value: UploaderItem[]) {
+	items.value = value;
+}
+
+function showPerItemMenu(item: UploaderItem, ev: PointerEvent | KeyboardEvent) {
 	const menu = uploader.getMenu(item);
 	os.popupMenu(menu, ev.currentTarget ?? ev.target);
 }

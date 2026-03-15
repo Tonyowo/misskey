@@ -4,61 +4,77 @@ SPDX-License-Identifier: AGPL-3.0-only
 -->
 
 <template>
-<div :class="$style.root" class="_gaps_s">
-	<div
-		v-for="item in props.items"
-		:key="item.id"
-		v-panel
-		:class="[$style.item, { [$style.itemWaiting]: item.preprocessing, [$style.itemCompleted]: item.uploaded, [$style.itemFailed]: item.uploadFailed }]"
-		:style="{
-			'--p': item.progress != null ? `${item.progress.value / item.progress.max * 100}%` : '0%',
-			'--pp': item.preprocessProgress != null ? `${item.preprocessProgress * 100}%` : '100%',
-		}"
-		@contextmenu.prevent.stop="onContextmenu(item, $event)"
+<div :class="$style.root">
+	<MkDraggable
+		:modelValue="props.items"
+		:class="$style.items"
+		direction="horizontal"
+		@update:modelValue="items => emit('update:items', items)"
 	>
-		<div :class="$style.itemInner">
-			<div :class="$style.itemActionWrapper">
-				<MkButton :iconOnly="true" rounded @click="emit('showMenu', item, $event)"><i class="ti ti-dots"></i></MkButton>
-			</div>
-			<div :class="$style.itemThumbnail" :style="{ backgroundImage: `url(${ item.thumbnail })` }" @click="onThumbnailClick(item, $event)"></div>
-			<div :class="$style.itemBody">
-				<div>
-					<i v-if="item.isSensitive" style="color: var(--MI_THEME-warn); margin-right: 0.5em;" class="ti ti-eye-exclamation"></i>
-					<MkCondensedLine :minScale="2 / 3">{{ item.name }}</MkCondensedLine>
+		<template #default="{ item }">
+			<div
+				v-panel
+				:class="[$style.item, { [$style.itemWaiting]: item.preprocessing, [$style.itemCompleted]: item.uploaded, [$style.itemFailed]: item.uploadFailed }]"
+				:style="{
+					'--p': item.progress != null ? `${item.progress.value / item.progress.max * 100}%` : '0%',
+					'--pp': item.preprocessProgress != null ? `${item.preprocessProgress * 100}%` : '100%',
+				}"
+				:title="item.name"
+				role="button"
+				tabindex="0"
+				@keydown.space.enter.prevent="emit('showMenu', item, $event)"
+				@contextmenu.prevent.stop="onContextmenu(item, $event)"
+			>
+				<div :class="$style.itemThumbnail" :style="item.thumbnail ? { backgroundImage: `url(${item.thumbnail})` } : undefined">
+					<div v-if="!item.thumbnail" :class="$style.itemFallback">
+						<i class="ti ti-file"></i>
+					</div>
+					<div v-if="item.isSensitive" :class="$style.itemSensitive">
+						<i class="ti ti-eye-exclamation"></i>
+					</div>
+					<div :class="$style.itemStatus">
+						<MkLoading v-if="item.preprocessing" inline em/>
+						<MkSystemIcon v-else-if="item.uploading" :class="$style.itemIcon" type="waiting"/>
+						<MkSystemIcon v-else-if="item.uploaded" :class="$style.itemIcon" type="success"/>
+						<MkSystemIcon v-else-if="item.uploadFailed" :class="$style.itemIcon" type="error"/>
+					</div>
+					<div :class="$style.itemName">
+						<MkCondensedLine :minScale="2 / 3">{{ item.name }}</MkCondensedLine>
+					</div>
 				</div>
-				<div :class="$style.itemInfo">
-					<span>{{ item.file.type }}</span>
-					<span v-if="item.compressedSize">({{ i18n.tsx._uploader.compressedToX({ x: bytes(item.compressedSize) }) }} = {{ i18n.tsx._uploader.savedXPercent({ x: Math.round((1 - item.compressedSize / item.file.size) * 100) }) }})</span>
-					<span v-else>{{ bytes(item.file.size) }}</span>
-					<span v-if="item.preprocessing">{{ i18n.ts.preprocessing }}<MkLoading inline em style="margin-left: 0.5em;"/></span>
-				</div>
-				<div>
-				</div>
 			</div>
-			<div :class="$style.itemIconWrapper">
-				<MkSystemIcon v-if="item.uploading" :class="$style.itemIcon" type="waiting"/>
-				<MkSystemIcon v-else-if="item.uploaded" :class="$style.itemIcon" type="success"/>
-				<MkSystemIcon v-else-if="item.uploadFailed" :class="$style.itemIcon" type="error"/>
-			</div>
-		</div>
-	</div>
+		</template>
+		<template v-if="props.showAddButton && props.items.length > 0" #footer>
+			<button
+				v-panel
+				type="button"
+				:class="[$style.item, $style.addButton]"
+				@click="emit('selectMore', $event)"
+			>
+				<i class="ti ti-plus"></i>
+			</button>
+		</template>
+	</MkDraggable>
 </div>
 </template>
 
 <script lang="ts" setup>
 import { isLink } from '@@/js/is-link.js';
 import type { UploaderItem } from '@/composables/use-uploader.js';
-import { i18n } from '@/i18n.js';
-import MkButton from '@/components/MkButton.vue';
-import bytes from '@/filters/bytes.js';
+import MkDraggable from '@/components/MkDraggable.vue';
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
 	items: UploaderItem[];
-}>();
+	showAddButton?: boolean;
+}>(), {
+	showAddButton: false,
+});
 
 const emit = defineEmits<{
-	(ev: 'showMenu', item: UploaderItem, event: PointerEvent): void;
+	(ev: 'update:items', items: UploaderItem[]): void;
+	(ev: 'showMenu', item: UploaderItem, event: PointerEvent | KeyboardEvent): void;
 	(ev: 'showMenuViaContextmenu', item: UploaderItem, event: PointerEvent): void;
+	(ev: 'selectMore', event: MouseEvent): void;
 }>();
 
 function onContextmenu(item: UploaderItem, ev: PointerEvent) {
@@ -67,10 +83,6 @@ function onContextmenu(item: UploaderItem, ev: PointerEvent) {
 
 	emit('showMenuViaContextmenu', item, ev);
 }
-
-function onThumbnailClick(item: UploaderItem, ev: PointerEvent) {
-	// TODO: preview when item is image
-}
 </script>
 
 <style lang="scss" module>
@@ -78,10 +90,42 @@ function onThumbnailClick(item: UploaderItem, ev: PointerEvent) {
 	position: relative;
 }
 
+.items {
+	--tile-size: 104px;
+	--tile-gap: 8px;
+	align-items: flex-start;
+	justify-content: flex-start;
+	margin: calc(var(--tile-gap) / -2);
+	max-width: min(100%, calc(var(--tile-size) * 3 + var(--tile-gap) * 3));
+
+	> * {
+		flex: 0 0 calc(100% / 3);
+		max-width: calc(100% / 3);
+		padding: calc(var(--tile-gap) / 2);
+		box-sizing: border-box;
+	}
+}
+
 .item {
 	position: relative;
-	border-radius: 10px;
+	display: block;
+	width: 100%;
+	aspect-ratio: 1;
+	padding: 0;
+	border: 0;
+	border-radius: 12px;
 	overflow: clip;
+	cursor: grab;
+	background: var(--MI_THEME-panel);
+
+	&:active {
+		cursor: grabbing;
+	}
+
+	&:focus-visible {
+		outline: 2px solid var(--MI_THEME-focus);
+		outline-offset: 3px;
+	}
 
 	&::before {
 		content: '';
@@ -117,16 +161,93 @@ function onThumbnailClick(item: UploaderItem, ev: PointerEvent) {
 			left: 100%;
 			width: var(--p);
 		}
-
-		.itemBody {
-			color: var(--MI_THEME-accent);
-		}
+		box-shadow: inset 0 0 0 1px color(from var(--MI_THEME-accent) srgb r g b / 0.6);
 	}
 
 	&.itemFailed {
-		.itemBody {
-			color: var(--MI_THEME-error);
-		}
+		box-shadow: inset 0 0 0 1px color(from var(--MI_THEME-error) srgb r g b / 0.7);
+	}
+}
+
+.itemThumbnail {
+	position: relative;
+	z-index: 1;
+	width: 100%;
+	height: 100%;
+	background-color: var(--MI_THEME-bg);
+	background-size: cover;
+	background-position: center;
+	background-repeat: no-repeat;
+	pointer-events: none;
+}
+
+.itemFallback {
+	position: absolute;
+	inset: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	font-size: 2rem;
+	color: color(from var(--MI_THEME-fg) srgb r g b / 0.5);
+	pointer-events: none;
+}
+
+.itemSensitive,
+.itemStatus {
+	position: absolute;
+	top: 8px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 28px;
+	height: 28px;
+	border-radius: 999px;
+	backdrop-filter: blur(10px);
+	background: color(from var(--MI_THEME-bg) srgb r g b / 0.7);
+	color: #fff;
+	pointer-events: none;
+}
+
+.itemSensitive {
+	left: 8px;
+	color: var(--MI_THEME-warn);
+}
+
+.itemStatus {
+	right: 8px;
+}
+
+.itemIcon {
+	width: 20px;
+}
+
+.itemName {
+	position: absolute;
+	right: 0;
+	bottom: 0;
+	left: 0;
+	padding: 18px 8px 8px;
+	font-size: 0.8rem;
+	line-height: 1.2;
+	color: #fff;
+	background: linear-gradient(to top, rgba(0, 0, 0, 0.72), rgba(0, 0, 0, 0));
+	pointer-events: none;
+}
+
+.addButton {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	color: color(from var(--MI_THEME-fg) srgb r g b / 0.65);
+	background:
+		linear-gradient(var(--MI_THEME-panel), var(--MI_THEME-panel)) padding-box,
+		linear-gradient(135deg, color(from var(--MI_THEME-accent) srgb r g b / 0.4), color(from var(--MI_THEME-fg) srgb r g b / 0.15)) border-box;
+	border: 1px dashed transparent;
+	cursor: pointer;
+	font-size: 2rem;
+
+	&:hover {
+		color: var(--MI_THEME-accent);
 	}
 }
 
@@ -135,69 +256,9 @@ function onThumbnailClick(item: UploaderItem, ev: PointerEvent) {
 	100% { background-position-x: -25px; }
 }
 
-.itemInner {
-	position: relative;
-	z-index: 1;
-	padding: 8px 16px;
-	display: flex;
-	align-items: center;
-	gap: 12px;
-}
-
-.itemThumbnail {
-	width: 70px;
-	height: 70px;
-	background-color: var(--MI_THEME-bg);
-	background-size: contain;
-	background-position: center;
-	background-repeat: no-repeat;
-	border-radius: 6px;
-}
-
-.itemBody {
-	flex: 1;
-	min-width: 0;
-}
-
-.itemInfo {
-	opacity: 0.7;
-	margin-top: 4px;
-	font-size: 90%;
-	display: flex;
-	gap: 8px;
-}
-
-.itemIcon {
-	width: 35px;
-}
-
-@container (max-width: 500px) {
-	.itemInner {
-		flex-direction: column;
-		gap: 8px;
-	}
-
-	.itemBody {
-		font-size: 90%;
-		text-align: center;
-		width: 100%;
-		min-width: 0;
-	}
-
-	.itemActionWrapper {
-		position: absolute;
-		top: 8px;
-		left: 8px;
-	}
-
-	.itemInfo {
-		justify-content: center;
-	}
-
-	.itemIconWrapper {
-		position: absolute;
-		top: 8px;
-		right: 8px;
+@media (max-width: 420px) {
+	.items {
+		max-width: 100%;
 	}
 }
 </style>

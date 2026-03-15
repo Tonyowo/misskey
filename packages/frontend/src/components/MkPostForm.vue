@@ -86,12 +86,26 @@ SPDX-License-Identifier: AGPL-3.0-only
 		<div v-if="maxTextLength - textLength < 100" :class="['_acrylic', $style.textCount, { [$style.textOver]: textLength > maxTextLength }]">{{ maxTextLength - textLength }}</div>
 	</div>
 	<input v-show="withHashtags" ref="hashtagsInputEl" v-model="hashtags" :class="$style.hashtags" :placeholder="i18n.ts.hashtags" list="hashtags">
-	<XPostFormAttaches v-model="files" @detach="detachFile" @changeSensitive="updateFileSensitive" @changeName="updateFileName"/>
+	<XPostFormAttaches
+		v-model="files"
+		:showAddButton="uploader.items.value.length === 0 && files.length > 0 && files.length < 16"
+		@add="chooseFileFromPc"
+		@detach="detachFile"
+		@changeSensitive="updateFileSensitive"
+		@changeName="updateFileName"
+	/>
 	<div v-if="uploader.items.value.length > 0" style="padding: 12px;">
 		<MkTip k="postFormUploader">
 			{{ i18n.ts._postForm.uploaderTip }}
 		</MkTip>
-		<MkUploaderItems :items="uploader.items.value" @showMenu="(item, ev) => showPerUploadItemMenu(item, ev)" @showMenuViaContextmenu="(item, ev) => showPerUploadItemMenuViaContextmenu(item, ev)"/>
+		<MkUploaderItems
+			:items="uploader.items.value"
+			:showAddButton="files.length + uploader.items.value.length < 16"
+			@update:items="updateQueuedFiles"
+			@selectMore="chooseFileFromPc"
+			@showMenu="(item, ev) => showPerUploadItemMenu(item, ev)"
+			@showMenuViaContextmenu="(item, ev) => showPerUploadItemMenuViaContextmenu(item, ev)"
+		/>
 	</div>
 	<MkPollEditor v-if="poll" v-model="poll" @destroyed="poll = null"/>
 	<MkNotePreview v-if="showPreview" :class="$style.preview" :text="text" :files="files" :poll="poll ?? undefined" :useCw="useCw" :cw="cw" :cwReplyRequired="effectiveCwReplyRequired" :user="postAccount ?? $i"/>
@@ -572,7 +586,7 @@ function focus() {
 	}
 }
 
-function chooseFileFromPc(ev: PointerEvent) {
+function chooseFileFromPc() {
 	if (props.mock) return;
 
 	os.chooseFileFromPc({ multiple: true }).then(files => {
@@ -581,7 +595,7 @@ function chooseFileFromPc(ev: PointerEvent) {
 	});
 }
 
-function chooseFileFromDrive(ev: PointerEvent) {
+function chooseFileFromDrive() {
 	if (props.mock) return;
 
 	chooseDriveFile({ multiple: true }).then(driveFiles => {
@@ -602,6 +616,10 @@ function updateFileSensitive(file: Misskey.entities.DriveFile, isSensitive: bool
 
 function updateFileName(file: Misskey.entities.DriveFile, name: Misskey.entities.DriveFile['name']) {
 	files.value[files.value.findIndex(x => x.id === file.id)].name = name;
+}
+
+function updateQueuedFiles(items: UploaderItem[]) {
+	uploader.items.value = items;
 }
 
 function setVisibility() {
@@ -1433,7 +1451,7 @@ async function openAccountMenu(ev: PointerEvent) {
 	}, { type: 'divider' }, ...items], (ev.currentTarget ?? ev.target ?? undefined) as HTMLElement | undefined);
 }
 
-function showPerUploadItemMenu(item: UploaderItem, ev: PointerEvent) {
+function showPerUploadItemMenu(item: UploaderItem, ev: PointerEvent | KeyboardEvent) {
 	const menu = uploader.getMenu(item);
 	os.popupMenu(menu, ev.currentTarget ?? ev.target);
 }
