@@ -10,6 +10,7 @@ import { bindThis } from '@/decorators.js';
 import { MetaService } from '@/core/MetaService.js';
 import { RoleService } from '@/core/RoleService.js';
 import { EmailService } from '@/core/EmailService.js';
+import { createInvitationOnlyChangedEmail, createModeratorInactivityWarningEmail } from '@/core/email/TrilingualEmailTemplates.js';
 import { MiUser, type UserProfilesRepository } from '@/models/_.js';
 import { DI } from '@/di-symbols.js';
 import { SystemWebhookService } from '@/core/SystemWebhookService.js';
@@ -36,64 +37,6 @@ export type ModeratorInactivityRemainingTime = {
 	asHours: number;
 	asDays: number;
 };
-
-function generateModeratorInactivityMail(remainingTime: ModeratorInactivityRemainingTime) {
-	const subject = 'Moderator Inactivity Warning / モデレーター不在の通知';
-
-	const timeVariant = remainingTime.asDays === 0 ? `${remainingTime.asHours} hours` : `${remainingTime.asDays} days`;
-	const timeVariantJa = remainingTime.asDays === 0 ? `${remainingTime.asHours} 時間` : `${remainingTime.asDays} 日間`;
-	const message = [
-		'To Moderators,',
-		'',
-		`A moderator has been inactive for a period of time. If there are ${timeVariant} of inactivity left, it will switch to invitation only.`,
-		'If you do not wish to move to invitation only, you must log into Misskey and update your last active date and time.',
-		'',
-		'---------------',
-		'',
-		'To モデレーター各位',
-		'',
-		`モデレーターが一定期間活動していないようです。あと${timeVariantJa}活動していない状態が続くと招待制に切り替わります。`,
-		'招待制に切り替わることを望まない場合は、Misskeyにログインして最終アクティブ日時を更新してください。',
-		'',
-	];
-
-	const html = message.join('<br>');
-	const text = message.join('\n');
-
-	return {
-		subject,
-		html,
-		text,
-	};
-}
-
-function generateInvitationOnlyChangedMail() {
-	const subject = 'Change to Invitation-Only / 招待制に変更されました';
-
-	const message = [
-		'To Moderators,',
-		'',
-		`Changed to invitation only because no moderator activity was detected for ${MODERATOR_INACTIVITY_LIMIT_DAYS} days.`,
-		'To cancel the invitation only, you need to access the control panel.',
-		'',
-		'---------------',
-		'',
-		'To モデレーター各位',
-		'',
-		`モデレーターの活動が${MODERATOR_INACTIVITY_LIMIT_DAYS}日間検出されなかったため、招待制に変更されました。`,
-		'招待制を解除するには、コントロールパネルにアクセスする必要があります。',
-		'',
-	];
-
-	const html = message.join('<br>');
-	const text = message.join('\n');
-
-	return {
-		subject,
-		html,
-		text,
-	};
-}
 
 @Injectable()
 export class CheckModeratorsActivityProcessorService {
@@ -221,7 +164,7 @@ export class CheckModeratorsActivityProcessorService {
 			.findBy({ userId: In(moderators.map(it => it.id)) })
 			.then(it => new Map(it.map(it => [it.userId, it])));
 
-		const mail = generateModeratorInactivityMail(remainingTime);
+		const mail = createModeratorInactivityWarningEmail(remainingTime);
 		for (const moderator of moderators) {
 			const profile = moderatorProfiles.get(moderator.id);
 			if (profile && profile.email && profile.emailVerified) {
@@ -246,7 +189,7 @@ export class CheckModeratorsActivityProcessorService {
 			.findBy({ userId: In(moderators.map(it => it.id)) })
 			.then(it => new Map(it.map(it => [it.userId, it])));
 
-		const mail = generateInvitationOnlyChangedMail();
+		const mail = createInvitationOnlyChangedEmail(MODERATOR_INACTIVITY_LIMIT_DAYS);
 		for (const moderator of moderators) {
 			this.announcementService.create({
 				title: mail.subject,

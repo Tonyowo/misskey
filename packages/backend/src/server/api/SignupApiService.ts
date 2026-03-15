@@ -14,6 +14,7 @@ import { IdService } from '@/core/IdService.js';
 import { SignupService } from '@/core/SignupService.js';
 import { UserEntityService } from '@/core/entities/UserEntityService.js';
 import { EmailService } from '@/core/EmailService.js';
+import { createSignupEmail } from '@/core/email/TrilingualEmailTemplates.js';
 import { MiLocalUser } from '@/models/User.js';
 import { FastifyReplyError } from '@/misc/fastify-reply-error.js';
 import { bindThis } from '@/decorators.js';
@@ -199,10 +200,9 @@ export class SignupApiService {
 			});
 
 			const link = `${this.config.url}/signup-complete/${code}`;
+			const email = createSignupEmail(link);
 
-			this.emailService.sendEmail(emailAddress!, 'Signup',
-				`To complete signup, please click this link:<br><a href="${link}">${link}</a>`,
-				`To complete signup, please click this link: ${link}`);
+			this.emailService.sendEmail(emailAddress!, email.subject, email.html, email.text);
 
 			if (ticket) {
 				await this.registrationTicketsRepository.update(ticket.id, {

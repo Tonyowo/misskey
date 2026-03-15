@@ -18,6 +18,7 @@ import type {
 	MiUser,
 } from '@/models/_.js';
 import { EmailService } from '@/core/EmailService.js';
+import { createAbuseReportEmail } from '@/core/email/TrilingualEmailTemplates.js';
 import { RoleService } from '@/core/RoleService.js';
 import { RecipientMethod } from '@/models/AbuseReportNotificationRecipient.js';
 import { ModerationLogService } from '@/core/ModerationLogService.js';
@@ -114,11 +115,14 @@ export class AbuseReportNotificationService implements OnApplicationShutdown {
 			await Promise.all(
 				abuseReports.map(it => {
 					// TODO: 送信処理はJobQueue化したい
+					const sanitizedCommentHtml = sanitizeHtml(it.comment);
+					const sanitizedCommentText = sanitizeHtml(it.comment, { allowedTags: [], allowedAttributes: {} });
+					const email = createAbuseReportEmail(sanitizedCommentHtml, sanitizedCommentText);
 					return this.emailService.sendEmail(
 						mailAddress,
-						'New Abuse Report',
-						sanitizeHtml(it.comment),
-						sanitizeHtml(it.comment),
+						email.subject,
+						email.html,
+						email.text,
 					);
 				}),
 			);

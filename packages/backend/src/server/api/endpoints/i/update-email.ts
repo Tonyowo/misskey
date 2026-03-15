@@ -15,6 +15,7 @@ import { DI } from '@/di-symbols.js';
 import { GlobalEventService } from '@/core/GlobalEventService.js';
 import { L_CHARS, secureRndstr } from '@/misc/secure-rndstr.js';
 import { UserAuthService } from '@/core/UserAuthService.js';
+import { createEmailVerificationEmail } from '@/core/email/TrilingualEmailTemplates.js';
 import { ApiError } from '../../error.js';
 
 export const meta = {
@@ -132,10 +133,9 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 				});
 
 				const link = `${this.config.url}/verify-email/${code}`;
+				const email = createEmailVerificationEmail(link);
 
-				this.emailService.sendEmail(ps.email, 'Email verification',
-					`To verify email, please click this link:<br><a href="${link}">${link}</a>`,
-					`To verify email, please click this link: ${link}`);
+				this.emailService.sendEmail(ps.email, email.subject, email.html, email.text);
 			}
 
 			return iObj;

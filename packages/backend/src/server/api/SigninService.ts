@@ -13,6 +13,7 @@ import { GlobalEventService } from '@/core/GlobalEventService.js';
 import { SigninEntityService } from '@/core/entities/SigninEntityService.js';
 import { bindThis } from '@/decorators.js';
 import { EmailService } from '@/core/EmailService.js';
+import { createNewLoginEmail } from '@/core/email/TrilingualEmailTemplates.js';
 import { NotificationService } from '@/core/NotificationService.js';
 import type { FastifyRequest, FastifyReply } from 'fastify';
 
@@ -50,9 +51,8 @@ export class SigninService {
 
 			const profile = await this.userProfilesRepository.findOneByOrFail({ userId: user.id });
 			if (profile.email && profile.emailVerified) {
-				this.emailService.sendEmail(profile.email, 'New login / ログインがありました',
-					'There is a new login. If you do not recognize this login, update the security status of your account, including changing your password. / 新しいログインがありました。このログインに心当たりがない場合は、パスワードを変更するなど、アカウントのセキュリティ状態を更新してください。',
-					'There is a new login. If you do not recognize this login, update the security status of your account, including changing your password. / 新しいログインがありました。このログインに心当たりがない場合は、パスワードを変更するなど、アカウントのセキュリティ状態を更新してください。');
+				const email = createNewLoginEmail();
+				this.emailService.sendEmail(profile.email, email.subject, email.html, email.text);
 			}
 		});
 
@@ -64,4 +64,3 @@ export class SigninService {
 		} satisfies Misskey.entities.SigninFlowResponse;
 	}
 }
-
