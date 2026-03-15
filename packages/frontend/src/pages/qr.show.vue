@@ -19,8 +19,6 @@ SPDX-License-Identifier: AGPL-3.0-only
 				<div><MkCondensedLine :minScale="2 / 3">{{ acct }}</MkCondensedLine></div>
 			</div>
 		</div>
-		<img v-if="deviceMotionPermissionNeeded" v-flip :class="$style.logo" :src="misskeysvg" alt="Misskey Logo" @click="requestDeviceMotion"/>
-		<img v-else v-flip :class="$style.logo" :src="misskeysvg" alt="Misskey Logo"/>
 	</div>
 </div>
 </template>
@@ -34,7 +32,6 @@ import type { Directive } from 'vue';
 import { instance } from '@/instance.js';
 import { ensureSignin } from '@/i.js';
 import { userPage, userName } from '@/filters/user.js';
-import misskeysvg from '/client-assets/misskey.svg';
 import { getStaticImageUrl } from '@/utility/media-proxy.js';
 import { i18n } from '@/i18n.js';
 
@@ -100,8 +97,6 @@ onMounted(() => {
 
 //#region flip
 const THRESHOLD = -3;
-// @ts-expect-error TS(2339)
-const deviceMotionPermissionNeeded = window.DeviceMotionEvent && typeof window.DeviceMotionEvent.requestPermission === 'function';
 const flipEls: Set<Element> = new Set();
 const flip = ref(false);
 
@@ -115,18 +110,6 @@ watch(flip, (newState) => {
 		el.classList.toggle('_qrShowFlipFliped', newState);
 	});
 });
-
-function requestDeviceMotion() {
-	if (!deviceMotionPermissionNeeded) return;
-	// @ts-expect-error TS(2339)
-	window.DeviceMotionEvent.requestPermission()
-		.then((response: string) => {
-			if (response === 'granted') {
-				window.addEventListener('deviceorientation', handleOrientationChange);
-			}
-		})
-		.catch(console.error);
-}
 
 onMounted(() => {
 	window.addEventListener('deviceorientation', handleOrientationChange);
@@ -210,12 +193,6 @@ $avatarSize: 58px;
 	font-weight: bold;
 	font-size: 110%;
 }
-
-.logo {
-	width: 100px;
-	margin: $s3 auto 0;
-	filter: drop-shadow(0 0 6px #0007);
-}
 </style>
 
 <style lang="scss">
@@ -232,4 +209,3 @@ $avatarSize: 58px;
   rotate: x 180deg;
 }
 </style>
-
