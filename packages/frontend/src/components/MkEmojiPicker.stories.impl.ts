@@ -36,11 +36,8 @@ export const Default = {
 	},
 	async play({ canvasElement }) {
 		const canvas = within(canvasElement);
-		const unicodeTab = canvas.queryByRole('button', { name: new RegExp(`^${i18n.ts.emoji}$`, 'i') });
-		if (unicodeTab) {
-			await waitFor(() => userEvent.click(unicodeTab));
-		}
 		const faceCategory = canvas.getByRole('button', { name: /face/i });
+		faceCategory.scrollIntoView();
 		await waitFor(() => userEvent.click(faceCategory));
 		const grinning = canvasElement.querySelector('[data-emoji="😀"]');
 		await expect(grinning).toBeInTheDocument();

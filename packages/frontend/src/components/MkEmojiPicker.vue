@@ -46,26 +46,35 @@ SPDX-License-Identifier: AGPL-3.0-only
 	</div>
 
 	<div class="bottomBar">
-		<button
-			v-for="section in bottomSections"
-			:key="section.key"
-			class="_button bottomTab"
-			:class="{ active: section.key === activeSectionKey }"
-			:title="section.title"
-			:aria-label="section.title"
-			@click="selectSection(section.key)"
-		>
-			<i v-if="section.iconClass" :class="section.iconClass"></i>
-			<MkCustomEmoji v-else-if="section.icon?.startsWith(':')" class="emoji" :name="section.icon" :normal="true" :fallbackToImage="true"/>
-			<MkEmoji v-else-if="section.icon" class="emoji" :emoji="section.icon" :normal="true"/>
-			<span v-else class="categoryFallback">{{ section.title.slice(0, 1).toUpperCase() }}</span>
+		<button v-if="showPrevArrow" class="_button navArrow" title="Previous" aria-label="Previous" @click="scrollRail('prev')">
+			<i class="ti ti-chevron-left"></i>
+		</button>
+		<div ref="bottomBarTrack" class="bottomBarTrack" @scroll.passive="updateRailButtons">
+			<button
+				v-for="section in bottomSections"
+				:key="section.key"
+				:data-section-key="section.key"
+				class="_button bottomTab"
+				:class="{ active: section.key === activeSectionKey }"
+				:title="section.title"
+				:aria-label="section.title"
+				@click="selectSection(section.key)"
+			>
+				<i v-if="section.iconClass" :class="section.iconClass"></i>
+				<MkCustomEmoji v-else-if="section.icon?.startsWith(':')" class="emoji" :name="section.icon" :normal="true" :fallbackToImage="true"/>
+				<MkEmoji v-else-if="section.icon" class="emoji" :emoji="section.icon" :normal="true"/>
+				<span v-else class="categoryFallback">{{ section.title.slice(0, 1).toUpperCase() }}</span>
+			</button>
+		</div>
+		<button v-if="showNextArrow" class="_button navArrow" :title="i18n.ts.next" :aria-label="i18n.ts.next" @click="scrollRail('next')">
+			<i class="ti ti-chevron-right"></i>
 		</button>
 	</div>
 </div>
 </template>
 
 <script lang="ts" setup>
-import { ref, useTemplateRef, computed, watch } from 'vue';
+import { ref, useTemplateRef, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue';
 import * as Misskey from 'misskey-js';
 import {
 	emojiCharByCategory,
@@ -94,8 +103,6 @@ type PickerSection = {
 };
 
 const OTHER_CUSTOM_CATEGORY_KEY = '__other__';
-const ALL_CUSTOM_SECTION_KEY = '__all_custom__';
-const PINNED_SECTION_KEY = '__pinned__';
 
 const props = withDefaults(defineProps<{
 	showPinned?: boolean;
@@ -115,6 +122,7 @@ const emit = defineEmits<{
 }>();
 
 const emojisEl = useTemplateRef('emojisEl');
+const bottomBarTrack = useTemplateRef('bottomBarTrack');
 
 const {
 	emojiPickerScale,
@@ -129,39 +137,9 @@ const recentlyUsedEmojisDef = computed(() => {
 });
 
 const pinned = computed(() => props.pinnedEmojis ?? []);
-const pinnedEmojisDef = computed(() => {
-	return pinned.value.map(getDef);
-});
-
 const size = computed(() => emojiPickerScale.value);
 const width = computed(() => emojiPickerWidth.value);
 const height = computed(() => emojiPickerHeight.value);
-
-const allCustomSection = computed<PickerSection | null>(() => {
-	if (customEmojis.value.length === 0) return null;
-
-	return {
-		key: ALL_CUSTOM_SECTION_KEY,
-		title: `${i18n.ts.all}${i18n.ts.customEmojis}`,
-		emojis: customEmojis.value.map(emoji => `:${emoji.name}:`),
-		disabledEmojis: customEmojis.value.filter(emoji => !canReact(emoji)).map(emoji => `:${emoji.name}:`),
-		icon: '🙂',
-		iconClass: null,
-	};
-});
-
-const pinnedSection = computed<PickerSection | null>(() => {
-	if (!props.showPinned || pinnedEmojisDef.value.length === 0) return null;
-
-	return {
-		key: PINNED_SECTION_KEY,
-		title: i18n.ts.pinned,
-		emojis: pinnedEmojisDef.value.map(getKey),
-		disabledEmojis: pinnedEmojisDef.value.filter(emoji => !canReact(emoji)).map(getKey),
-		icon: null,
-		iconClass: 'ti ti-heart',
-	};
-});
 
 const customSections = computed<PickerSection[]>(() => {
 	return customEmojiCategories.value
@@ -198,14 +176,14 @@ const unicodeSections = computed<PickerSection[]>(() => {
 
 const bottomSections = computed<PickerSection[]>(() => {
 	return [
-		...(allCustomSection.value ? [allCustomSection.value] : []),
-		...(pinnedSection.value ? [pinnedSection.value] : []),
 		...customSections.value,
 		...unicodeSections.value,
 	];
 });
 
-const activeSectionKey = ref<string>(ALL_CUSTOM_SECTION_KEY);
+const activeSectionKey = ref<string>('');
+const showPrevArrow = ref(false);
+const showNextArrow = ref(false);
 
 const activeSection = computed(() => {
 	return bottomSections.value.find(section => section.key === activeSectionKey.value) ?? bottomSections.value[0] ?? null;
@@ -220,7 +198,18 @@ watch(bottomSections, (sections) => {
 	if (!sections.some(section => section.key === activeSectionKey.value)) {
 		activeSectionKey.value = sections[0].key;
 	}
+	nextTick(() => {
+		scrollActiveSectionIntoView(false);
+		updateRailButtons();
+	});
 }, { immediate: true });
+
+watch(activeSectionKey, () => {
+	nextTick(() => {
+		scrollActiveSectionIntoView();
+		updateRailButtons();
+	});
+});
 
 function canReact(emoji: Misskey.entities.EmojiSimple | UnicodeEmojiDef | string): boolean {
 	return !props.targetNote || checkReactionPermissions($i!, props.targetNote, emoji);
@@ -247,6 +236,43 @@ function humanizeUnicodeCategory(category: string): string {
 function selectSection(key: string) {
 	activeSectionKey.value = key;
 	if (emojisEl.value) emojisEl.value.scrollTop = 0;
+}
+
+function updateRailButtons() {
+	const rail = bottomBarTrack.value;
+	if (rail == null) {
+		showPrevArrow.value = false;
+		showNextArrow.value = false;
+		return;
+	}
+
+	showPrevArrow.value = rail.scrollLeft > 4;
+	showNextArrow.value = rail.scrollLeft + rail.clientWidth < rail.scrollWidth - 4;
+}
+
+function scrollRail(direction: 'prev' | 'next') {
+	const rail = bottomBarTrack.value;
+	if (rail == null) return;
+
+	const amount = Math.max(rail.clientWidth * 0.75, 120);
+	rail.scrollBy({
+		left: direction === 'next' ? amount : -amount,
+		behavior: 'smooth',
+	});
+}
+
+function scrollActiveSectionIntoView(smooth = true) {
+	const rail = bottomBarTrack.value;
+	if (rail == null) return;
+
+	const button = Array.from(rail.querySelectorAll<HTMLElement>('[data-section-key]'))
+		.find(el => el.dataset.sectionKey === activeSectionKey.value);
+
+	button?.scrollIntoView({
+		behavior: smooth ? 'smooth' : 'auto',
+		block: 'nearest',
+		inline: 'center',
+	});
 }
 
 function focus() {
@@ -303,6 +329,15 @@ function chosen(emoji: string | Misskey.entities.EmojiSimple | UnicodeEmojiDef, 
 defineExpose({
 	focus,
 	reset,
+});
+
+onMounted(() => {
+	updateRailButtons();
+	window.addEventListener('resize', updateRailButtons);
+});
+
+onBeforeUnmount(() => {
+	window.removeEventListener('resize', updateRailButtons);
 });
 </script>
 
@@ -374,17 +409,13 @@ defineExpose({
 
 	> .bottomBar {
 		display: flex;
+		align-items: center;
 		gap: 8px;
 		padding: 8px;
-		overflow-x: auto;
-		scrollbar-width: none;
 		border-top: solid 0.5px var(--MI_THEME-divider);
 
-		&::-webkit-scrollbar {
-			display: none;
-		}
-
-		> .bottomTab {
+		> .navArrow,
+		> .bottomBarTrack > .bottomTab {
 			flex: 0 0 auto;
 			display: inline-flex;
 			align-items: center;
@@ -419,6 +450,19 @@ defineExpose({
 				pointer-events: none;
 				width: 100%;
 				object-fit: contain;
+			}
+		}
+
+		> .bottomBarTrack {
+			flex: 1 1 auto;
+			min-width: 0;
+			display: flex;
+			gap: 8px;
+			overflow-x: auto;
+			scrollbar-width: none;
+
+			&::-webkit-scrollbar {
+				display: none;
 			}
 		}
 	}
