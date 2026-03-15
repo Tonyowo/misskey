@@ -30,11 +30,40 @@ SPDX-License-Identifier: AGPL-3.0-only
 			</div>
 		</div>
 
-		<!-- username入力 -->
-		<form class="_gaps_s" @submit.prevent="emit('usernameSubmitted', username)">
-			<MkInput v-model="username" :placeholder="i18n.ts.username" type="text" pattern="^[a-zA-Z0-9_]+$" :spellcheck="false" autocomplete="username webauthn" autofocus required data-cy-signin-username>
-				<template #prefix>@</template>
-				<template #suffix>@{{ host }}</template>
+		<div :class="$style.loginMethodSwitch" role="tablist" :aria-label="i18n.ts.login">
+			<button
+				type="button"
+				:class="[$style.loginMethodButton, inputMode === 'username' ? $style.loginMethodButtonActive : null]"
+				:aria-selected="inputMode === 'username'"
+				@click="switchInputMode('username')"
+			>
+				{{ i18n.ts.username }}
+			</button>
+			<button
+				type="button"
+				:class="[$style.loginMethodButton, inputMode === 'email' ? $style.loginMethodButtonActive : null]"
+				:aria-selected="inputMode === 'email'"
+				@click="switchInputMode('email')"
+			>
+				{{ i18n.ts.emailAddress }}
+			</button>
+		</div>
+
+		<!-- username / email入力 -->
+		<form class="_gaps_s" @submit.prevent="onSubmit">
+			<MkInput
+				v-model="identifier"
+				:placeholder="inputMode === 'email' ? i18n.ts.emailAddress : i18n.ts.username"
+				:type="inputMode === 'email' ? 'email' : 'text'"
+				:pattern="inputMode === 'email' ? undefined : '^[a-zA-Z0-9_]+$'"
+				:spellcheck="false"
+				:autocomplete="inputMode === 'email' ? 'email' : 'username webauthn'"
+				autofocus
+				required
+				data-cy-signin-username
+			>
+				<template v-if="inputMode === 'username'" #prefix>@</template>
+				<template v-if="inputMode === 'username'" #suffix>@{{ host }}</template>
 			</MkInput>
 			<MkButton type="submit" large primary rounded style="margin: 0 auto;" data-cy-signin-page-input-continue>{{ i18n.ts.continue }} <i class="ti ti-arrow-right"></i></MkButton>
 		</form>
@@ -77,13 +106,29 @@ const props = withDefaults(defineProps<{
 });
 
 const emit = defineEmits<{
-	(ev: 'usernameSubmitted', v: string): void;
+	(ev: 'identifierSubmitted', v: string): void;
 	(ev: 'passkeyClick', v: PointerEvent): void;
 }>();
 
 const host = toUnicode(configHost);
 
-const username = ref(props.initialUsername ?? '');
+type SigninInputMode = 'username' | 'email';
+
+const inputMode = ref<SigninInputMode>(props.initialUsername?.includes('@') ? 'email' : 'username');
+const identifier = ref(props.initialUsername ?? '');
+
+function switchInputMode(mode: SigninInputMode): void {
+	inputMode.value = mode;
+	if (mode === 'username' && identifier.value.includes('@')) {
+		identifier.value = '';
+	}
+}
+
+function onSubmit(): void {
+	const value = identifier.value.trim();
+	if (value === '') return;
+	emit('identifierSubmitted', value);
+}
 
 //#region Open on remote
 function openRemote(options: OpenOnRemoteOptions, targetHost?: string): void {
@@ -183,6 +228,40 @@ async function specifyHostAndOpenRemote(options: OpenOnRemoteOptions): Promise<v
 	&:hover {
 		text-decoration: underline;
 	}
+}
+
+.loginMethodSwitch {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 6px;
+	padding: 6px;
+	border-radius: 999px;
+	background: color-mix(in srgb, var(--MI_THEME-fg), transparent 92%);
+}
+
+.loginMethodButton {
+	border: 0;
+	border-radius: 999px;
+	padding: 10px 14px;
+	background: transparent;
+	color: var(--MI_THEME-fg);
+	font-weight: 700;
+	cursor: pointer;
+	transition: background-color .2s ease, color .2s ease, transform .2s ease;
+
+	&:hover {
+		background: color-mix(in srgb, var(--MI_THEME-fg), transparent 92%);
+	}
+
+	&:focus-visible {
+		outline: 2px solid var(--MI_THEME-accent);
+		outline-offset: 2px;
+	}
+}
+
+.loginMethodButtonActive {
+	background: var(--MI_THEME-accent);
+	color: var(--MI_THEME-fgOnAccent);
 }
 
 .orHr {

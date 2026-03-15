@@ -66,6 +66,30 @@ export class SigninApiService {
 	}
 
 	@bindThis
+	private async resolveSigninUser(identifier: string): Promise<MiLocalUser | null> {
+		if (identifier.includes('@')) {
+			const profile = await this.userProfilesRepository.findOne({
+				where: {
+					email: identifier,
+					emailVerified: true,
+				},
+				relations: ['user'],
+			});
+
+			if (profile?.user?.host == null) {
+				return profile.user as MiLocalUser;
+			}
+
+			return null;
+		}
+
+		return await this.usersRepository.findOneBy({
+			usernameLower: identifier.toLowerCase(),
+			host: IsNull(),
+		}) as MiLocalUser | null;
+	}
+
+	@bindThis
 	public async signin(
 		request: FastifyRequest<{
 			Body: {
@@ -86,7 +110,7 @@ export class SigninApiService {
 		reply.header('Access-Control-Allow-Credentials', 'true');
 
 		const body = request.body;
-		const username = body['username'];
+		const signinId = body['username'];
 		const password = body['password'];
 		const token = body['token'];
 
@@ -113,7 +137,13 @@ export class SigninApiService {
 			}
 		}
 
-		if (typeof username !== 'string') {
+		if (typeof signinId !== 'string') {
+			reply.code(400);
+			return;
+		}
+
+		const normalizedSigninId = signinId.trim();
+		if (normalizedSigninId === '') {
 			reply.code(400);
 			return;
 		}
@@ -124,10 +154,7 @@ export class SigninApiService {
 		}
 
 		// Fetch user
-		const user = await this.usersRepository.findOneBy({
-			usernameLower: username.toLowerCase(),
-			host: IsNull(),
-		}) as MiLocalUser;
+		const user = await this.resolveSigninUser(normalizedSigninId);
 
 		if (user == null) {
 			return error(404, {

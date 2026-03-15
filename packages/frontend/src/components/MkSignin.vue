@@ -22,7 +22,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 			:openOnRemote="openOnRemote"
 			:initialUsername="initialUsername"
 
-			@usernameSubmitted="onUsernameSubmitted"
+			@identifierSubmitted="onIdentifierSubmitted"
 			@passkeyClick="onPasskeyLogin"
 		/>
 
@@ -32,7 +32,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 			key="password"
 			ref="passwordPageEl"
 
-			:user="userInfo!"
+			:user="userInfo"
+			:identifier="signinId"
 			:needCaptcha="needCaptcha"
 
 			@passwordSubmitted="onPasswordSubmitted"
@@ -105,6 +106,7 @@ const passwordPageEl = useTemplateRef('passwordPageEl');
 const needCaptcha = ref(false);
 
 const userInfo = ref<null | Misskey.entities.UserDetailed>(null);
+const signinId = ref(props.initialUsername ?? '');
 const password = ref('');
 
 //#region Passkey Passwordless
@@ -146,9 +148,9 @@ function onPasskeyDone(credential: AuthenticationPublicKeyCredential): void {
 			emit('login', res.signinResponse);
 			onLoginSucceeded(res.signinResponse);
 		}).catch(onSigninApiError);
-	} else if (userInfo.value != null) {
+	} else if (signinId.value !== '') {
 		tryLogin({
-			username: userInfo.value.username,
+			username: signinId.value,
 			password: password.value,
 			// @ts-expect-error TODO: misskey-js由来の型（@simplewebauthn/types）とフロントエンド由来の型（@github/webauthn-json）が合わない
 			credential: credential.toJSON(),
@@ -161,15 +163,18 @@ function onUseTotp(): void {
 }
 //#endregion
 
-async function onUsernameSubmitted(username: string) {
+async function onIdentifierSubmitted(identifier: string) {
 	waiting.value = true;
+	signinId.value = identifier;
 
-	userInfo.value = await misskeyApi('users/show', {
-		username,
-	}).catch(() => null);
+	userInfo.value = identifier.includes('@')
+		? null
+		: await misskeyApi('users/show', {
+			username: identifier,
+		}).catch(() => null);
 
 	await tryLogin({
-		username,
+		username: identifier,
 	});
 }
 
@@ -177,7 +182,7 @@ async function onPasswordSubmitted(pw: PwResponse) {
 	waiting.value = true;
 	password.value = pw.password;
 
-	if (userInfo.value == null) {
+	if (signinId.value === '') {
 		await os.alert({
 			type: 'error',
 			title: i18n.ts.noSuchUser,
@@ -187,7 +192,7 @@ async function onPasswordSubmitted(pw: PwResponse) {
 		return;
 	} else {
 		await tryLogin({
-			username: userInfo.value.username,
+			username: signinId.value,
 			password: pw.password,
 			'hcaptcha-response': pw.captcha.hCaptchaResponse,
 			'm-captcha-response': pw.captcha.mCaptchaResponse,
@@ -201,7 +206,7 @@ async function onPasswordSubmitted(pw: PwResponse) {
 async function onTotpSubmitted(token: string) {
 	waiting.value = true;
 
-	if (userInfo.value == null) {
+	if (signinId.value === '') {
 		await os.alert({
 			type: 'error',
 			title: i18n.ts.noSuchUser,
@@ -211,7 +216,7 @@ async function onTotpSubmitted(token: string) {
 		return;
 	} else {
 		await tryLogin({
-			username: userInfo.value.username,
+			username: signinId.value,
 			password: password.value,
 			token,
 		});
@@ -220,7 +225,7 @@ async function onTotpSubmitted(token: string) {
 
 async function tryLogin(req: Partial<Misskey.entities.SigninFlowRequest>): Promise<Misskey.entities.SigninFlowResponse> {
 	const _req = {
-		username: req.username ?? userInfo.value?.username,
+		username: req.username ?? signinId.value,
 		...req,
 	};
 
@@ -383,6 +388,7 @@ function onSigninApiError(err?: any): void {
 }
 
 onBeforeUnmount(() => {
+	signinId.value = '';
 	password.value = '';
 	needCaptcha.value = false;
 	userInfo.value = null;
