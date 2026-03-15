@@ -20,6 +20,11 @@ import { HttpRequestService } from '@/core/HttpRequestService.js';
 @Injectable()
 export class EmailService {
 	private logger: Logger;
+	private embeddedLogoCache: {
+		url: string;
+		content: Buffer;
+		contentType: string;
+	} | null = null;
 
 	constructor(
 		@Inject(DI.config)
@@ -43,7 +48,9 @@ export class EmailService {
 		if (!this.meta.enableEmail) return;
 
 		const iconUrl = `${this.config.url}/static-assets/mi-white.png`;
+		const headerLogoUrl = this.meta.logoImageUrl ?? this.meta.iconUrl ?? iconUrl;
 		const emailSettingUrl = `${this.config.url}/settings/email`;
+		const { src: headerLogoSrc, attachments } = await this.resolveHeaderLogo(headerLogoUrl);
 
 		const enableAuth = this.meta.smtpUser != null && this.meta.smtpUser !== '';
 
@@ -128,7 +135,7 @@ export class EmailService {
 	<body>
 		<main>
 			<header>
-				<img src="${ this.meta.logoImageUrl ?? this.meta.iconUrl ?? iconUrl }"/>
+				<img src="${ headerLogoSrc }" alt="${ this.meta.name ?? this.config.host }"/>
 			</header>
 			<article>
 				<h1>${ subject }</h1>
@@ -157,12 +164,58 @@ export class EmailService {
 				subject: subject,
 				text: text,
 				html: inlinedHtml,
+				attachments,
 			});
 
 			this.logger.info(`Message sent: ${info.messageId}`);
 		} catch (err) {
 			this.logger.error(err as Error);
 			throw err;
+		}
+	}
+
+	@bindThis
+	private async resolveHeaderLogo(logoUrl: string): Promise<{
+		src: string;
+		attachments: nodemailer.SendMailOptions['attachments'];
+	}> {
+		try {
+			if (this.embeddedLogoCache?.url !== logoUrl) {
+				const res = await this.httpRequestService.send(logoUrl, {
+					method: 'GET',
+					timeout: 10000,
+					size: 1024 * 1024,
+					isLocalAddressAllowed: true,
+				});
+
+				this.embeddedLogoCache = {
+					url: logoUrl,
+					content: Buffer.from(await res.arrayBuffer()),
+					contentType: res.headers.get('content-type') ?? 'image/png',
+				};
+			}
+
+			const cache = this.embeddedLogoCache;
+			if (cache == null) {
+				throw new Error('embedded logo cache is empty');
+			}
+
+			return {
+				src: 'cid:instance-logo',
+				attachments: [{
+					filename: 'instance-logo',
+					content: cache.content,
+					contentType: cache.contentType,
+					cid: 'instance-logo',
+					contentDisposition: 'inline',
+				}],
+			};
+		} catch (err) {
+			this.logger.warn(`Failed to embed email logo: ${(err as Error).message}`);
+			return {
+				src: logoUrl,
+				attachments: [],
+			};
 		}
 	}
 
