@@ -46,27 +46,35 @@ SPDX-License-Identifier: AGPL-3.0-only
 	</div>
 
 	<div class="bottomBar">
-		<button v-if="showPrevArrow" class="_button navArrow" title="Previous" aria-label="Previous" @click="scrollRail('prev')">
+		<button v-if="showPrevArrow" class="_button navArrow" title="Previous" aria-label="Previous" @click="goToPreviousPage">
 			<i class="ti ti-chevron-left"></i>
 		</button>
-		<div ref="bottomBarTrack" class="bottomBarTrack" @scroll.passive="updateRailButtons">
-			<button
-				v-for="section in bottomSections"
-				:key="section.key"
-				:data-section-key="section.key"
-				class="_button bottomTab"
-				:class="{ active: section.key === activeSectionKey }"
-				:title="section.title"
-				:aria-label="section.title"
-				@click="selectSection(section.key)"
-			>
-				<i v-if="section.iconClass" :class="section.iconClass"></i>
-				<MkCustomEmoji v-else-if="section.icon?.startsWith(':')" class="emoji" :name="section.icon" :normal="true" :fallbackToImage="true"/>
-				<MkEmoji v-else-if="section.icon" class="emoji" :emoji="section.icon" :normal="true"/>
-				<span v-else class="categoryFallback">{{ section.title.slice(0, 1).toUpperCase() }}</span>
-			</button>
+		<div class="bottomBarViewport">
+			<Transition :name="pageTransitionName" mode="out-in">
+				<div
+					:key="pageKey"
+					class="bottomBarPage"
+					:style="bottomBarPageStyle"
+				>
+					<button
+						v-for="section in visibleBottomSections"
+						:key="section.key"
+						:data-section-key="section.key"
+						class="_button bottomTab"
+						:class="{ active: section.key === activeSectionKey }"
+						:title="section.title"
+						:aria-label="section.title"
+						@click="selectSection(section.key)"
+					>
+						<i v-if="section.iconClass" :class="section.iconClass"></i>
+						<MkCustomEmoji v-else-if="section.icon?.startsWith(':')" class="emoji" :name="section.icon" :normal="true" :fallbackToImage="true"/>
+						<MkEmoji v-else-if="section.icon" class="emoji" :emoji="section.icon" :normal="true"/>
+						<span v-else class="categoryFallback">{{ section.title.slice(0, 1).toUpperCase() }}</span>
+					</button>
+				</div>
+			</Transition>
 		</div>
-		<button v-if="showNextArrow" class="_button navArrow" :title="i18n.ts.next" :aria-label="i18n.ts.next" @click="scrollRail('next')">
+		<button v-if="showNextArrow" class="_button navArrow" :title="i18n.ts.next" :aria-label="i18n.ts.next" @click="goToNextPage">
 			<i class="ti ti-chevron-right"></i>
 		</button>
 	</div>
@@ -74,7 +82,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script lang="ts" setup>
-import { ref, useTemplateRef, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue';
+import { ref, useTemplateRef, computed, watch } from 'vue';
 import * as Misskey from 'misskey-js';
 import {
 	emojiCharByCategory,
@@ -122,8 +130,6 @@ const emit = defineEmits<{
 }>();
 
 const emojisEl = useTemplateRef('emojisEl');
-const bottomBarTrack = useTemplateRef('bottomBarTrack');
-
 const {
 	emojiPickerScale,
 	emojiPickerWidth,
@@ -181,35 +187,50 @@ const bottomSections = computed<PickerSection[]>(() => {
 	];
 });
 
+const totalNavSlots = computed(() => width.value + 4);
 const activeSectionKey = ref<string>('');
-const showPrevArrow = ref(false);
-const showNextArrow = ref(false);
+const currentPageIndex = ref(0);
+const pageTransitionDirection = ref<'forward' | 'backward'>('forward');
 
 const activeSection = computed(() => {
 	return bottomSections.value.find(section => section.key === activeSectionKey.value) ?? bottomSections.value[0] ?? null;
 });
 
-watch(bottomSections, (sections) => {
+const sectionPages = computed(() => {
+	return paginateSections(bottomSections.value, totalNavSlots.value);
+});
+
+const visibleBottomSections = computed(() => {
+	return sectionPages.value[currentPageIndex.value] ?? [];
+});
+
+const showPrevArrow = computed(() => currentPageIndex.value > 0);
+const showNextArrow = computed(() => currentPageIndex.value < sectionPages.value.length - 1);
+const pageTransitionName = computed(() => pageTransitionDirection.value === 'forward' ? 'tabPageForward' : 'tabPageBackward');
+const bottomBarPageStyle = computed(() => {
+	return {
+		'--bottomBarCount': `${Math.max(visibleBottomSections.value.length, 1)}`,
+	};
+});
+const pageKey = computed(() => {
+	const keys = visibleBottomSections.value.map(section => section.key).join('|');
+	return `${currentPageIndex.value}:${keys || 'empty'}`;
+});
+
+watch([bottomSections, sectionPages], ([sections, pages]) => {
 	if (sections.length === 0) {
 		activeSectionKey.value = '';
+		currentPageIndex.value = 0;
 		return;
 	}
 
 	if (!sections.some(section => section.key === activeSectionKey.value)) {
 		activeSectionKey.value = sections[0].key;
 	}
-	nextTick(() => {
-		scrollActiveSectionIntoView(false);
-		updateRailButtons();
-	});
-}, { immediate: true });
 
-watch(activeSectionKey, () => {
-	nextTick(() => {
-		scrollActiveSectionIntoView();
-		updateRailButtons();
-	});
-});
+	const pageIndex = findPageIndex(activeSectionKey.value, pages);
+	currentPageIndex.value = pageIndex === -1 ? 0 : pageIndex;
+}, { immediate: true });
 
 function canReact(emoji: Misskey.entities.EmojiSimple | UnicodeEmojiDef | string): boolean {
 	return !props.targetNote || checkReactionPermissions($i!, props.targetNote, emoji);
@@ -235,44 +256,62 @@ function humanizeUnicodeCategory(category: string): string {
 
 function selectSection(key: string) {
 	activeSectionKey.value = key;
+	const pageIndex = findPageIndex(key);
+	if (pageIndex !== -1 && pageIndex !== currentPageIndex.value) {
+		pageTransitionDirection.value = pageIndex > currentPageIndex.value ? 'forward' : 'backward';
+		currentPageIndex.value = pageIndex;
+	}
 	if (emojisEl.value) emojisEl.value.scrollTop = 0;
 }
 
-function updateRailButtons() {
-	const rail = bottomBarTrack.value;
-	if (rail == null) {
-		showPrevArrow.value = false;
-		showNextArrow.value = false;
-		return;
+function goToPreviousPage() {
+	if (!showPrevArrow.value) return;
+
+	pageTransitionDirection.value = 'backward';
+	currentPageIndex.value -= 1;
+	const firstSection = visibleBottomSections.value[0];
+	if (firstSection) activeSectionKey.value = firstSection.key;
+	if (emojisEl.value) emojisEl.value.scrollTop = 0;
+}
+
+function goToNextPage() {
+	if (!showNextArrow.value) return;
+
+	pageTransitionDirection.value = 'forward';
+	currentPageIndex.value += 1;
+	const firstSection = visibleBottomSections.value[0];
+	if (firstSection) activeSectionKey.value = firstSection.key;
+	if (emojisEl.value) emojisEl.value.scrollTop = 0;
+}
+
+function findPageIndex(key: string, pages = sectionPages.value): number {
+	return pages.findIndex(page => page.some(section => section.key === key));
+}
+
+function paginateSections(sections: PickerSection[], slots: number): PickerSection[][] {
+	if (sections.length === 0) return [];
+	if (sections.length <= slots) return [sections];
+
+	const pages: PickerSection[][] = [];
+	const firstOrLastPageSize = Math.max(slots - 1, 1);
+	const middlePageSize = Math.max(slots - 2, 1);
+	let index = 0;
+
+	pages.push(sections.slice(index, index + firstOrLastPageSize));
+	index += firstOrLastPageSize;
+
+	while (index < sections.length) {
+		const remaining = sections.length - index;
+		if (remaining <= firstOrLastPageSize) {
+			pages.push(sections.slice(index));
+			break;
+		}
+
+		pages.push(sections.slice(index, index + middlePageSize));
+		index += middlePageSize;
 	}
 
-	showPrevArrow.value = rail.scrollLeft > 4;
-	showNextArrow.value = rail.scrollLeft + rail.clientWidth < rail.scrollWidth - 4;
-}
-
-function scrollRail(direction: 'prev' | 'next') {
-	const rail = bottomBarTrack.value;
-	if (rail == null) return;
-
-	const amount = Math.max(rail.clientWidth * 0.75, 120);
-	rail.scrollBy({
-		left: direction === 'next' ? amount : -amount,
-		behavior: 'smooth',
-	});
-}
-
-function scrollActiveSectionIntoView(smooth = true) {
-	const rail = bottomBarTrack.value;
-	if (rail == null) return;
-
-	const button = Array.from(rail.querySelectorAll<HTMLElement>('[data-section-key]'))
-		.find(el => el.dataset.sectionKey === activeSectionKey.value);
-
-	button?.scrollIntoView({
-		behavior: smooth ? 'smooth' : 'auto',
-		block: 'nearest',
-		inline: 'center',
-	});
+	return pages;
 }
 
 function focus() {
@@ -329,15 +368,6 @@ function chosen(emoji: string | Misskey.entities.EmojiSimple | UnicodeEmojiDef, 
 defineExpose({
 	focus,
 	reset,
-});
-
-onMounted(() => {
-	updateRailButtons();
-	window.addEventListener('resize', updateRailButtons);
-});
-
-onBeforeUnmount(() => {
-	window.removeEventListener('resize', updateRailButtons);
 });
 </script>
 
@@ -415,7 +445,7 @@ onBeforeUnmount(() => {
 		border-top: solid 0.5px var(--MI_THEME-divider);
 
 		> .navArrow,
-		> .bottomBarTrack > .bottomTab {
+		> .bottomBarViewport .bottomTab {
 			flex: 0 0 auto;
 			display: inline-flex;
 			align-items: center;
@@ -453,16 +483,20 @@ onBeforeUnmount(() => {
 			}
 		}
 
-		> .bottomBarTrack {
+		> .bottomBarViewport {
 			flex: 1 1 auto;
 			min-width: 0;
-			display: flex;
-			gap: 8px;
-			overflow-x: auto;
-			scrollbar-width: none;
+			overflow: hidden;
 
-			&::-webkit-scrollbar {
-				display: none;
+			> .bottomBarPage {
+				display: grid;
+				grid-template-columns: repeat(var(--bottomBarCount), minmax(0, 1fr));
+				gap: 8px;
+				align-items: center;
+
+				> .bottomTab {
+					justify-self: center;
+				}
 			}
 		}
 	}
@@ -568,5 +602,24 @@ onBeforeUnmount(() => {
 	padding: 24px 16px;
 	text-align: center;
 	color: var(--MI_THEME-fgTransparentWeak);
+}
+
+.tabPageForward-enter-active,
+.tabPageForward-leave-active,
+.tabPageBackward-enter-active,
+.tabPageBackward-leave-active {
+	transition: transform 0.18s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.18s ease;
+}
+
+.tabPageForward-enter-from,
+.tabPageBackward-leave-to {
+	opacity: 0;
+	transform: translateX(16px);
+}
+
+.tabPageForward-leave-to,
+.tabPageBackward-enter-from {
+	opacity: 0;
+	transform: translateX(-16px);
 }
 </style>

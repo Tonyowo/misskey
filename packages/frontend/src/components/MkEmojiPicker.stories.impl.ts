@@ -36,8 +36,17 @@ export const Default = {
 	},
 	async play({ canvasElement }) {
 		const canvas = within(canvasElement);
-		const faceCategory = canvas.getByRole('button', { name: /face/i });
-		faceCategory.scrollIntoView();
+		let faceCategory = canvas.queryByRole('button', { name: /face/i });
+		let guard = 0;
+		while (faceCategory == null && guard < 8) {
+			const nextButton = canvas.queryByRole('button', { name: i18n.ts.next });
+			if (nextButton == null) break;
+			await waitFor(() => userEvent.click(nextButton));
+			faceCategory = canvas.queryByRole('button', { name: /face/i });
+			guard += 1;
+		}
+		await expect(faceCategory).toBeInTheDocument();
+		if (faceCategory == null) throw new Error(); // NOTE: not called
 		await waitFor(() => userEvent.click(faceCategory));
 		const grinning = canvasElement.querySelector('[data-emoji="😀"]');
 		await expect(grinning).toBeInTheDocument();
