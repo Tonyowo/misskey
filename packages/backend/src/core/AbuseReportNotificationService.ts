@@ -18,7 +18,7 @@ import type {
 	MiUser,
 } from '@/models/_.js';
 import { EmailService } from '@/core/EmailService.js';
-import { createAbuseReportEmail } from '@/core/email/TrilingualEmailTemplates.js';
+import { createAbuseReportEmail } from '@/core/email/EmailTemplates.js';
 import { RoleService } from '@/core/RoleService.js';
 import { RecipientMethod } from '@/models/AbuseReportNotificationRecipient.js';
 import { ModerationLogService } from '@/core/ModerationLogService.js';

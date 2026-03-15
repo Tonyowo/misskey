@@ -12,7 +12,7 @@ import { DriveService } from '@/core/DriveService.js';
 import type { MiDriveFile } from '@/models/DriveFile.js';
 import type { MiNote } from '@/models/Note.js';
 import { EmailService } from '@/core/EmailService.js';
-import { createAccountDeletedEmail } from '@/core/email/TrilingualEmailTemplates.js';
+import { createAccountDeletedEmail } from '@/core/email/EmailTemplates.js';
 import { bindThis } from '@/decorators.js';
 import { SearchService } from '@/core/SearchService.js';
 import { PageService } from '@/core/PageService.js';

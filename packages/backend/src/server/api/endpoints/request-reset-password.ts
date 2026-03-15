@@ -12,7 +12,7 @@ import { IdService } from '@/core/IdService.js';
 import type { Config } from '@/config.js';
 import { DI } from '@/di-symbols.js';
 import { EmailService } from '@/core/EmailService.js';
-import { createPasswordResetEmail } from '@/core/email/TrilingualEmailTemplates.js';
+import { createPasswordResetEmail } from '@/core/email/EmailTemplates.js';
 import { L_CHARS, secureRndstr } from '@/misc/secure-rndstr.js';
 
 export const meta = {

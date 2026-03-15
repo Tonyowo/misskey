@@ -91,12 +91,16 @@ export class EmailService {
 				color: #555;
 			}
 				main > header {
-					padding: 32px;
-					background: #3498db;
+					padding: 24px 32px;
+					background: #f7f8fa;
+					border-bottom: solid 1px #e9edf2;
 				}
 					main > header > img {
-						max-width: 128px;
-						max-height: 28px;
+						display: block;
+						max-width: 180px;
+						max-height: 56px;
+						width: auto;
+						height: auto;
 						vertical-align: bottom;
 					}
 				main > article {
@@ -131,7 +135,7 @@ export class EmailService {
 				<div>${ html }</div>
 			</article>
 			<footer>
-				<a href="${ emailSettingUrl }">${ '邮件设置 / メール設定 / Email settings' }</a>
+				<a href="${ emailSettingUrl }">${ '邮件设置' }</a>
 			</footer>
 		</main>
 		<nav>

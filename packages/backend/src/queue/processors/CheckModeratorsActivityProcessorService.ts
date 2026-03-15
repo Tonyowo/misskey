@@ -10,7 +10,7 @@ import { bindThis } from '@/decorators.js';
 import { MetaService } from '@/core/MetaService.js';
 import { RoleService } from '@/core/RoleService.js';
 import { EmailService } from '@/core/EmailService.js';
-import { createInvitationOnlyChangedEmail, createModeratorInactivityWarningEmail } from '@/core/email/TrilingualEmailTemplates.js';
+import { createInvitationOnlyChangedEmail, createModeratorInactivityWarningEmail } from '@/core/email/EmailTemplates.js';
 import { MiUser, type UserProfilesRepository } from '@/models/_.js';
 import { DI } from '@/di-symbols.js';
 import { SystemWebhookService } from '@/core/SystemWebhookService.js';

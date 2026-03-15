@@ -13,7 +13,7 @@ import { GlobalEventService } from '@/core/GlobalEventService.js';
 import { SigninEntityService } from '@/core/entities/SigninEntityService.js';
 import { bindThis } from '@/decorators.js';
 import { EmailService } from '@/core/EmailService.js';
-import { createNewLoginEmail } from '@/core/email/TrilingualEmailTemplates.js';
+import { createNewLoginEmail } from '@/core/email/EmailTemplates.js';
 import { NotificationService } from '@/core/NotificationService.js';
 import type { FastifyRequest, FastifyReply } from 'fastify';
 
