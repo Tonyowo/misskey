@@ -164,6 +164,14 @@ function createCustomEmojiNode(name: string, raw: string): HTMLSpanElement {
 	img.decoding = 'async';
 	img.draggable = false;
 	img.style.webkitUserDrag = 'none';
+	img.style.display = 'inline-block';
+	img.style.width = '1.25em';
+	img.style.height = '1.25em';
+	img.style.maxWidth = 'none';
+	img.style.maxHeight = 'none';
+	img.style.objectFit = 'contain';
+	img.style.verticalAlign = '-0.25em';
+	img.style.flex = 'none';
 
 	span.append(img);
 	return span;
@@ -655,6 +663,7 @@ defineExpose({
 	getRootEl: () => editorEl.value,
 	focus,
 	blur,
+	rememberSelection,
 	getSelectionRange,
 	setSelectionRange,
 	replaceSelection,
