@@ -122,8 +122,6 @@ SPDX-License-Identifier: AGPL-3.0-only
 			<button v-tooltip="i18n.ts.mention" class="_button" :class="$style.footerButton" @pointerdown.prevent="preserveTextSelection" @click="insertMention"><i class="ti ti-at"></i></button>
 			<button v-if="showAddMfmFunction" v-tooltip="i18n.ts.addMfmFunction" :class="['_button', $style.footerButton]" @pointerdown.prevent="preserveTextSelection" @click="insertMfmFunction"><i class="ti ti-palette"></i></button>
 			<button v-if="postFormActions.length > 0" v-tooltip="i18n.ts.plugins" class="_button" :class="$style.footerButton" @click="showActions"><i class="ti ti-plug"></i></button>
-		</div>
-		<div :class="$style.footerRight">
 			<button v-tooltip="i18n.ts.emoji" :class="['_button', $style.footerButton]" @pointerdown.prevent="preserveTextSelection" @click="insertEmoji"><i class="ti ti-mood-happy"></i></button>
 		</div>
 	</footer>
@@ -1975,16 +1973,6 @@ html[data-color-scheme=light] .preview {
 	grid-auto-rows: 40px;
 }
 
-.footerRight {
-	flex: 0;
-	margin-left: auto;
-	display: grid;
-	grid-auto-flow: row;
-	grid-template-columns: repeat(auto-fill, minmax(42px, 1fr));
-	grid-auto-rows: 40px;
-	direction: rtl;
-}
-
 .footerButton {
 	display: inline-block;
 	padding: 0;
@@ -2060,10 +2048,6 @@ html[data-color-scheme=light] .preview {
 	}
 
 	.footerLeft {
-		grid-template-columns: repeat(auto-fill, minmax(38px, 1fr));
-	}
-
-	.footerRight {
 		grid-template-columns: repeat(auto-fill, minmax(38px, 1fr));
 	}
 
