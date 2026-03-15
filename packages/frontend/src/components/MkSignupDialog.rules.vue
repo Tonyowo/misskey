@@ -43,15 +43,6 @@ SPDX-License-Identifier: AGPL-3.0-only
 				<MkSwitch :modelValue="agreeTosAndPrivacyPolicy" style="margin-top: 16px;" @update:modelValue="updateAgreeTosAndPrivacyPolicy">{{ i18n.ts.agree }}</MkSwitch>
 			</MkFolder>
 
-			<MkFolder :defaultOpen="true">
-				<template #label>{{ i18n.ts.basicNotesBeforeCreateAccount }}</template>
-				<template #suffix><i v-if="agreeNote" class="ti ti-check" style="color: var(--MI_THEME-success)"></i></template>
-
-				<a href="https://misskey-hub.net/docs/for-users/onboarding/warning/" class="_link" target="_blank">{{ i18n.ts.basicNotesBeforeCreateAccount }} <i class="ti ti-external-link"></i></a>
-
-				<MkSwitch :modelValue="agreeNote" style="margin-top: 16px;" data-cy-signup-rules-notes-agree @update:modelValue="updateAgreeNote">{{ i18n.ts.agree }}</MkSwitch>
-			</MkFolder>
-
 			<div v-if="!agreed" style="text-align: center;">{{ i18n.ts.pleaseAgreeAllToContinue }}</div>
 
 			<div class="_buttonsCenter">
@@ -79,10 +70,9 @@ const availablePrivacyPolicy = instance.privacyPolicyUrl != null && instance.pri
 
 const agreeServerRules = ref(false);
 const agreeTosAndPrivacyPolicy = ref(false);
-const agreeNote = ref(false);
 
 const agreed = computed(() => {
-	return (!availableServerRules || agreeServerRules.value) && ((!availableTos && !availablePrivacyPolicy) || agreeTosAndPrivacyPolicy.value) && agreeNote.value;
+	return (!availableServerRules || agreeServerRules.value) && ((!availableTos && !availablePrivacyPolicy) || agreeTosAndPrivacyPolicy.value);
 });
 
 const emit = defineEmits<{
@@ -129,20 +119,6 @@ async function updateAgreeTosAndPrivacyPolicy(v: boolean) {
 		agreeTosAndPrivacyPolicy.value = true;
 	} else {
 		agreeTosAndPrivacyPolicy.value = false;
-	}
-}
-
-async function updateAgreeNote(v: boolean) {
-	if (v) {
-		const confirm = await os.confirm({
-			type: 'question',
-			title: i18n.ts.doYouAgree,
-			text: i18n.tsx.iHaveReadXCarefullyAndAgree({ x: i18n.ts.basicNotesBeforeCreateAccount }),
-		});
-		if (confirm.canceled) return;
-		agreeNote.value = true;
-	} else {
-		agreeNote.value = false;
 	}
 }
 </script>
