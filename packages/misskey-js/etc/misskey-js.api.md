@@ -1506,6 +1506,7 @@ declare namespace entities {
         SignupPendingRequest,
         SignupPendingResponse,
         SigninFlowRequest,
+        SigninFlowUser,
         SigninFlowResponse,
         SigninWithPasskeyRequest,
         SigninWithPasskeyInitResponse,
@@ -3529,15 +3530,24 @@ type SigninFlowRequest = {
 };
 
 // @public (undocumented)
+type SigninFlowUser = {
+    username: string;
+    name: string | null;
+    avatarUrl: string | null;
+};
+
+// @public (undocumented)
 type SigninFlowResponse = {
     finished: true;
     id: User['id'];
     i: string;
 } | {
     finished: false;
+    user: SigninFlowUser;
     next: 'captcha' | 'password' | 'totp';
 } | {
     finished: false;
+    user: SigninFlowUser;
     next: 'passkey';
     authRequest: PublicKeyCredentialRequestOptionsJSON_2;
 };

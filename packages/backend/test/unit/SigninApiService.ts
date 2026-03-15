@@ -144,6 +144,11 @@ describe('SigninApiService', () => {
 		expect(res.statusCode).toBe(200);
 		expect(response).toEqual({
 			finished: false,
+			user: {
+				username: 'alice',
+				name: null,
+				avatarUrl: null,
+			},
 			next: 'captcha',
 		});
 	});

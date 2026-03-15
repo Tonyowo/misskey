@@ -90,6 +90,15 @@ export class SigninApiService {
 	}
 
 	@bindThis
+	private packSigninFlowUser(user: MiLocalUser): Misskey.entities.SigninFlowUser {
+		return {
+			username: user.username,
+			name: user.name,
+			avatarUrl: user.avatarUrl,
+		};
+	}
+
+	@bindThis
 	public async signin(
 		request: FastifyRequest<{
 			Body: {
@@ -170,17 +179,20 @@ export class SigninApiService {
 
 		const profile = await this.userProfilesRepository.findOneByOrFail({ userId: user.id });
 		const securityKeysAvailable = await this.userSecurityKeysRepository.countBy({ userId: user.id }).then(result => result >= 1);
+		const signinUser = this.packSigninFlowUser(user);
 
 		if (password == null) {
 			reply.code(200);
 			if (profile.twoFactorEnabled) {
 				return {
 					finished: false,
+					user: signinUser,
 					next: 'password',
 				} satisfies Misskey.entities.SigninFlowResponse;
 			} else {
 				return {
 					finished: false,
+					user: signinUser,
 					next: 'captcha',
 				} satisfies Misskey.entities.SigninFlowResponse;
 			}
@@ -293,6 +305,7 @@ export class SigninApiService {
 			reply.code(200);
 			return {
 				finished: false,
+				user: signinUser,
 				next: 'passkey',
 				authRequest,
 			} satisfies Misskey.entities.SigninFlowResponse;
@@ -305,6 +318,7 @@ export class SigninApiService {
 				reply.code(200);
 				return {
 					finished: false,
+					user: signinUser,
 					next: 'totp',
 				} satisfies Misskey.entities.SigninFlowResponse;
 			}

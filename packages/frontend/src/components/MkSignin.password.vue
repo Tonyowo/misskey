@@ -63,7 +63,7 @@ import MkInput from '@/components/MkInput.vue';
 import MkCaptcha from '@/components/MkCaptcha.vue';
 
 const props = defineProps<{
-	user: Misskey.entities.UserDetailed | null;
+	user: Misskey.entities.SigninFlowUser | null;
 	identifier: string;
 	needCaptcha: boolean;
 }>();

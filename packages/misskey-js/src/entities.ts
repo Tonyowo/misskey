@@ -297,15 +297,23 @@ export type SigninFlowRequest = {
 	'testcaptcha-response'?: string | null;
 };
 
+export type SigninFlowUser = {
+	username: string;
+	name: string | null;
+	avatarUrl: string | null;
+};
+
 export type SigninFlowResponse = {
 	finished: true;
 	id: User['id'];
 	i: string;
 } | {
 	finished: false;
+	user: SigninFlowUser;
 	next: 'captcha' | 'password' | 'totp';
 } | {
 	finished: false;
+	user: SigninFlowUser;
 	next: 'passkey';
 	authRequest: PublicKeyCredentialRequestOptionsJSON;
 };

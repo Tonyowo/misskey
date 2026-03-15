@@ -105,7 +105,7 @@ const waiting = ref(false);
 const passwordPageEl = useTemplateRef('passwordPageEl');
 const needCaptcha = ref(false);
 
-const userInfo = ref<null | Misskey.entities.UserDetailed>(null);
+const userInfo = ref<null | Misskey.entities.SigninFlowUser>(null);
 const signinId = ref(props.initialUsername ?? '');
 const password = ref('');
 
@@ -166,12 +166,7 @@ function onUseTotp(): void {
 async function onIdentifierSubmitted(identifier: string) {
 	waiting.value = true;
 	signinId.value = identifier;
-
-	userInfo.value = identifier.includes('@')
-		? null
-		: await misskeyApi('users/show', {
-			username: identifier,
-		}).catch(() => null);
+	userInfo.value = null;
 
 	await tryLogin({
 		username: identifier,
@@ -242,6 +237,7 @@ async function tryLogin(req: Partial<Misskey.entities.SigninFlowRequest>): Promi
 			emit('login', res);
 			await onLoginSucceeded(res);
 		} else {
+			userInfo.value = res.user;
 			switch (res.next) {
 				case 'captcha': {
 					needCaptcha.value = true;

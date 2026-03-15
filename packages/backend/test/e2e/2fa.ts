@@ -200,10 +200,9 @@ describe('2要素認証', () => {
 			...signinParam(),
 		});
 		assert.strictEqual(signinWithoutTokenResponse.status, 200);
-		assert.deepStrictEqual(signinWithoutTokenResponse.body, {
-			finished: false,
-			next: 'totp',
-		});
+		assert.strictEqual(signinWithoutTokenResponse.body.finished, false);
+		assert.strictEqual(signinWithoutTokenResponse.body.next, 'totp');
+		assert.strictEqual(signinWithoutTokenResponse.body.user.username, username);
 
 		const signinResponse = await api('signin-flow', {
 			...signinParam(),
