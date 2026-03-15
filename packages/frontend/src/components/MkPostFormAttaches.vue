@@ -343,8 +343,8 @@ function showFileMenu(file: Misskey.entities.DriveFile, ev: MouseEvent | Pointer
 
 .menuButton {
 	position: absolute;
-	right: 10px;
-	top: 10px;
+	right: 6px;
+	top: 6px;
 	z-index: 3;
 	display: flex;
 	align-items: center;
@@ -356,7 +356,7 @@ function showFileMenu(file: Misskey.entities.DriveFile, ev: MouseEvent | Pointer
 	background: transparent;
 	color: rgba(255, 255, 255, 0.96);
 	box-shadow: none;
-	opacity: 0.94;
+	opacity: 0.72;
 	transition: transform 0.16s ease, opacity 0.16s ease;
 
 	> i {
@@ -366,7 +366,7 @@ function showFileMenu(file: Misskey.entities.DriveFile, ev: MouseEvent | Pointer
 
 	&:hover,
 	&:focus-visible {
-		opacity: 1;
+		opacity: 0.92;
 		transform: scale(1.08);
 	}
 }
