@@ -17,6 +17,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 	spellcheck="true"
 	@focus="onFocus"
 	@blur="onBlur"
+	@beforeinput="onBeforeInput"
 	@input="onInput"
 	@keydown="onKeydown"
 	@keyup="onKeyup"
@@ -54,6 +55,10 @@ type SelectionRange = {
 	end: number;
 };
 
+type ApplyTextUpdateOptions = {
+	skipNextInputNormalization?: boolean;
+};
+
 const props = withDefaults(defineProps<{
 	modelValue: string;
 	placeholder?: string;
@@ -80,8 +85,26 @@ const renderedText = ref(props.modelValue ?? '');
 const composing = ref(false);
 const focused = ref(false);
 const lastSelectionRange = ref<SelectionRange>({ start: renderedText.value.length, end: renderedText.value.length });
+let skipInputNormalizationUntilRender = false;
 
 const segments = computed(() => tokenizePostFormCustomEmojis(renderedText.value, (name) => customEmojisMap.has(name)));
+
+function getTokenBoundaries() {
+	const boundaries: Array<{ start: number; end: number; type: 'text' | 'customEmoji' }> = [];
+	let cursor = 0;
+
+	for (const segment of segments.value) {
+		const length = segment.value.length;
+		boundaries.push({
+			start: cursor,
+			end: cursor + length,
+			type: segment.type,
+		});
+		cursor += length;
+	}
+
+	return boundaries;
+}
 
 watch(() => props.modelValue, (value) => {
 	const next = value ?? '';
@@ -297,7 +320,11 @@ function blur() {
 	editorEl.value?.blur();
 }
 
-function applyTextUpdate(value: string, selectionStart: number, selectionEnd = selectionStart) {
+function applyTextUpdate(value: string, selectionStart: number, selectionEnd = selectionStart, options: ApplyTextUpdateOptions = {}) {
+	if (options.skipNextInputNormalization) {
+		skipInputNormalizationUntilRender = true;
+	}
+
 	renderedText.value = value;
 	emit('update:modelValue', value);
 	lastSelectionRange.value = { start: selectionStart, end: selectionEnd };
@@ -305,14 +332,47 @@ function applyTextUpdate(value: string, selectionStart: number, selectionEnd = s
 	nextTick(() => {
 		focus();
 		setSelectionRange(selectionStart, selectionEnd);
+		if (options.skipNextInputNormalization) {
+			skipInputNormalizationUntilRender = false;
+		}
 	});
 }
 
-function replaceSelection(value: string) {
+function replaceSelection(value: string, options: ApplyTextUpdateOptions = {}) {
 	const { start, end } = getSelectionRange();
+	replaceRange(start, end, value, options);
+}
+
+function replaceRange(start: number, end: number, value: string, options: ApplyTextUpdateOptions = {}) {
 	const nextText = renderedText.value.slice(0, start) + value + renderedText.value.slice(end);
 	const nextCursor = start + value.length;
-	applyTextUpdate(nextText, nextCursor, nextCursor);
+	applyTextUpdate(nextText, nextCursor, nextCursor, options);
+}
+
+function deleteBackward(options: ApplyTextUpdateOptions = {}) {
+	const { start, end } = getSelectionRange();
+	if (start !== end) {
+		replaceRange(start, end, '', options);
+		return;
+	}
+	if (start === 0) return;
+
+	const token = getTokenBoundaries().find(segment => segment.end === start && segment.type === 'customEmoji');
+	const deleteStart = token?.start ?? Math.max(0, start - 1);
+	replaceRange(deleteStart, end, '', options);
+}
+
+function deleteForward(options: ApplyTextUpdateOptions = {}) {
+	const { start, end } = getSelectionRange();
+	if (start !== end) {
+		replaceRange(start, end, '', options);
+		return;
+	}
+	if (end >= renderedText.value.length) return;
+
+	const token = getTokenBoundaries().find(segment => segment.start === end && segment.type === 'customEmoji');
+	const deleteEnd = token?.end ?? Math.min(renderedText.value.length, end + 1);
+	replaceRange(start, deleteEnd, '', options);
 }
 
 function normalizeFromDom() {
@@ -330,7 +390,7 @@ function normalizeFromDom() {
 
 function getSelectedText() {
 	const { start, end } = getSelectionRange();
-	const text = getCurrentText();
+	const text = renderedText.value;
 	return text.slice(Math.min(start, end), Math.max(start, end));
 }
 
@@ -402,8 +462,46 @@ function onBlur() {
 }
 
 function onInput() {
-	if (composing.value || props.disabled || props.readonly) return;
-	normalizeFromDom();
+	if (props.disabled || props.readonly) return;
+	if (composing.value) return;
+	if (skipInputNormalizationUntilRender) return;
+
+	if (getCurrentText() !== renderedText.value) {
+		normalizeFromDom();
+	}
+}
+
+function onBeforeInput(ev: InputEvent) {
+	if (props.disabled || props.readonly || composing.value) return;
+
+	switch (ev.inputType) {
+		case 'insertText':
+		case 'insertReplacementText':
+			ev.preventDefault();
+			replaceSelection(ev.data ?? '', { skipNextInputNormalization: true });
+			return;
+
+		case 'insertParagraph':
+		case 'insertLineBreak':
+			ev.preventDefault();
+			replaceSelection('\n', { skipNextInputNormalization: true });
+			return;
+
+		case 'deleteContentBackward':
+			ev.preventDefault();
+			deleteBackward({ skipNextInputNormalization: true });
+			return;
+
+		case 'deleteContentForward':
+			ev.preventDefault();
+			deleteForward({ skipNextInputNormalization: true });
+			return;
+
+		case 'historyUndo':
+		case 'historyRedo':
+			ev.preventDefault();
+			return;
+	}
 }
 
 function onKeydown(ev: KeyboardEvent) {
@@ -417,7 +515,7 @@ function onKeydown(ev: KeyboardEvent) {
 
 	if (!ev.isComposing && ev.key === 'Enter' && !ev.ctrlKey && !ev.metaKey) {
 		ev.preventDefault();
-		replaceSelection('\n');
+		replaceSelection('\n', { skipNextInputNormalization: true });
 	}
 }
 
@@ -431,7 +529,7 @@ function onPaste(ev: ClipboardEvent) {
 	if (ev.defaultPrevented || props.disabled || props.readonly) return;
 
 	ev.preventDefault();
-	replaceSelection(ev.clipboardData?.getData('text') ?? '');
+	replaceSelection(ev.clipboardData?.getData('text') ?? '', { skipNextInputNormalization: true });
 }
 
 function onCopy(ev: ClipboardEvent) {
@@ -449,7 +547,7 @@ function onCut(ev: ClipboardEvent) {
 
 	ev.preventDefault();
 	ev.clipboardData?.setData('text/plain', text);
-	replaceSelection('');
+	replaceSelection('', { skipNextInputNormalization: true });
 }
 
 function onCompositionStart() {
@@ -507,7 +605,8 @@ defineExpose({
 .customEmoji {
 	display: inline-flex;
 	align-items: center;
-	user-select: none;
-	-webkit-user-select: none;
+	pointer-events: none;
+	user-select: text;
+	-webkit-user-select: text;
 }
 </style>
