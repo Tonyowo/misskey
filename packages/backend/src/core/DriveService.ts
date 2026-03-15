@@ -65,6 +65,8 @@ type AddFileArgs = {
 	uri?: string | null;
 	/** Mark file as sensitive */
 	sensitive?: boolean | null;
+	/** Replace image file names with random strings */
+	anonymizeImageName?: boolean;
 	/** Extension to force */
 	ext?: string | null;
 
@@ -81,6 +83,7 @@ type UploadFromUrlArgs = {
 	force?: boolean;
 	isLink?: boolean;
 	comment?: string | null;
+	anonymizeImageName?: boolean;
 	requestIp?: string | null;
 	requestHeaders?: Record<string, string> | null;
 };
@@ -453,6 +456,7 @@ export class DriveService {
 		url = null,
 		uri = null,
 		sensitive = null,
+		anonymizeImageName = false,
 		requestIp = null,
 		requestHeaders = null,
 		ext = null,
@@ -488,10 +492,14 @@ export class DriveService {
 		//}
 
 		// detect name
+		const baseName = anonymizeImageName && isMimeImage(info.type.mime, 'sharp-convertible-image-with-bmp')
+			? randomUUID()
+			: (name && this.driveFileEntityService.validateFileName(name)) ? name : 'untitled';
+
 		const detectedName = correctFilename(
 			// DriveFile.nameは256文字, validateFileNameは200文字制限であるため、
 			// extを付加してデータベースの文字数制限に当たることはまずない
-			(name && this.driveFileEntityService.validateFileName(name)) ? name : 'untitled',
+			baseName,
 			ext ?? info.type.ext,
 		);
 
@@ -884,6 +892,7 @@ export class DriveService {
 		force = false,
 		isLink = false,
 		comment = null,
+		anonymizeImageName = false,
 		requestIp = null,
 		requestHeaders = null,
 	}: UploadFromUrlArgs): Promise<MiDriveFile> {
@@ -900,7 +909,7 @@ export class DriveService {
 				comment = null;
 			}
 
-			const driveFile = await this.addFile({ user, path, name, comment, folderId, force, isLink, url, uri, sensitive, requestIp, requestHeaders });
+			const driveFile = await this.addFile({ user, path, name, comment, folderId, force, isLink, url, uri, sensitive, anonymizeImageName, requestIp, requestHeaders });
 			this.downloaderLogger.succ(`Got: ${driveFile.id}`);
 			return driveFile!;
 		} catch (err) {

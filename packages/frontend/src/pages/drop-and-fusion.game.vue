@@ -213,6 +213,7 @@ import * as sound from '@/utility/sound.js';
 import MkRange from '@/components/MkRange.vue';
 import { copyToClipboard } from '@/utility/copy-to-clipboard.js';
 import { prefer } from '@/preferences.js';
+import { genId } from '@/utility/id.js';
 
 type FrontendMonoDefinition = {
 	id: string;
@@ -905,7 +906,7 @@ function getGameImageDriveFile() {
 				if ($i == null) return res(null);
 				const formData = new FormData();
 				formData.append('file', blob);
-				formData.append('name', `bubble-game-${Date.now()}.png`);
+				formData.append('name', `${genId()}.png`);
 				formData.append('isSensitive', 'false');
 				formData.append('i', $i.token);
 				if (prefer.s.uploadFolder) {

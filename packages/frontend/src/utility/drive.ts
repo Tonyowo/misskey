@@ -23,6 +23,33 @@ type UploadReturnType = {
 	abort: () => void;
 };
 
+const mimeExtensionMap = {
+	'image/avif': '.avif',
+	'image/gif': '.gif',
+	'image/jpeg': '.jpg',
+	'image/png': '.png',
+	'image/svg+xml': '.svg',
+	'image/webp': '.webp',
+} as const;
+
+function getFileExtension(filename: string) {
+	const dotIndex = filename.lastIndexOf('.');
+	return dotIndex > 0 ? filename.slice(dotIndex) : '';
+}
+
+function getDefaultUploadName(file: File | Blob, explicitName?: string) {
+	if (explicitName != null) return explicitName;
+
+	if (file.type.startsWith('image/')) {
+		const extension = file instanceof File
+			? getFileExtension(file.name)
+			: mimeExtensionMap[file.type as keyof typeof mimeExtensionMap] ?? '';
+		return `${genId()}${extension}`;
+	}
+
+	return file instanceof File ? file.name : 'untitled';
+}
+
 export class UploadAbortedError extends Error {
 	constructor() {
 		super('Upload aborted');
@@ -141,7 +168,7 @@ export function uploadFile(file: File | Blob, options: {
 		formData.append('i', $i.token);
 		formData.append('force', 'true');
 		formData.append('file', file);
-		formData.append('name', options.name ?? (file instanceof File ? file.name : 'untitled'));
+		formData.append('name', getDefaultUploadName(file, options.name));
 		formData.append('isSensitive', options.isSensitive ? 'true' : 'false');
 		if (options.caption != null) formData.append('comment', options.caption);
 		if (options.folderId) formData.append('folderId', options.folderId);
@@ -288,7 +315,6 @@ export async function createCroppedImageDriveFileFromImageDriveFile(imageDriveFi
 					aspectRatio: options.aspectRatio,
 				}).then(croppedImageFile => {
 					const { filePromise } = uploadFile(croppedImageFile, {
-						name: imageDriveFile.name,
 						folderId: imageDriveFile.folderId,
 					});
 

@@ -58,6 +58,17 @@ const mimeTypeMap = {
 	'image/png': 'png',
 } as const;
 
+function getFileExtension(filename: string) {
+	const dotIndex = filename.lastIndexOf('.');
+	return dotIndex > 0 ? filename.slice(dotIndex) : '';
+}
+
+function replaceFileExtension(filename: string, nextExtension: string) {
+	const dotIndex = filename.lastIndexOf('.');
+	const basename = dotIndex > 0 ? filename.slice(0, dotIndex) : filename;
+	return `${basename}${nextExtension}`;
+}
+
 export type UploaderItem = {
 	id: string;
 	name: string;
@@ -108,6 +119,7 @@ export function useUploader(options: {
 	folderId?: string | null;
 	multiple?: boolean;
 	features?: UploaderFeatures;
+	keepOriginalFilename?: boolean;
 } = {}) {
 	const $i = ensureSignin();
 
@@ -127,11 +139,15 @@ export function useUploader(options: {
 	function initializeFile(file: File) {
 		const id = genId();
 		const filename = file.name ?? 'untitled';
-		const extension = filename.split('.').length > 1 ? '.' + filename.split('.').pop() : '';
+		const extension = getFileExtension(filename);
+		const shouldKeepOriginalFilename = file.type.startsWith('image/')
+			? false
+			: (options.keepOriginalFilename ?? prefer.s.keepOriginalFilename);
 		const watermarkPreset = uploaderFeatures.value.watermark && $i.policies.watermarkAvailable ? (prefer.s.watermarkPresets.find(p => p.id === prefer.s.defaultWatermarkPresetId) ?? null) : null;
 		items.value.push({
 			id,
-			name: prefer.s.keepOriginalFilename ? filename : id + extension,
+			name: filename,
+			uploadName: shouldKeepOriginalFilename ? filename : id + extension,
 			progress: null,
 			thumbnail: THUMBNAIL_SUPPORTED_TYPES.includes(file.type) ? window.URL.createObjectURL(file) : null,
 			preprocessing: false,
@@ -185,6 +201,7 @@ export function useUploader(options: {
 					if (result.trim() === '') return;
 
 					item.name = result;
+					item.uploadName = result;
 				},
 			}, {
 				type: 'switch',
@@ -355,7 +372,7 @@ export function useUploader(options: {
 							params: item.imageFrameParams,
 							image: item.file,
 							imageCaption: item.caption ?? null,
-							imageFilename: item.name,
+							imageFilename: item.uploadName ?? item.name,
 						}, {
 							ok: (params) => {
 								change(params);
@@ -381,7 +398,7 @@ export function useUploader(options: {
 							params: preset.params,
 							image: item.file,
 							imageCaption: item.caption ?? null,
-							imageFilename: item.name,
+							imageFilename: item.uploadName ?? item.name,
 						}, {
 							ok: (params) => {
 								change(params);
@@ -643,7 +660,7 @@ export function useUploader(options: {
 				image: await window.createImageBitmap(preprocessedFile),
 				exif,
 				caption: item.caption ?? null,
-				filename: item.name,
+				filename: item.uploadName ?? item.name,
 			});
 
 			await frameRenderer.render(item.imageFrameParams);
@@ -677,14 +694,16 @@ export function useUploader(options: {
 					// (and WebP is not browser safe yet)
 					preprocessedFile = result;
 					item.compressedSize = result.size;
-					item.uploadName = preprocessedFile.type !== config.mimeType ? `${item.name}.${mimeTypeMap[config.mimeType]}` : item.name;
+					const extension = mimeTypeMap[result.type as keyof typeof mimeTypeMap];
+					const baseUploadName = item.uploadName ?? item.name;
+					item.uploadName = extension ? replaceFileExtension(baseUploadName, `.${extension}`) : baseUploadName;
 				}
 			} catch (err) {
 				console.error('Failed to resize image', err);
 			}
 		} else {
 			item.compressedSize = null;
-			item.uploadName = item.name;
+			item.uploadName = item.uploadName ?? item.name;
 		}
 
 		imageBitmap.close();
@@ -743,10 +762,10 @@ export function useUploader(options: {
 
 			preprocessedFile = new Blob([output.target.buffer!], { type: output.format.mimeType });
 			item.compressedSize = output.target.buffer!.byteLength;
-			item.uploadName = `${item.name}.mp4`;
+			item.uploadName = replaceFileExtension(item.uploadName ?? item.name, '.mp4');
 		} else {
 			item.compressedSize = null;
-			item.uploadName = item.name;
+			item.uploadName = item.uploadName ?? item.name;
 		}
 
 		if (item.thumbnail != null) URL.revokeObjectURL(item.thumbnail);
@@ -780,4 +799,3 @@ export function useUploader(options: {
 		events,
 	};
 }
-
