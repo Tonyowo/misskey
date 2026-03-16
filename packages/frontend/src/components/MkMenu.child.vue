@@ -13,6 +13,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 import { nextTick, onMounted, onUnmounted, provide, useTemplateRef, watch } from 'vue';
 import MkMenu from './MkMenu.vue';
 import type { MenuItem } from '@/types/menu.js';
+import { isTouchUsing } from '@/utility/touch.js';
 
 const props = defineProps<{
 	items: MenuItem[];
@@ -31,7 +32,6 @@ provide('isNestingMenu', true);
 const el = useTemplateRef('el');
 const align = 'left';
 
-const OVERLAP_OFFSET = 32;
 const VIEWPORT_MARGIN = 16;
 const SCROLLBAR_THICKNESS = 16;
 
@@ -41,10 +41,16 @@ function setPosition() {
 	const parentRect = props.anchorElement.getBoundingClientRect();
 	const myRect = el.value.getBoundingClientRect();
 
-	let left = props.anchorElement.offsetWidth - OVERLAP_OFFSET;
+	let left = props.anchorElement.offsetWidth;
 	let top = (parentRect.top - rootRect.top) - 8;
-	if (rootRect.left + left + myRect.width >= (window.innerWidth - SCROLLBAR_THICKNESS)) {
-		left = -(myRect.width - OVERLAP_OFFSET);
+	const rightBoundary = window.innerWidth - SCROLLBAR_THICKNESS - VIEWPORT_MARGIN;
+	const rightOverflow = (rootRect.left + left + myRect.width) - rightBoundary;
+	if (rightOverflow > 0) {
+		if (isTouchUsing) {
+			left -= rightOverflow;
+		} else {
+			left = -myRect.width;
+		}
 	}
 	if (rootRect.top + top + myRect.height >= (window.innerHeight - SCROLLBAR_THICKNESS)) {
 		top = top - ((rootRect.top + top + myRect.height) - (window.innerHeight - SCROLLBAR_THICKNESS));
