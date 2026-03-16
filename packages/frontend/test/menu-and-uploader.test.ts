@@ -11,6 +11,7 @@ import MkMenu from '@/components/MkMenu.vue';
 import { popups } from '@/os.js';
 import { preferState } from './init.js';
 import { IMAGE_EDITING_SUPPORTED_TYPES, THUMBNAIL_SUPPORTED_TYPES } from '@/composables/use-uploader.js';
+import { getDragData, setDragData } from '@/drag-and-drop.js';
 
 describe('menu and uploader regressions', () => {
 	const originalMenuStyle = preferState.menuStyle;
@@ -95,5 +96,38 @@ describe('menu and uploader regressions', () => {
 	test('avif uploads keep thumbnails and editing menu support', () => {
 		assert.include(THUMBNAIL_SUPPORTED_TYPES, 'image/avif');
 		assert.include(IMAGE_EDITING_SUPPORTED_TYPES, 'image/avif');
+	});
+
+	test('drag data keeps uploader file objects intact after reordering', () => {
+		const data = new Map<string, string>();
+		const file = new File(['hello'], 'hello.jpg', { type: 'image/jpeg' });
+		const event = {
+			dataTransfer: {
+				setData(type: string, value: string) {
+					data.set(type, value);
+				},
+				getData(type: string) {
+					return data.get(type) ?? '';
+				},
+			},
+		} as DragEvent;
+
+		setDragData(event, 'MkDraggable', {
+			item: {
+				id: 'item-1',
+				file,
+			} as { id: string },
+			instanceId: 'instance-1',
+			group: 'group-1',
+		});
+
+		const dragged = getDragData(event, 'MkDraggable') as {
+			item: { id: string; file: File };
+			instanceId: string;
+			group: string;
+		};
+
+		assert.strictEqual(dragged.item.file, file);
+		assert.strictEqual(dragged.item.file.type, 'image/jpeg');
 	});
 });

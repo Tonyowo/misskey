@@ -12,6 +12,9 @@ type DragDataMap = {
 	MkDraggable: { item: { id: string }; instanceId: string; group: string; };
 };
 
+// Preserve non-serializable payloads like File objects during same-page drags.
+const transientDragData: Partial<{ [K in keyof DragDataMap]: DragDataMap[K] }> = {};
+
 // NOTE: dataTransfer の format は大文字小文字区別されないっぽいので toLowerCase が必要
 
 export function setDragData<T extends keyof DragDataMap>(
@@ -21,6 +24,7 @@ export function setDragData<T extends keyof DragDataMap>(
 ) {
 	if (event.dataTransfer == null) return;
 
+	transientDragData[type] = data;
 	event.dataTransfer.setData(`misskey/${type}`.toLowerCase(), JSON.stringify(data));
 }
 
@@ -38,6 +42,11 @@ export function getDragData<T extends keyof DragDataMap>(
 	type: T,
 ): DragDataMap[T] | null {
 	if (event.dataTransfer == null) return null;
+
+	const transientData = transientDragData[type];
+	if (transientData != null) {
+		return transientData as DragDataMap[T];
+	}
 
 	const data = event.dataTransfer.getData(`misskey/${type}`.toLowerCase());
 	if (data == null || data === '') return null;
