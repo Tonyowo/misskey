@@ -7,7 +7,15 @@ SPDX-License-Identifier: AGPL-3.0-only
 <div :class="[$style.root, { [$style.isMe]: isMe }]">
 	<MkAvatar :class="[$style.avatar, prefer.s.useStickyIcons ? $style.useSticky : null]" :user="message.fromUser!" :link="!isMe" :preview="false"/>
 	<div :class="[$style.body, message.file != null ? $style.fullWidth : null]" @contextmenu.stop="onContextmenu">
-		<div :class="$style.header"><MkUserName v-if="!isMe && prefer.s['chat.showSenderName'] && message.fromUser != null" :user="message.fromUser"/></div>
+		<div :class="$style.header">
+			<template v-if="showSenderHeader && message.fromUser != null">
+				<MkUserName :class="$style.senderName" :user="message.fromUser"/>
+				<MkAcct :class="$style.senderAcct" :user="message.fromUser"/>
+				<div v-if="message.fromUser.badgeRoles?.length" :class="$style.badgeRoles">
+					<img v-for="(role, i) in message.fromUser.badgeRoles" :key="i" v-tooltip="role.name" :class="$style.badgeRole" :src="role.iconUrl!" alt=""/>
+				</div>
+			</template>
+		</div>
 		<MkFukidashi :class="$style.fukidashi" :tail="isMe ? 'right' : 'left'" :fullWidth="message.file != null" :accented="isMe">
 			<Mfm
 				v-if="message.text"
@@ -73,6 +81,7 @@ import MkReactionIcon from '@/components/MkReactionIcon.vue';
 import { prefer } from '@/preferences.js';
 import { DI } from '@/di.js';
 import { getHTMLElementOrNull } from '@/utility/get-dom-node-or-null.js';
+import MkAcct from '@/components/global/MkAcct.vue';
 
 const $i = ensureSignin();
 
@@ -82,6 +91,14 @@ const props = defineProps<{
 }>();
 
 const isMe = computed(() => props.message.fromUserId === $i.id);
+const isRoomMessage = computed(() => {
+	return 'toRoomId' in props.message && props.message.toRoomId != null;
+});
+const showSenderHeader = computed(() => {
+	if (props.message.fromUser == null) return false;
+	if (isRoomMessage.value) return true;
+	return !isMe.value && prefer.s['chat.showSenderName'];
+});
 const urls = computed(() => props.message.text ? extractUrlFromMfm(mfm.parse(props.message.text)) : []);
 
 provide(DI.mfmEmojiReactCallback, (reaction) => {
@@ -271,6 +288,28 @@ function showMenu(ev: PointerEvent, contextmenu = false) {
 .header {
 	min-height: 4px; // fukidashiの位置調整も兼ねるため
 	font-size: 80%;
+	display: flex;
+	align-items: center;
+	gap: 0.5em;
+}
+
+.senderName {
+	font-weight: 700;
+}
+
+.senderAcct {
+	opacity: 0.8;
+}
+
+.badgeRoles {
+	display: flex;
+	align-items: center;
+	gap: 0.2em;
+}
+
+.badgeRole {
+	height: 1.2em;
+	vertical-align: -20%;
 }
 
 .fukidashi {
