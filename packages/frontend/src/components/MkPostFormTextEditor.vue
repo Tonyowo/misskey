@@ -81,6 +81,46 @@ const composing = ref(false);
 const focused = ref(false);
 const lastSelectionRange = ref<SelectionRange>({ start: renderedText.value.length, end: renderedText.value.length });
 let skipInputNormalizationUntilRender = false;
+const CUSTOM_EMOJI_CARET_ANCHOR = '\u200b';
+
+function stripCaretAnchors(value: string) {
+	return value.replaceAll(CUSTOM_EMOJI_CARET_ANCHOR, '');
+}
+
+function getLeadingCaretAnchorLength(value: string) {
+	let length = 0;
+	while (value[length] === CUSTOM_EMOJI_CARET_ANCHOR) {
+		length++;
+	}
+	return length;
+}
+
+function getRawTextLength(value: string, endOffset = value.length) {
+	let length = 0;
+	for (let i = 0; i < Math.min(endOffset, value.length); i++) {
+		if (value[i] !== CUSTOM_EMOJI_CARET_ANCHOR) {
+			length++;
+		}
+	}
+	return length;
+}
+
+function getDomOffsetForRawTextOffset(value: string, rawOffset: number) {
+	if (rawOffset <= 0) {
+		return getLeadingCaretAnchorLength(value);
+	}
+
+	let length = 0;
+	for (let i = 0; i < value.length; i++) {
+		if (value[i] === CUSTOM_EMOJI_CARET_ANCHOR) continue;
+		length++;
+		if (length === rawOffset) {
+			return i + 1;
+		}
+	}
+
+	return value.length;
+}
 
 function getSegments() {
 	return tokenizePostFormCustomEmojis(renderedText.value, (name) => customEmojisMap.has(name));
@@ -177,6 +217,23 @@ function createCustomEmojiNode(name: string, raw: string): HTMLSpanElement {
 	return span;
 }
 
+function createCustomEmojiCaretAnchorNode() {
+	return window.document.createTextNode(CUSTOM_EMOJI_CARET_ANCHOR);
+}
+
+function getCustomEmojiCaretAnchorPoint(node: HTMLElement): { node: Node; offset: number } | null {
+	const nextSibling = node.nextSibling;
+	if (nextSibling?.nodeType !== Node.TEXT_NODE) return null;
+
+	const text = nextSibling.textContent ?? '';
+	if (!text.startsWith(CUSTOM_EMOJI_CARET_ANCHOR)) return null;
+
+	return {
+		node: nextSibling,
+		offset: getLeadingCaretAnchorLength(text),
+	};
+}
+
 function renderEditorContent(selection: SelectionRange | null = focused.value ? lastSelectionRange.value : null) {
 	if (editorEl.value == null || composing.value) return;
 
@@ -188,6 +245,7 @@ function renderEditorContent(selection: SelectionRange | null = focused.value ? 
 		}
 
 		fragment.append(createCustomEmojiNode(segment.name, segment.value));
+		fragment.append(createCustomEmojiCaretAnchorNode());
 	}
 
 	const scrollLeft = editorEl.value.scrollLeft;
@@ -203,7 +261,7 @@ function renderEditorContent(selection: SelectionRange | null = focused.value ? 
 
 function serializeNode(node: Node): string {
 	if (node.nodeType === Node.TEXT_NODE) {
-		return node.textContent ?? '';
+		return stripCaretAnchors(node.textContent ?? '');
 	}
 
 	if (node instanceof HTMLBRElement) {
@@ -224,7 +282,7 @@ function getCurrentText(): string {
 
 function getNodeRawLength(node: Node): number {
 	if (node.nodeType === Node.TEXT_NODE) {
-		return node.textContent?.length ?? 0;
+		return getRawTextLength(node.textContent ?? '');
 	}
 
 	if (node instanceof HTMLBRElement) {
@@ -246,7 +304,7 @@ function getPointOffset(container: Node, offset: number): number {
 	const walk = (node: Node): number | null => {
 		if (node === container) {
 			if (node.nodeType === Node.TEXT_NODE) {
-				return total + Math.min(offset, node.textContent?.length ?? 0);
+				return total + getRawTextLength(node.textContent ?? '', offset);
 			}
 
 			if (node instanceof HTMLElement && node.dataset.raw != null) {
@@ -261,7 +319,7 @@ function getPointOffset(container: Node, offset: number): number {
 		}
 
 		if (node.nodeType === Node.TEXT_NODE) {
-			total += node.textContent?.length ?? 0;
+			total += getRawTextLength(node.textContent ?? '');
 			return null;
 		}
 
@@ -321,9 +379,10 @@ function getPointForOffset(targetOffset: number): { node: Node; offset: number }
 
 	const walk = (node: Node): { node: Node; offset: number } | null => {
 		if (node.nodeType === Node.TEXT_NODE) {
-			const length = node.textContent?.length ?? 0;
+			const text = node.textContent ?? '';
+			const length = getRawTextLength(text);
 			if (remaining <= length) {
-				return { node, offset: remaining };
+				return { node, offset: getDomOffsetForRawTextOffset(text, remaining) };
 			}
 			remaining -= length;
 			return null;
@@ -344,7 +403,10 @@ function getPointForOffset(targetOffset: number): { node: Node; offset: number }
 			const index = Array.from(parent.childNodes).indexOf(node);
 			const rawLength = node.dataset.raw.length;
 			if (remaining <= rawLength) {
-				return { node: parent, offset: remaining === 0 ? index : index + 1 };
+				if (remaining === 0) {
+					return { node: parent, offset: index };
+				}
+				return getCustomEmojiCaretAnchorPoint(node) ?? { node: parent, offset: index + 1 };
 			}
 			remaining -= rawLength;
 			return null;

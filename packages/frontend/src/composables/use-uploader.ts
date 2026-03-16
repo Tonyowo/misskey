@@ -24,18 +24,20 @@ export type UploaderFeatures = {
 	watermark?: boolean;
 };
 
-const THUMBNAIL_SUPPORTED_TYPES = [
+export const THUMBNAIL_SUPPORTED_TYPES = [
 	'image/jpeg',
 	'image/png',
 	'image/webp',
+	'image/avif',
 	'image/svg+xml',
 	'image/gif',
 ];
 
-const IMAGE_EDITING_SUPPORTED_TYPES = [
+export const IMAGE_EDITING_SUPPORTED_TYPES = [
 	'image/jpeg',
 	'image/png',
 	'image/webp',
+	'image/avif',
 ];
 
 const VIDEO_COMPRESSION_SUPPORTED_TYPES = [ // TODO
