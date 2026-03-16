@@ -31,6 +31,7 @@ provide('isNestingMenu', true);
 const el = useTemplateRef('el');
 const align = 'left';
 
+const VIEWPORT_MARGIN = 16;
 const SCROLLBAR_THICKNESS = 16;
 
 function setPosition() {
@@ -46,6 +47,15 @@ function setPosition() {
 	}
 	if (rootRect.top + top + myRect.height >= (window.innerHeight - SCROLLBAR_THICKNESS)) {
 		top = top - ((rootRect.top + top + myRect.height) - (window.innerHeight - SCROLLBAR_THICKNESS));
+	}
+	if (rootRect.left + left < VIEWPORT_MARGIN) {
+		left += VIEWPORT_MARGIN - (rootRect.left + left);
+	}
+	if (rootRect.left + left + myRect.width > (window.innerWidth - SCROLLBAR_THICKNESS - VIEWPORT_MARGIN)) {
+		left -= (rootRect.left + left + myRect.width) - (window.innerWidth - SCROLLBAR_THICKNESS - VIEWPORT_MARGIN);
+	}
+	if (rootRect.top + top < VIEWPORT_MARGIN) {
+		top += VIEWPORT_MARGIN - (rootRect.top + top);
 	}
 	el.value.style.left = left + 'px';
 	el.value.style.top = top + 'px';
@@ -63,7 +73,7 @@ watch(() => props.anchorElement, () => {
 	setPosition();
 });
 
-const ro = new ResizeObserver((entries, observer) => {
+const ro = new ResizeObserver(() => {
 	setPosition();
 });
 

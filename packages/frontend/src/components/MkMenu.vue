@@ -294,7 +294,7 @@ watch(() => props.items, () => {
 const childMenu = ref<MenuItem[] | null>();
 const childTarget = shallowRef<HTMLElement>();
 
-async function openDrawerChildMenu(items: MenuItem[]) {
+async function openStackedChildMenu(items: MenuItem[]) {
 	emit('hide');
 	await nextTick();
 	await os.popupMenu(items, null);
@@ -346,8 +346,8 @@ async function showRadioOptions(item: MenuRadio, ev: MouseEvent | PointerEvent |
 		};
 	});
 
-	if (props.asDrawer) {
-		await openDrawerChildMenu(children);
+	if (preferClick) {
+		await openStackedChildMenu(children);
 	} else {
 		childTarget.value = (ev.currentTarget ?? ev.target) as HTMLElement;
 		childMenu.value = children;
@@ -372,8 +372,8 @@ async function showChildren(item: MenuParent, ev: MouseEvent | PointerEvent | Ke
 
 	childrenCache.set(item, children);
 
-	if (props.asDrawer) {
-		await openDrawerChildMenu(children);
+	if (preferClick) {
+		await openStackedChildMenu(children);
 	} else {
 		childTarget.value = (ev.currentTarget ?? ev.target) as HTMLElement;
 		// これでもリアクティビティは保たれる
