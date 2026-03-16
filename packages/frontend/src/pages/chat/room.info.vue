@@ -14,23 +14,23 @@ SPDX-License-Identifier: AGPL-3.0-only
 	</MkTextarea>
 
 	<MkSelect v-model="joinPolicy_" :disabled="!isOwner" :items="joinPolicyItems">
-		<template #label>Join policy</template>
+		<template #label>加入方式</template>
 	</MkSelect>
 
 	<MkSelect v-model="discoverability_" :disabled="!isOwner" :items="discoverabilityItems">
-		<template #label>Discoverability</template>
+		<template #label>可发现性</template>
 	</MkSelect>
 
 	<MkInput v-model="maxMembers_" type="number" :disabled="!isOwner">
-		<template #label>Max members</template>
+		<template #label>成员上限</template>
 	</MkInput>
 
 	<MkSwitch v-model="memberCanInvite_" :disabled="!isOwner">
-		<template #label>Allow members to invite</template>
+		<template #label>允许成员邀请他人</template>
 	</MkSwitch>
 
 	<MkSwitch v-model="allowJoinRequest_" :disabled="!isOwner">
-		<template #label>Allow join requests</template>
+		<template #label>允许提交入群申请</template>
 	</MkSwitch>
 
 	<MkButton v-if="isOwner" primary @click="save">{{ i18n.ts.save }}</MkButton>
@@ -83,24 +83,24 @@ let syncingRoomState = false;
 
 const joinPolicyItems: MkSelectItem<string>[] = [{
 	value: 'invite_only',
-	label: 'Invite only',
+	label: '仅邀请',
 }, {
 	value: 'request_required',
-	label: 'Request required',
+	label: '需申请审核',
 }, {
 	value: 'public',
-	label: 'Public',
+	label: '公开可加入',
 }];
 
 const discoverabilityItems: MkSelectItem<string>[] = [{
 	value: 'private',
-	label: 'Private',
+	label: '私密',
 }, {
 	value: 'unlisted',
-	label: 'Unlisted',
+	label: '不公开（仅链接可见）',
 }, {
 	value: 'public',
-	label: 'Public',
+	label: '公开可发现',
 }];
 
 watch(() => props.room, (room) => {

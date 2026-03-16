@@ -18,7 +18,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 			<MkUserCardMini :user="membership.user!"/>
 		</MkA>
 
-		<div :class="$style.badge">{{ membership.role }}</div>
+		<div :class="$style.badge">{{ membership.role === 'admin' ? '管理员' : '成员' }}</div>
 
 		<div v-if="canManageMembers" :class="$style.memberActions">
 			<MkButton
@@ -26,19 +26,19 @@ SPDX-License-Identifier: AGPL-3.0-only
 				rounded
 				small
 				@click="addAdmin(membership)"
-			><i class="ti ti-shield-check"></i> admin</MkButton>
+			><i class="ti ti-shield-check"></i> 设为管理员</MkButton>
 			<MkButton
 				v-if="canManageAdmins && membership.role === 'admin'"
 				rounded
 				small
 				@click="removeAdmin(membership)"
-			><i class="ti ti-shield-x"></i> member</MkButton>
+			><i class="ti ti-shield-x"></i> 取消管理员</MkButton>
 			<MkButton
 				v-if="canManageAdmins"
 				rounded
 				small
 				@click="transferOwner(membership)"
-			><i class="ti ti-crown"></i> owner</MkButton>
+			><i class="ti ti-crown"></i> 转让群主</MkButton>
 			<MkButton rounded small danger @click="kickMember(membership)"><i class="ti ti-user-minus"></i> {{ i18n.ts.remove }}</MkButton>
 			<MkButton rounded small danger @click="banMember(membership)"><i class="ti ti-ban"></i> {{ i18n.ts.block }}</MkButton>
 		</div>
@@ -87,9 +87,6 @@ import * as os from '@/os.js';
 import { misskeyApi } from '@/utility/misskey-api.js';
 import MkUserCardMini from '@/components/MkUserCardMini.vue';
 import { userPage } from '@/filters/user.js';
-import { ensureSignin } from '@/i.js';
-
-const $i = ensureSignin();
 
 const props = defineProps<{
 	room: Misskey.entities.ChatRoom;
@@ -99,7 +96,6 @@ const emit = defineEmits<{
 	(ev: 'inviteUser'): void,
 }>();
 
-const myRole = computed(() => props.room.myRole ?? null);
 const canInvite = computed(() => props.room.canInvite ?? false);
 const canManageMembers = computed(() => props.room.canManageMembers ?? false);
 const canManageAdmins = computed(() => props.room.canManageAdmins ?? false);

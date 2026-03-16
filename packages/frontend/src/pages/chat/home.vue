@@ -41,7 +41,7 @@ const headerTabs = computed(() => [{
 	icon: 'ti ti-ticket',
 }, {
 	key: 'requests',
-	title: 'My Requests',
+	title: '我的申请',
 	icon: 'ti ti-clock-hour-4',
 }, {
 	key: 'joiningRooms',
