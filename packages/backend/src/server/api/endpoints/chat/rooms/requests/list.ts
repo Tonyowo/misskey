@@ -33,6 +33,11 @@ export const meta = {
 			code: 'NO_SUCH_ROOM',
 			id: '4d511f40-bf8f-4df4-8338-1b4e29a776fe',
 		},
+		forbidden: {
+			message: 'You are not allowed to view requests for this room.',
+			code: 'FORBIDDEN',
+			id: '15311138-f09f-4f28-8f01-ea6077ec8de4',
+		},
 	},
 } as const;
 
@@ -62,9 +67,12 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 
 			await this.chatService.checkChatAvailability(me.id, 'read');
 
-			const room = await this.chatService.findMyRoomById(me.id, ps.roomId);
+			const room = await this.chatService.findRoomById(ps.roomId);
 			if (room == null) {
 				throw new ApiError(meta.errors.noSuchRoom);
+			}
+			if (!await this.chatService.isRoomAdmin(room, me.id)) {
+				throw new ApiError(meta.errors.forbidden);
 			}
 
 			const requests = await this.chatService.getRoomJoinRequestsWithPagination(room.id, ps.limit, sinceId, untilId);

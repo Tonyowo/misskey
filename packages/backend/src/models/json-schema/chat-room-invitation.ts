@@ -33,5 +33,23 @@ export const packedChatRoomInvitationSchema = {
 			optional: false, nullable: false,
 			ref: 'ChatRoom',
 		},
+		createdById: {
+			type: 'string',
+			optional: false, nullable: false,
+		},
+		expiresAt: {
+			type: 'string',
+			format: 'date-time',
+			optional: false, nullable: true,
+		},
+		revokedAt: {
+			type: 'string',
+			format: 'date-time',
+			optional: false, nullable: true,
+		},
+		ignored: {
+			type: 'boolean',
+			optional: false, nullable: false,
+		},
 	},
 } as const;

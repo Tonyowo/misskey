@@ -80,6 +80,7 @@ import {
 	MiUserSecurityKey,
 	MiWebhook,
 	MiChatMessage,
+	MiChatRoomBan,
 	MiChatRoom,
 	MiChatRoomMembership,
 	MiChatRoomInvitation,
@@ -509,6 +510,12 @@ const $chatMessagesRepository: Provider = {
 	inject: [DI.db],
 };
 
+const $chatRoomBansRepository: Provider = {
+	provide: DI.chatRoomBansRepository,
+	useFactory: (db: DataSource) => db.getRepository(MiChatRoomBan).extend(miRepository as MiRepository<MiChatRoomBan>),
+	inject: [DI.db],
+};
+
 const $chatRoomsRepository: Provider = {
 	provide: DI.chatRoomsRepository,
 	useFactory: (db: DataSource) => db.getRepository(MiChatRoom).extend(miRepository as MiRepository<MiChatRoom>),
@@ -624,6 +631,7 @@ const $reversiGamesRepository: Provider = {
 		$flashLikesRepository,
 		$userMemosRepository,
 		$chatMessagesRepository,
+		$chatRoomBansRepository,
 		$chatRoomsRepository,
 		$chatRoomMembershipsRepository,
 		$chatRoomInvitationsRepository,
@@ -703,6 +711,7 @@ const $reversiGamesRepository: Provider = {
 		$flashLikesRepository,
 		$userMemosRepository,
 		$chatMessagesRepository,
+		$chatRoomBansRepository,
 		$chatRoomsRepository,
 		$chatRoomMembershipsRepository,
 		$chatRoomInvitationsRepository,

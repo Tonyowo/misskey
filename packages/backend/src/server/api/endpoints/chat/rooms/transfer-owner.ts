@@ -8,6 +8,7 @@ import { EntityNotFoundError } from 'typeorm';
 import { Endpoint } from '@/server/api/endpoint-base.js';
 import { ChatService } from '@/core/ChatService.js';
 import { ApiError } from '@/server/api/error.js';
+import { ChatEntityService } from '@/core/entities/ChatEntityService.js';
 
 export const meta = {
 	tags: ['chat'],
@@ -16,21 +17,22 @@ export const meta = {
 
 	kind: 'write:chat',
 
+	res: {
+		type: 'object',
+		optional: false, nullable: false,
+		ref: 'ChatRoom',
+	},
+
 	errors: {
+		noSuchMembership: {
+			message: 'Target user must be a room member.',
+			code: 'NO_SUCH_MEMBERSHIP',
+			id: '5a0b2655-a194-46ee-bb84-56f7cc8448ea',
+		},
 		noSuchRoom: {
 			message: 'No such room.',
 			code: 'NO_SUCH_ROOM',
-			id: 'c9056df2-0a2f-4ac3-a2bf-bc0dbb3cd030',
-		},
-		noSuchRequest: {
-			message: 'No such room join request.',
-			code: 'NO_SUCH_REQUEST',
-			id: '449b1ef0-e0af-4ca3-b162-bd9bb7d5c5b8',
-		},
-		forbidden: {
-			message: 'You are not allowed to reject requests for this room.',
-			code: 'FORBIDDEN',
-			id: '5f03fd53-4fa9-4523-82d9-c6c248c34786',
+			id: 'a459f7b5-c6cf-4d65-a1e8-9f6b3ca9f0ca',
 		},
 	},
 } as const;
@@ -48,25 +50,22 @@ export const paramDef = {
 export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-disable-line import/no-default-export
 	constructor(
 		private chatService: ChatService,
+		private chatEntityService: ChatEntityService,
 	) {
 		super(meta, paramDef, async (ps, me) => {
 			await this.chatService.checkChatAvailability(me.id, 'write');
-
-			const room = await this.chatService.findRoomById(ps.roomId);
-			if (room == null) {
+			const currentRoom = await this.chatService.findMyRoomById(me.id, ps.roomId);
+			if (currentRoom == null) {
 				throw new ApiError(meta.errors.noSuchRoom);
 			}
 
 			try {
-				await this.chatService.rejectRoomJoinRequest(me.id, room.id, ps.userId);
+				const room = await this.chatService.transferRoomOwner(me.id, ps.roomId, ps.userId);
+				return await this.chatEntityService.packRoom(room, me);
 			} catch (err) {
 				if (err instanceof EntityNotFoundError) {
-					throw new ApiError(meta.errors.noSuchRequest);
+					throw new ApiError(meta.errors.noSuchMembership);
 				}
-				if (err instanceof Error && err.message === 'forbidden') {
-					throw new ApiError(meta.errors.forbidden);
-				}
-
 				throw err;
 			}
 		});

@@ -4,7 +4,6 @@
  */
 
 import { Injectable } from '@nestjs/common';
-import { EntityNotFoundError } from 'typeorm';
 import { Endpoint } from '@/server/api/endpoint-base.js';
 import { ChatService } from '@/core/ChatService.js';
 import { ApiError } from '@/server/api/error.js';
@@ -17,20 +16,15 @@ export const meta = {
 	kind: 'write:chat',
 
 	errors: {
-		noSuchRoom: {
-			message: 'No such room.',
-			code: 'NO_SUCH_ROOM',
-			id: 'c9056df2-0a2f-4ac3-a2bf-bc0dbb3cd030',
-		},
-		noSuchRequest: {
-			message: 'No such room join request.',
-			code: 'NO_SUCH_REQUEST',
-			id: '449b1ef0-e0af-4ca3-b162-bd9bb7d5c5b8',
-		},
 		forbidden: {
-			message: 'You are not allowed to reject requests for this room.',
+			message: 'You are not allowed to ban this user.',
 			code: 'FORBIDDEN',
-			id: '5f03fd53-4fa9-4523-82d9-c6c248c34786',
+			id: 'f981c06e-4690-4af5-afef-d0f6280e17a9',
+		},
+		cannotBanOwner: {
+			message: 'Owner cannot be banned.',
+			code: 'CANNOT_BAN_OWNER',
+			id: '52de8901-c4cb-4ca0-9619-a9ca14f17ec1',
 		},
 	},
 } as const;
@@ -40,6 +34,8 @@ export const paramDef = {
 	properties: {
 		roomId: { type: 'string', format: 'misskey:id' },
 		userId: { type: 'string', format: 'misskey:id' },
+		reason: { type: 'string', maxLength: 1024, nullable: true },
+		expiresAt: { type: 'integer', nullable: true },
 	},
 	required: ['roomId', 'userId'],
 } as const;
@@ -51,22 +47,17 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 	) {
 		super(meta, paramDef, async (ps, me) => {
 			await this.chatService.checkChatAvailability(me.id, 'write');
-
-			const room = await this.chatService.findRoomById(ps.roomId);
-			if (room == null) {
-				throw new ApiError(meta.errors.noSuchRoom);
-			}
-
 			try {
-				await this.chatService.rejectRoomJoinRequest(me.id, room.id, ps.userId);
+				await this.chatService.banRoomMember(me.id, ps.roomId, ps.userId, ps.reason ?? null, ps.expiresAt ? new Date(ps.expiresAt) : null);
 			} catch (err) {
-				if (err instanceof EntityNotFoundError) {
-					throw new ApiError(meta.errors.noSuchRequest);
+				if (err instanceof Error) {
+					switch (err.message) {
+						case 'forbidden':
+							throw new ApiError(meta.errors.forbidden);
+						case 'cannot ban owner':
+							throw new ApiError(meta.errors.cannotBanOwner);
+					}
 				}
-				if (err instanceof Error && err.message === 'forbidden') {
-					throw new ApiError(meta.errors.forbidden);
-				}
-
 				throw err;
 			}
 		});

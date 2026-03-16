@@ -7,6 +7,12 @@ import { PrimaryColumn, Entity, Index, JoinColumn, Column, ManyToOne } from 'typ
 import { id } from './util/id.js';
 import { MiUser } from './User.js';
 
+export const chatRoomJoinPolicies = ['invite_only', 'request_required', 'public'] as const;
+export type ChatRoomJoinPolicy = typeof chatRoomJoinPolicies[number];
+
+export const chatRoomDiscoverabilities = ['private', 'unlisted', 'public'] as const;
+export type ChatRoomDiscoverability = typeof chatRoomDiscoverabilities[number];
+
 @Entity('chat_room')
 export class MiChatRoom {
 	@PrimaryColumn(id())
@@ -33,6 +39,40 @@ export class MiChatRoom {
 		length: 2048, default: '',
 	})
 	public description: string;
+
+	@Column('varchar', {
+		length: 16,
+		default: 'invite_only',
+	})
+	public joinPolicy: ChatRoomJoinPolicy;
+
+	@Column('varchar', {
+		length: 16,
+		default: 'private',
+	})
+	public discoverability: ChatRoomDiscoverability;
+
+	@Column('varchar', {
+		...id(),
+		nullable: true,
+		default: null,
+	})
+	public avatarFileId: string | null;
+
+	@Column('boolean', {
+		default: false,
+	})
+	public memberCanInvite: boolean;
+
+	@Column('boolean', {
+		default: true,
+	})
+	public allowJoinRequest: boolean;
+
+	@Column('integer', {
+		default: 50,
+	})
+	public maxMembers: number;
 
 	@Column('boolean', {
 		default: false,

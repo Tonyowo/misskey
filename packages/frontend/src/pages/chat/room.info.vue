@@ -13,6 +13,26 @@ SPDX-License-Identifier: AGPL-3.0-only
 		<template #label>{{ i18n.ts.description }}</template>
 	</MkTextarea>
 
+	<MkSelect v-model="joinPolicy_" :disabled="!isOwner" :items="joinPolicyItems">
+		<template #label>Join policy</template>
+	</MkSelect>
+
+	<MkSelect v-model="discoverability_" :disabled="!isOwner" :items="discoverabilityItems">
+		<template #label>Discoverability</template>
+	</MkSelect>
+
+	<MkInput v-model="maxMembers_" type="number" :disabled="!isOwner">
+		<template #label>Max members</template>
+	</MkInput>
+
+	<MkSwitch v-model="memberCanInvite_" :disabled="!isOwner">
+		<template #label>Allow members to invite</template>
+	</MkSwitch>
+
+	<MkSwitch v-model="allowJoinRequest_" :disabled="!isOwner">
+		<template #label>Allow join requests</template>
+	</MkSwitch>
+
 	<MkButton v-if="isOwner" primary @click="save">{{ i18n.ts.save }}</MkButton>
 
 	<hr>
@@ -35,6 +55,8 @@ import { ensureSignin } from '@/i.js';
 import MkInput from '@/components/MkInput.vue';
 import MkTextarea from '@/components/MkTextarea.vue';
 import MkSwitch from '@/components/MkSwitch.vue';
+import MkSelect from '@/components/MkSelect.vue';
+import type { MkSelectItem } from '@/components/MkSelect.vue';
 import { useRouter } from '@/router.js';
 
 const router = useRouter();
@@ -51,13 +73,45 @@ const isJoined = computed(() => props.room.isJoined ?? false);
 
 const name_ = ref('');
 const description_ = ref('');
+const joinPolicy_ = ref<Misskey.entities.ChatRoom['joinPolicy']>('invite_only');
+const discoverability_ = ref<Misskey.entities.ChatRoom['discoverability']>('private');
+const maxMembers_ = ref(50);
+const memberCanInvite_ = ref(false);
+const allowJoinRequest_ = ref(true);
 const isMuted = ref(false);
 let syncingRoomState = false;
+
+const joinPolicyItems: MkSelectItem<string>[] = [{
+	value: 'invite_only',
+	label: 'Invite only',
+}, {
+	value: 'request_required',
+	label: 'Request required',
+}, {
+	value: 'public',
+	label: 'Public',
+}];
+
+const discoverabilityItems: MkSelectItem<string>[] = [{
+	value: 'private',
+	label: 'Private',
+}, {
+	value: 'unlisted',
+	label: 'Unlisted',
+}, {
+	value: 'public',
+	label: 'Public',
+}];
 
 watch(() => props.room, (room) => {
 	syncingRoomState = true;
 	name_.value = room.name;
 	description_.value = room.description;
+	joinPolicy_.value = room.joinPolicy;
+	discoverability_.value = room.discoverability;
+	maxMembers_.value = room.maxMembers;
+	memberCanInvite_.value = room.memberCanInvite;
+	allowJoinRequest_.value = room.allowJoinRequest;
 	isMuted.value = room.isMuted ?? false;
 	syncingRoomState = false;
 }, {
@@ -65,10 +119,15 @@ watch(() => props.room, (room) => {
 });
 
 function save() {
-	os.apiWithDialog('chat/rooms/update', {
+	os.apiWithDialog('chat/rooms/update-settings', {
 		roomId: props.room.id,
 		name: name_.value,
 		description: description_.value,
+		joinPolicy: joinPolicy_.value,
+		discoverability: discoverability_.value,
+		memberCanInvite: memberCanInvite_.value,
+		allowJoinRequest: allowJoinRequest_.value,
+		maxMembers: maxMembers_.value,
 	});
 }
 

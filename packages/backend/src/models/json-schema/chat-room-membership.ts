@@ -33,5 +33,10 @@ export const packedChatRoomMembershipSchema = {
 			optional: true, nullable: false,
 			ref: 'ChatRoom',
 		},
+		role: {
+			type: 'string',
+			optional: false, nullable: false,
+			enum: ['member', 'admin'],
+		},
 	},
 } as const;

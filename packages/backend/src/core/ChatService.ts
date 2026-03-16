@@ -5,7 +5,7 @@
 
 import { Inject, Injectable } from '@nestjs/common';
 import * as Redis from 'ioredis';
-import { Brackets } from 'typeorm';
+import { Brackets, IsNull, MoreThan } from 'typeorm';
 import { DI } from '@/di-symbols.js';
 import type { Config } from '@/config.js';
 import { QueueService } from '@/core/QueueService.js';
@@ -16,13 +16,15 @@ import { ChatEntityService } from '@/core/entities/ChatEntityService.js';
 import { ApRendererService } from '@/core/activitypub/ApRendererService.js';
 import { PushNotificationService } from '@/core/PushNotificationService.js';
 import { bindThis } from '@/decorators.js';
-import type { ChatApprovalsRepository, ChatMessagesRepository, ChatRoomInvitationsRepository, ChatRoomJoinRequestsRepository, ChatRoomMembershipsRepository, ChatRoomsRepository, MiChatMessage, MiChatRoom, MiChatRoomMembership, MiDriveFile, MiUser, MutingsRepository, UsersRepository } from '@/models/_.js';
+import type { ChatApprovalsRepository, ChatMessagesRepository, ChatRoomBansRepository, ChatRoomInvitationsRepository, ChatRoomJoinRequestsRepository, ChatRoomMembershipsRepository, ChatRoomsRepository, MiChatMessage, MiChatRoom, MiChatRoomMembership, MiDriveFile, MiUser, MutingsRepository, UsersRepository } from '@/models/_.js';
 import { UserBlockingService } from '@/core/UserBlockingService.js';
 import { QueryService } from '@/core/QueryService.js';
 import { RoleService } from '@/core/RoleService.js';
 import { UserFollowingService } from '@/core/UserFollowingService.js';
 import { MiChatRoomInvitation } from '@/models/ChatRoomInvitation.js';
 import { MiChatRoomJoinRequest } from '@/models/ChatRoomJoinRequest.js';
+import type { ChatRoomDiscoverability, ChatRoomJoinPolicy } from '@/models/ChatRoom.js';
+import type { ChatRoomMembershipRole } from '@/models/ChatRoomMembership.js';
 import { Packed } from '@/misc/json-schema.js';
 import { sqlLikeEscape } from '@/misc/sql-like-escape.js';
 import { CustomEmojiService } from '@/core/CustomEmojiService.js';
@@ -30,7 +32,8 @@ import { emojiRegex } from '@/misc/emoji-regex.js';
 import { NotificationService } from '@/core/NotificationService.js';
 import { ModerationLogService } from '@/core/ModerationLogService.js';
 
-const MAX_ROOM_MEMBERS = 50;
+const DEFAULT_ROOM_MAX_MEMBERS = 50;
+const DEFAULT_INVITATION_EXPIRATION_MS = 1000 * 60 * 60 * 24 * 7;
 const MAX_REACTIONS_PER_MESSAGE = 100;
 const isCustomEmojiRegexp = /^:([\w+-]+)(?:@\.)?:$/;
 
@@ -71,6 +74,9 @@ export class ChatService {
 
 		@Inject(DI.chatRoomInvitationsRepository)
 		private chatRoomInvitationsRepository: ChatRoomInvitationsRepository,
+
+		@Inject(DI.chatRoomBansRepository)
+		private chatRoomBansRepository: ChatRoomBansRepository,
 
 		@Inject(DI.chatRoomJoinRequestsRepository)
 		private chatRoomJoinRequestsRepository: ChatRoomJoinRequestsRepository,
@@ -563,12 +569,29 @@ export class ChatService {
 	public async createRoom(owner: MiUser, params: Partial<{
 		name: string;
 		description: string;
+		joinPolicy: ChatRoomJoinPolicy;
+		discoverability: ChatRoomDiscoverability;
+		avatarFileId: string | null;
+		memberCanInvite: boolean;
+		allowJoinRequest: boolean;
+		maxMembers: number;
 	}>) {
+		this.ensureValidRoomSettingCombination({
+			joinPolicy: params.joinPolicy ?? 'invite_only',
+			discoverability: params.discoverability ?? 'private',
+		});
+
 		const room = {
 			id: this.idService.gen(),
 			name: params.name,
 			description: params.description,
 			ownerId: owner.id,
+			joinPolicy: params.joinPolicy ?? 'invite_only',
+			discoverability: params.discoverability ?? 'private',
+			avatarFileId: params.avatarFileId ?? null,
+			memberCanInvite: params.memberCanInvite ?? false,
+			allowJoinRequest: params.allowJoinRequest ?? true,
+			maxMembers: params.maxMembers ?? DEFAULT_ROOM_MAX_MEMBERS,
 		} satisfies Partial<MiChatRoom>;
 
 		const created = await this.chatRoomsRepository.insertOne(room);
@@ -637,21 +660,76 @@ export class ChatService {
 		return membership != null;
 	}
 
-	private async addUserToRoom(roomId: MiChatRoom['id'], userId: MiUser['id']) {
+	@bindThis
+	public async getRoomActorRole(room: MiChatRoom, userId: MiUser['id']): Promise<'owner' | ChatRoomMembershipRole | null> {
+		if (room.ownerId === userId) return 'owner';
+		const membership = await this.chatRoomMembershipsRepository.findOneBy({ roomId: room.id, userId });
+		return membership?.role ?? null;
+	}
+
+	@bindThis
+	public async isRoomAdmin(room: MiChatRoom, userId: MiUser['id']): Promise<boolean> {
+		const role = await this.getRoomActorRole(room, userId);
+		return role === 'owner' || role === 'admin';
+	}
+
+	@bindThis
+	public async canInviteToRoom(room: MiChatRoom, userId: MiUser['id']): Promise<boolean> {
+		const role = await this.getRoomActorRole(room, userId);
+		if (role === 'owner' || role === 'admin') {
+			return true;
+		}
+		return role === 'member' && room.memberCanInvite;
+	}
+
+	@bindThis
+	public async isRoomBanned(roomId: MiChatRoom['id'], userId: MiUser['id']): Promise<boolean> {
+		const now = new Date();
+		const activeBan = await this.chatRoomBansRepository.findOne({
+			where: [
+				{ roomId, userId, expiresAt: IsNull() },
+				{ roomId, userId, expiresAt: MoreThan(now) },
+			],
+		});
+		return activeBan != null;
+	}
+
+	private async addUserToRoom(roomId: MiChatRoom['id'], userId: MiUser['id'], role: ChatRoomMembershipRole = 'member') {
 		const membership = {
 			id: this.idService.gen(),
 			roomId,
 			userId,
+			role,
 		} satisfies Partial<MiChatRoomMembership>;
 
 		return await this.chatRoomMembershipsRepository.insertOne(membership);
 	}
 
-	private async ensureRoomHasSpace(roomId: MiChatRoom['id']) {
-		const membershipsCount = await this.chatRoomMembershipsRepository.countBy({ roomId });
-		if (membershipsCount >= MAX_ROOM_MEMBERS) {
+	private async ensureRoomHasSpace(room: MiChatRoom) {
+		const membershipsCount = await this.chatRoomMembershipsRepository.countBy({ roomId: room.id });
+		const activeMembers = membershipsCount + 1;
+		if (activeMembers >= room.maxMembers) {
 			throw new Error('room is full');
 		}
+	}
+
+	private ensureValidRoomSettingCombination(params: {
+		joinPolicy: ChatRoomJoinPolicy;
+		discoverability: ChatRoomDiscoverability;
+	}) {
+		if (params.joinPolicy === 'public' && params.discoverability === 'private') {
+			throw new Error('invalid discoverability');
+		}
+	}
+
+	private async findActiveRoomInvitation(roomId: MiChatRoom['id'], userId: MiUser['id']) {
+		const now = new Date();
+		return await this.chatRoomInvitationsRepository.findOne({
+			where: [
+				{ roomId, userId, ignored: false, revokedAt: IsNull(), expiresAt: IsNull() },
+				{ roomId, userId, ignored: false, revokedAt: IsNull(), expiresAt: MoreThan(now) },
+			],
+		});
 	}
 
 	@bindThis
@@ -660,18 +738,25 @@ export class ChatService {
 			throw new Error('yourself');
 		}
 
-		const room = await this.chatRoomsRepository.findOneByOrFail({ id: roomId, ownerId: inviterId });
+		const room = await this.chatRoomsRepository.findOneByOrFail({ id: roomId });
+		if (!(await this.canInviteToRoom(room, inviterId))) {
+			throw new Error('forbidden');
+		}
+
+		if (await this.isRoomBanned(room.id, inviteeId)) {
+			throw new Error('banned');
+		}
 
 		if (await this.isRoomMember(room, inviteeId)) {
 			throw new Error('already member');
 		}
 
-		const existingInvitation = await this.chatRoomInvitationsRepository.findOneBy({ roomId, userId: inviteeId });
+		const existingInvitation = await this.findActiveRoomInvitation(roomId, inviteeId);
 		if (existingInvitation) {
 			throw new Error('already invited');
 		}
 
-		await this.ensureRoomHasSpace(roomId);
+		await this.ensureRoomHasSpace(room);
 
 		// TODO: cehck block
 
@@ -679,6 +764,8 @@ export class ChatService {
 			id: this.idService.gen(),
 			roomId: room.id,
 			userId: inviteeId,
+			createdById: inviterId,
+			expiresAt: new Date(Date.now() + DEFAULT_INVITATION_EXPIRATION_MS),
 		} satisfies Partial<MiChatRoomInvitation>;
 
 		const created = await this.chatRoomInvitationsRepository.insertOne(invitation);
@@ -694,7 +781,12 @@ export class ChatService {
 	@bindThis
 	public async getSentRoomInvitationsWithPagination(roomId: MiChatRoom['id'], limit: number, sinceId?: MiChatRoomInvitation['id'] | null, untilId?: MiChatRoomInvitation['id'] | null) {
 		const query = this.queryService.makePaginationQuery(this.chatRoomInvitationsRepository.createQueryBuilder('invitation'), sinceId, untilId)
-			.andWhere('invitation.roomId = :roomId', { roomId });
+			.andWhere('invitation.roomId = :roomId', { roomId })
+			.andWhere('invitation.revokedAt IS NULL')
+			.andWhere(new Brackets((qb) => {
+				qb.where('invitation.expiresAt IS NULL')
+					.orWhere('invitation.expiresAt > :now', { now: new Date() });
+			}));
 
 		const invitations = await query.take(limit).getMany();
 
@@ -715,7 +807,12 @@ export class ChatService {
 	public async getReceivedRoomInvitationsWithPagination(userId: MiUser['id'], limit: number, sinceId?: MiChatRoomInvitation['id'] | null, untilId?: MiChatRoomInvitation['id'] | null) {
 		const query = this.queryService.makePaginationQuery(this.chatRoomInvitationsRepository.createQueryBuilder('invitation'), sinceId, untilId)
 			.andWhere('invitation.userId = :userId', { userId })
-			.andWhere('invitation.ignored = FALSE');
+			.andWhere('invitation.ignored = FALSE')
+			.andWhere('invitation.revokedAt IS NULL')
+			.andWhere(new Brackets((qb) => {
+				qb.where('invitation.expiresAt IS NULL')
+					.orWhere('invitation.expiresAt > :now', { now: new Date() });
+			}));
 
 		const invitations = await query.take(limit).getMany();
 
@@ -723,18 +820,26 @@ export class ChatService {
 	}
 
 	@bindThis
-	public async createRoomJoinRequest(requesterId: MiUser['id'], roomId: MiChatRoom['id']) {
+	public async createRoomJoinRequest(requesterId: MiUser['id'], roomId: MiChatRoom['id'], message?: string | null) {
 		const room = await this.chatRoomsRepository.findOneByOrFail({ id: roomId });
 
 		if (room.ownerId === requesterId) {
 			throw new Error('yourself');
 		}
 
+		if (await this.isRoomBanned(room.id, requesterId)) {
+			throw new Error('banned');
+		}
+
+		if (!room.allowJoinRequest || room.joinPolicy === 'invite_only') {
+			throw new Error('request disabled');
+		}
+
 		if (await this.isRoomMember(room, requesterId)) {
 			throw new Error('already member');
 		}
 
-		const existingInvitation = await this.chatRoomInvitationsRepository.findOneBy({ roomId, userId: requesterId });
+		const existingInvitation = await this.findActiveRoomInvitation(roomId, requesterId);
 		if (existingInvitation) {
 			throw new Error('already invited');
 		}
@@ -748,6 +853,7 @@ export class ChatService {
 			id: this.idService.gen(),
 			roomId: room.id,
 			userId: requesterId,
+			message: message?.trim() || null,
 		} satisfies Partial<MiChatRoomJoinRequest>;
 
 		return await this.chatRoomJoinRequestsRepository.insertOne(request);
@@ -770,38 +876,104 @@ export class ChatService {
 	}
 
 	@bindThis
-	public async approveRoomJoinRequest(ownerId: MiUser['id'], roomId: MiChatRoom['id'], userId: MiUser['id']) {
-		await this.chatRoomsRepository.findOneByOrFail({ id: roomId, ownerId });
-		const request = await this.chatRoomJoinRequestsRepository.findOneByOrFail({ roomId, userId });
+	public async getMyRoomJoinRequestsWithPagination(userId: MiUser['id'], limit: number, sinceId?: MiChatRoomJoinRequest['id'] | null, untilId?: MiChatRoomJoinRequest['id'] | null) {
+		const query = this.queryService.makePaginationQuery(this.chatRoomJoinRequestsRepository.createQueryBuilder('request'), sinceId, untilId)
+			.andWhere('request.userId = :userId', { userId });
 
-		await this.ensureRoomHasSpace(roomId);
+		const requests = await query.take(limit).getMany();
 
-		const membership = await this.addUserToRoom(roomId, userId);
-
-		// TODO: transaction
-		await this.chatRoomJoinRequestsRepository.delete(request.id);
-		await this.chatRoomInvitationsRepository.delete({ roomId, userId });
-
-		return membership;
+		return requests;
 	}
 
 	@bindThis
-	public async rejectRoomJoinRequest(ownerId: MiUser['id'], roomId: MiChatRoom['id'], userId: MiUser['id']) {
-		await this.chatRoomsRepository.findOneByOrFail({ id: roomId, ownerId });
+	public async getPendingRoomJoinRequestCount(actorId: MiUser['id'], roomId?: MiChatRoom['id']) {
+		const qb = this.chatRoomJoinRequestsRepository.createQueryBuilder('request')
+			.innerJoin('chat_room', 'room', 'room.id = request.roomId')
+			.leftJoin('chat_room_membership', 'membership', 'membership.roomId = room.id AND membership.userId = :actorId', { actorId })
+			.where(new Brackets((inner) => {
+				inner.where('room.ownerId = :actorId')
+					.orWhere('membership.role = :adminRole', { adminRole: 'admin' });
+			}));
+
+		if (roomId) {
+			qb.andWhere('request.roomId = :roomId', { roomId });
+		}
+
+		return await qb.getCount();
+	}
+
+	@bindThis
+	public async approveRoomJoinRequest(actorId: MiUser['id'], roomId: MiChatRoom['id'], userId: MiUser['id']) {
+		const room = await this.chatRoomsRepository.findOneByOrFail({ id: roomId });
+		if (!(await this.isRoomAdmin(room, actorId))) {
+			throw new Error('forbidden');
+		}
+
+		const request = await this.chatRoomJoinRequestsRepository.findOneByOrFail({ roomId, userId });
+
+		if (await this.isRoomBanned(room.id, userId)) {
+			throw new Error('banned');
+		}
+
+		await this.ensureRoomHasSpace(room);
+
+		return await this.chatRoomsRepository.manager.transaction(async (manager) => {
+			const membership = await manager.getRepository(this.chatRoomMembershipsRepository.target).insert({
+				id: this.idService.gen(),
+				roomId,
+				userId,
+				role: 'member',
+			}).then(result => manager.getRepository(this.chatRoomMembershipsRepository.target).findOneByOrFail(result.identifiers[0]));
+
+			await manager.getRepository(this.chatRoomJoinRequestsRepository.target).delete(request.id);
+			await manager.getRepository(this.chatRoomInvitationsRepository.target).delete({ roomId, userId });
+
+			return membership;
+		});
+	}
+
+	@bindThis
+	public async rejectRoomJoinRequest(actorId: MiUser['id'], roomId: MiChatRoom['id'], userId: MiUser['id']) {
+		const room = await this.chatRoomsRepository.findOneByOrFail({ id: roomId });
+		if (!(await this.isRoomAdmin(room, actorId))) {
+			throw new Error('forbidden');
+		}
+
 		const request = await this.chatRoomJoinRequestsRepository.findOneByOrFail({ roomId, userId });
 		await this.chatRoomJoinRequestsRepository.delete(request.id);
 	}
 
 	@bindThis
 	public async joinToRoom(userId: MiUser['id'], roomId: MiChatRoom['id']) {
-		const invitation = await this.chatRoomInvitationsRepository.findOneByOrFail({ roomId, userId });
+		const room = await this.chatRoomsRepository.findOneByOrFail({ id: roomId });
 
-		await this.ensureRoomHasSpace(roomId);
+		if (await this.isRoomBanned(room.id, userId)) {
+			throw new Error('banned');
+		}
 
-		// TODO: transaction
-		await this.addUserToRoom(roomId, userId);
-		await this.chatRoomInvitationsRepository.delete(invitation.id);
-		await this.chatRoomJoinRequestsRepository.delete({ roomId, userId });
+		if (await this.isRoomMember(room, userId)) {
+			throw new Error('already member');
+		}
+
+		const invitation = await this.findActiveRoomInvitation(roomId, userId);
+		if (room.joinPolicy !== 'public' && invitation == null) {
+			throw new Error('not invited');
+		}
+
+		await this.ensureRoomHasSpace(room);
+
+		await this.chatRoomsRepository.manager.transaction(async (manager) => {
+			await manager.getRepository(this.chatRoomMembershipsRepository.target).insert({
+				id: this.idService.gen(),
+				roomId,
+				userId,
+				role: 'member',
+			});
+			if (invitation) {
+				await manager.getRepository(this.chatRoomInvitationsRepository.target).delete(invitation.id);
+			}
+			await manager.getRepository(this.chatRoomJoinRequestsRepository.target).delete({ roomId, userId });
+		});
 	}
 
 	@bindThis
@@ -832,7 +1004,18 @@ export class ChatService {
 	public async updateRoom(room: MiChatRoom, params: {
 		name?: string;
 		description?: string;
+		joinPolicy?: ChatRoomJoinPolicy;
+		discoverability?: ChatRoomDiscoverability;
+		avatarFileId?: string | null;
+		memberCanInvite?: boolean;
+		allowJoinRequest?: boolean;
+		maxMembers?: number;
 	}): Promise<MiChatRoom> {
+		this.ensureValidRoomSettingCombination({
+			joinPolicy: params.joinPolicy ?? room.joinPolicy,
+			discoverability: params.discoverability ?? room.discoverability,
+		});
+
 		return this.chatRoomsRepository.createQueryBuilder().update()
 			.set(params)
 			.where('id = :id', { id: room.id })
@@ -851,6 +1034,133 @@ export class ChatService {
 		const memberships = await query.take(limit).getMany();
 
 		return memberships;
+	}
+
+	@bindThis
+	public async revokeRoomInvitation(actorId: MiUser['id'], invitationId: MiChatRoomInvitation['id']) {
+		const invitation = await this.chatRoomInvitationsRepository.findOneByOrFail({ id: invitationId });
+		const room = await this.chatRoomsRepository.findOneByOrFail({ id: invitation.roomId });
+		if (!(await this.isRoomAdmin(room, actorId))) {
+			throw new Error('forbidden');
+		}
+
+		if (invitation.revokedAt != null) {
+			throw new Error('already revoked');
+		}
+
+		await this.chatRoomInvitationsRepository.update(invitation.id, { revokedAt: new Date() });
+	}
+
+	@bindThis
+	public async kickRoomMember(actorId: MiUser['id'], roomId: MiChatRoom['id'], userId: MiUser['id']) {
+		const room = await this.chatRoomsRepository.findOneByOrFail({ id: roomId });
+		const actorRole = await this.getRoomActorRole(room, actorId);
+		if (actorRole !== 'owner' && actorRole !== 'admin') {
+			throw new Error('forbidden');
+		}
+		if (room.ownerId === userId) {
+			throw new Error('cannot kick owner');
+		}
+
+		const targetMembership = await this.chatRoomMembershipsRepository.findOneByOrFail({ roomId, userId });
+		if (actorRole === 'admin' && targetMembership.role === 'admin') {
+			throw new Error('forbidden');
+		}
+
+		await this.chatRoomMembershipsRepository.delete(targetMembership.id);
+
+		const redisPipeline = this.redisClient.pipeline();
+		redisPipeline.del(`newRoomChatMessageExists:${userId}:${roomId}`);
+		redisPipeline.srem(`newChatMessagesExists:${userId}`, `room:${roomId}`);
+		await redisPipeline.exec();
+	}
+
+	@bindThis
+	public async banRoomMember(actorId: MiUser['id'], roomId: MiChatRoom['id'], userId: MiUser['id'], reason?: string | null, expiresAt?: Date | null) {
+		const room = await this.chatRoomsRepository.findOneByOrFail({ id: roomId });
+		const actorRole = await this.getRoomActorRole(room, actorId);
+		if (actorRole !== 'owner' && actorRole !== 'admin') {
+			throw new Error('forbidden');
+		}
+		if (room.ownerId === userId) {
+			throw new Error('cannot ban owner');
+		}
+
+		const targetMembership = await this.chatRoomMembershipsRepository.findOneBy({ roomId, userId });
+		if (actorRole === 'admin' && targetMembership?.role === 'admin') {
+			throw new Error('forbidden');
+		}
+
+		await this.chatRoomsRepository.manager.transaction(async (manager) => {
+			await manager.getRepository(this.chatRoomBansRepository.target).upsert({
+				id: this.idService.gen(),
+				roomId,
+				userId,
+				createdById: actorId,
+				reason: reason?.trim() || null,
+				expiresAt: expiresAt ?? null,
+			}, ['roomId', 'userId']);
+			await manager.getRepository(this.chatRoomMembershipsRepository.target).delete({ roomId, userId });
+			await manager.getRepository(this.chatRoomInvitationsRepository.target).delete({ roomId, userId });
+			await manager.getRepository(this.chatRoomJoinRequestsRepository.target).delete({ roomId, userId });
+		});
+
+		const redisPipeline = this.redisClient.pipeline();
+		redisPipeline.del(`newRoomChatMessageExists:${userId}:${roomId}`);
+		redisPipeline.srem(`newChatMessagesExists:${userId}`, `room:${roomId}`);
+		await redisPipeline.exec();
+	}
+
+	@bindThis
+	public async unbanRoomMember(actorId: MiUser['id'], roomId: MiChatRoom['id'], userId: MiUser['id']) {
+		const room = await this.chatRoomsRepository.findOneByOrFail({ id: roomId });
+		if (!(await this.isRoomAdmin(room, actorId))) {
+			throw new Error('forbidden');
+		}
+		await this.chatRoomBansRepository.delete({ roomId, userId });
+	}
+
+	@bindThis
+	public async addRoomAdmin(ownerId: MiUser['id'], roomId: MiChatRoom['id'], userId: MiUser['id']) {
+		const room = await this.chatRoomsRepository.findOneByOrFail({ id: roomId, ownerId });
+		if (room.ownerId === userId) return;
+		const targetMembership = await this.chatRoomMembershipsRepository.findOneByOrFail({ roomId, userId });
+		await this.chatRoomMembershipsRepository.update(targetMembership.id, { role: 'admin' });
+	}
+
+	@bindThis
+	public async removeRoomAdmin(ownerId: MiUser['id'], roomId: MiChatRoom['id'], userId: MiUser['id']) {
+		await this.chatRoomsRepository.findOneByOrFail({ id: roomId, ownerId });
+		const targetMembership = await this.chatRoomMembershipsRepository.findOneByOrFail({ roomId, userId });
+		await this.chatRoomMembershipsRepository.update(targetMembership.id, { role: 'member' });
+	}
+
+	@bindThis
+	public async transferRoomOwner(ownerId: MiUser['id'], roomId: MiChatRoom['id'], newOwnerId: MiUser['id']) {
+		const room = await this.chatRoomsRepository.findOneByOrFail({ id: roomId, ownerId });
+		if (newOwnerId === ownerId) return room;
+
+		const newOwnerMembership = await this.chatRoomMembershipsRepository.findOneByOrFail({ roomId, userId: newOwnerId });
+
+		await this.chatRoomsRepository.manager.transaction(async (manager) => {
+			await manager.getRepository(this.chatRoomMembershipsRepository.target).delete(newOwnerMembership.id);
+
+			const oldOwnerMembership = await manager.getRepository(this.chatRoomMembershipsRepository.target).findOneBy({ roomId, userId: ownerId });
+			if (!oldOwnerMembership) {
+				await manager.getRepository(this.chatRoomMembershipsRepository.target).insert({
+					id: this.idService.gen(),
+					roomId,
+					userId: ownerId,
+					role: 'admin',
+				});
+			} else {
+				await manager.getRepository(this.chatRoomMembershipsRepository.target).update(oldOwnerMembership.id, { role: 'admin' });
+			}
+
+			await manager.getRepository(this.chatRoomsRepository.target).update(room.id, { ownerId: newOwnerId });
+		});
+
+		return await this.chatRoomsRepository.findOneByOrFail({ id: roomId });
 	}
 
 	@bindThis

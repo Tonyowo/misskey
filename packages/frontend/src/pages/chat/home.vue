@@ -9,6 +9,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 	<div class="_spacer" style="--MI_SPACER-w: 700px;">
 		<XHome v-if="tab === 'home'"/>
 		<XInvitations v-else-if="tab === 'invitations'"/>
+		<XRequests v-else-if="tab === 'requests'"/>
 		<XJoiningRooms v-else-if="tab === 'joiningRooms'"/>
 		<XOwnedRooms v-else-if="tab === 'ownedRooms'"/>
 	</div>
@@ -19,6 +20,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 import { computed, ref } from 'vue';
 import XHome from './home.home.vue';
 import XInvitations from './home.invitations.vue';
+import XRequests from './home.requests.vue';
 import XJoiningRooms from './home.joiningRooms.vue';
 import XOwnedRooms from './home.ownedRooms.vue';
 import { i18n } from '@/i18n.js';
@@ -37,6 +39,10 @@ const headerTabs = computed(() => [{
 	key: 'invitations',
 	title: i18n.ts._chat.invitations,
 	icon: 'ti ti-ticket',
+}, {
+	key: 'requests',
+	title: 'My Requests',
+	icon: 'ti ti-clock-hour-4',
 }, {
 	key: 'joiningRooms',
 	title: i18n.ts._chat.joiningRooms,

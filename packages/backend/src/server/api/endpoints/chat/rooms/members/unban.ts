@@ -4,7 +4,6 @@
  */
 
 import { Injectable } from '@nestjs/common';
-import { EntityNotFoundError } from 'typeorm';
 import { Endpoint } from '@/server/api/endpoint-base.js';
 import { ChatService } from '@/core/ChatService.js';
 import { ApiError } from '@/server/api/error.js';
@@ -17,20 +16,10 @@ export const meta = {
 	kind: 'write:chat',
 
 	errors: {
-		noSuchRoom: {
-			message: 'No such room.',
-			code: 'NO_SUCH_ROOM',
-			id: 'c9056df2-0a2f-4ac3-a2bf-bc0dbb3cd030',
-		},
-		noSuchRequest: {
-			message: 'No such room join request.',
-			code: 'NO_SUCH_REQUEST',
-			id: '449b1ef0-e0af-4ca3-b162-bd9bb7d5c5b8',
-		},
 		forbidden: {
-			message: 'You are not allowed to reject requests for this room.',
+			message: 'You are not allowed to unban this user.',
 			code: 'FORBIDDEN',
-			id: '5f03fd53-4fa9-4523-82d9-c6c248c34786',
+			id: '1f513df7-e4e5-44ab-a59a-1d2a1f697eb5',
 		},
 	},
 } as const;
@@ -51,22 +40,12 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 	) {
 		super(meta, paramDef, async (ps, me) => {
 			await this.chatService.checkChatAvailability(me.id, 'write');
-
-			const room = await this.chatService.findRoomById(ps.roomId);
-			if (room == null) {
-				throw new ApiError(meta.errors.noSuchRoom);
-			}
-
 			try {
-				await this.chatService.rejectRoomJoinRequest(me.id, room.id, ps.userId);
+				await this.chatService.unbanRoomMember(me.id, ps.roomId, ps.userId);
 			} catch (err) {
-				if (err instanceof EntityNotFoundError) {
-					throw new ApiError(meta.errors.noSuchRequest);
-				}
 				if (err instanceof Error && err.message === 'forbidden') {
 					throw new ApiError(meta.errors.forbidden);
 				}
-
 				throw err;
 			}
 		});

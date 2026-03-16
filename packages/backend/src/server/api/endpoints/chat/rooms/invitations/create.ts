@@ -36,6 +36,11 @@ export const meta = {
 			code: 'NO_SUCH_ROOM',
 			id: '916f9507-49ba-4e90-b57f-1fd4deaa47a5',
 		},
+		forbidden: {
+			message: 'You are not allowed to invite users to this room.',
+			code: 'FORBIDDEN',
+			id: '6fc03a47-3db1-4ea5-8338-c9bd60f85042',
+		},
 		isYourself: {
 			message: 'Target user is yourself.',
 			code: 'IS_YOURSELF',
@@ -55,6 +60,11 @@ export const meta = {
 			message: 'This room is full.',
 			code: 'ROOM_IS_FULL',
 			id: '2fe10100-3628-4960-a8ca-2d7f1996758f',
+		},
+		targetUserBanned: {
+			message: 'Target user is banned from this room.',
+			code: 'TARGET_USER_BANNED',
+			id: '0f6e30fb-16cc-4b11-bf31-1cf9df9fde73',
 		},
 	},
 } as const;
@@ -77,7 +87,7 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 		super(meta, paramDef, async (ps, me) => {
 			await this.chatService.checkChatAvailability(me.id, 'write');
 
-			const room = await this.chatService.findMyRoomById(me.id, ps.roomId);
+			const room = await this.chatService.findRoomById(ps.roomId);
 			if (room == null) {
 				throw new ApiError(meta.errors.noSuchRoom);
 			}
@@ -96,6 +106,10 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 							throw new ApiError(meta.errors.alreadyInvited);
 						case 'room is full':
 							throw new ApiError(meta.errors.roomIsFull);
+						case 'forbidden':
+							throw new ApiError(meta.errors.forbidden);
+						case 'banned':
+							throw new ApiError(meta.errors.targetUserBanned);
 					}
 				}
 

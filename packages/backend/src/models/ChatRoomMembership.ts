@@ -8,6 +8,9 @@ import { id } from './util/id.js';
 import { MiUser } from './User.js';
 import { MiChatRoom } from './ChatRoom.js';
 
+export const chatRoomMembershipRoles = ['member', 'admin'] as const;
+export type ChatRoomMembershipRole = typeof chatRoomMembershipRoles[number];
+
 @Entity('chat_room_membership')
 @Index(['userId', 'roomId'], { unique: true })
 export class MiChatRoomMembership {
@@ -42,4 +45,10 @@ export class MiChatRoomMembership {
 		default: false,
 	})
 	public isMuted: boolean;
+
+	@Column('varchar', {
+		length: 16,
+		default: 'member',
+	})
+	public role: ChatRoomMembershipRole;
 }

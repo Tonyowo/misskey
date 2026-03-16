@@ -4,7 +4,7 @@
  */
 
 import { Inject, Injectable } from '@nestjs/common';
-import { In } from 'typeorm';
+import { In, IsNull, MoreThan } from 'typeorm';
 import { DI } from '@/di-symbols.js';
 import type { MiUser, ChatMessagesRepository, MiChatMessage, ChatRoomsRepository, MiChatRoom, MiChatRoomInvitation, ChatRoomInvitationsRepository, MiChatRoomJoinRequest, ChatRoomJoinRequestsRepository, MiChatRoomMembership, ChatRoomMembershipsRepository } from '@/models/_.js';
 import type { Packed } from '@/misc/json-schema.js';
@@ -250,10 +250,20 @@ export class ChatEntityService {
 		},
 	): Promise<Packed<'ChatRoom'>> {
 		const room = typeof src === 'object' ? src : await this.chatRoomsRepository.findOneByOrFail({ id: src });
+		const now = new Date();
 
 		const membership = me && me.id !== room.ownerId ? (options?._hint_?.myMemberships?.get(room.id) ?? await this.chatRoomMembershipsRepository.findOneBy({ roomId: room.id, userId: me.id })) : null;
-		const invitation = me && me.id !== room.ownerId ? (options?._hint_?.myInvitations?.get(room.id) ?? await this.chatRoomInvitationsRepository.findOneBy({ roomId: room.id, userId: me.id })) : null;
+		const invitation = me && me.id !== room.ownerId ? (options?._hint_?.myInvitations?.get(room.id) ?? await this.chatRoomInvitationsRepository.findOne({
+			where: [
+				{ roomId: room.id, userId: me.id, ignored: false, revokedAt: IsNull(), expiresAt: IsNull() },
+				{ roomId: room.id, userId: me.id, ignored: false, revokedAt: IsNull(), expiresAt: MoreThan(now) },
+			],
+		})) : null;
 		const joinRequest = me && me.id !== room.ownerId ? (options?._hint_?.myJoinRequests?.get(room.id) ?? await this.chatRoomJoinRequestsRepository.findOneBy({ roomId: room.id, userId: me.id })) : null;
+		const myRole = room.ownerId === me?.id ? 'owner' : membership?.role ?? null;
+		const canManageAdmins = myRole === 'owner';
+		const canManageMembers = myRole === 'owner' || myRole === 'admin';
+		const canInvite = myRole === 'owner' || myRole === 'admin' || (myRole === 'member' && room.memberCanInvite);
 
 		return {
 			id: room.id,
@@ -262,8 +272,18 @@ export class ChatEntityService {
 			description: room.description,
 			ownerId: room.ownerId,
 			owner: options?._hint_?.packedOwners.get(room.ownerId) ?? await this.userEntityService.pack(room.owner ?? room.ownerId, me),
+			joinPolicy: room.joinPolicy,
+			discoverability: room.discoverability,
+			avatarFileId: room.avatarFileId,
+			memberCanInvite: room.memberCanInvite,
+			allowJoinRequest: room.allowJoinRequest,
+			maxMembers: room.maxMembers,
 			isMuted: membership != null ? membership.isMuted : false,
 			isJoined: room.ownerId === me?.id || membership != null,
+			myRole,
+			canInvite,
+			canManageMembers,
+			canManageAdmins,
 			invitationExists: invitation != null,
 			joinRequestExists: joinRequest != null,
 		};
@@ -300,10 +320,22 @@ export class ChatEntityService {
 				},
 			}).then(memberships => new Map(_rooms.map(r => [r.id, memberships.find(m => m.roomId === r.id)]))),
 			this.chatRoomInvitationsRepository.find({
-				where: {
-					roomId: In(_rooms.map(x => x.id)),
-					userId: me.id,
-				},
+				where: [
+					{
+						roomId: In(_rooms.map(x => x.id)),
+						userId: me.id,
+						ignored: false,
+						revokedAt: IsNull(),
+						expiresAt: IsNull(),
+					},
+					{
+						roomId: In(_rooms.map(x => x.id)),
+						userId: me.id,
+						ignored: false,
+						revokedAt: IsNull(),
+						expiresAt: MoreThan(new Date()),
+					},
+				],
 			}).then(invitations => new Map(_rooms.map(r => [r.id, invitations.find(i => i.roomId === r.id)]))),
 			this.chatRoomJoinRequestsRepository.find({
 				where: {
@@ -323,7 +355,7 @@ export class ChatEntityService {
 		options?: {
 			_hint_?: {
 				packedRooms: Map<MiChatRoomInvitation['roomId'], Packed<'ChatRoom'>>;
-				packedUsers: Map<MiChatRoomInvitation['id'], Packed<'UserLite'>>;
+				packedUsers: Map<MiChatRoomInvitation['userId'], Packed<'UserLite'>>;
 			};
 		},
 	): Promise<Packed<'ChatRoomInvitation'>> {
@@ -336,6 +368,10 @@ export class ChatEntityService {
 			room: options?._hint_?.packedRooms.get(invitation.roomId) ?? await this.packRoom(invitation.room ?? invitation.roomId, me),
 			userId: invitation.userId,
 			user: options?._hint_?.packedUsers.get(invitation.userId) ?? await this.userEntityService.pack(invitation.user ?? invitation.userId, me),
+			createdById: invitation.createdById,
+			expiresAt: invitation.expiresAt ? invitation.expiresAt.toISOString() : null,
+			revokedAt: invitation.revokedAt ? invitation.revokedAt.toISOString() : null,
+			ignored: invitation.ignored,
 		};
 	}
 
@@ -369,6 +405,7 @@ export class ChatEntityService {
 			room: options?._hint_?.packedRooms.get(request.roomId) ?? await this.packRoom(request.room ?? request.roomId, me),
 			userId: request.userId,
 			user: options?._hint_?.packedUsers.get(request.userId) ?? await this.userEntityService.pack(request.user ?? request.userId, me),
+			message: request.message,
 		};
 	}
 
@@ -404,6 +441,7 @@ export class ChatEntityService {
 			user: options?.populateUser ? (options._hint_?.packedUsers.get(membership.userId) ?? await this.userEntityService.pack(membership.user ?? membership.userId, me)) : undefined,
 			roomId: membership.roomId,
 			room: options?.populateRoom ? (options._hint_?.packedRooms.get(membership.roomId) ?? await this.packRoom(membership.room ?? membership.roomId, me)) : undefined,
+			role: membership.role,
 		};
 	}
 

@@ -239,6 +239,8 @@ import type {
 	ChatMessagesUnreactRequest,
 	ChatMessagesUserTimelineRequest,
 	ChatMessagesUserTimelineResponse,
+	ChatRoomsAdminsAddRequest,
+	ChatRoomsAdminsRemoveRequest,
 	ChatRoomsCreateRequest,
 	ChatRoomsCreateResponse,
 	ChatRoomsDeleteRequest,
@@ -249,12 +251,16 @@ import type {
 	ChatRoomsInvitationsInboxResponse,
 	ChatRoomsInvitationsOutboxRequest,
 	ChatRoomsInvitationsOutboxResponse,
+	ChatRoomsInvitationsRevokeRequest,
 	ChatRoomsJoinRequest,
 	ChatRoomsJoiningRequest,
 	ChatRoomsJoiningResponse,
 	ChatRoomsLeaveRequest,
 	ChatRoomsMembersRequest,
 	ChatRoomsMembersResponse,
+	ChatRoomsMembersBanRequest,
+	ChatRoomsMembersKickRequest,
+	ChatRoomsMembersUnbanRequest,
 	ChatRoomsMuteRequest,
 	ChatRoomsOwnedRequest,
 	ChatRoomsOwnedResponse,
@@ -265,11 +271,19 @@ import type {
 	ChatRoomsRequestsCreateResponse,
 	ChatRoomsRequestsListRequest,
 	ChatRoomsRequestsListResponse,
+	ChatRoomsRequestsMineRequest,
+	ChatRoomsRequestsMineResponse,
+	ChatRoomsRequestsPendingCountRequest,
+	ChatRoomsRequestsPendingCountResponse,
 	ChatRoomsRequestsRejectRequest,
 	ChatRoomsShowRequest,
 	ChatRoomsShowResponse,
+	ChatRoomsTransferOwnerRequest,
+	ChatRoomsTransferOwnerResponse,
 	ChatRoomsUpdateRequest,
 	ChatRoomsUpdateResponse,
+	ChatRoomsUpdateSettingsRequest,
+	ChatRoomsUpdateSettingsResponse,
 	ClipsAddNoteRequest,
 	ClipsCreateRequest,
 	ClipsCreateResponse,
@@ -831,25 +845,35 @@ export type Endpoints = {
 	'chat/messages/unreact': { req: ChatMessagesUnreactRequest; res: EmptyResponse };
 	'chat/messages/user-timeline': { req: ChatMessagesUserTimelineRequest; res: ChatMessagesUserTimelineResponse };
 	'chat/read-all': { req: EmptyRequest; res: EmptyResponse };
+	'chat/rooms/admins/add': { req: ChatRoomsAdminsAddRequest; res: EmptyResponse };
+	'chat/rooms/admins/remove': { req: ChatRoomsAdminsRemoveRequest; res: EmptyResponse };
 	'chat/rooms/create': { req: ChatRoomsCreateRequest; res: ChatRoomsCreateResponse };
 	'chat/rooms/delete': { req: ChatRoomsDeleteRequest; res: EmptyResponse };
 	'chat/rooms/invitations/create': { req: ChatRoomsInvitationsCreateRequest; res: ChatRoomsInvitationsCreateResponse };
 	'chat/rooms/invitations/ignore': { req: ChatRoomsInvitationsIgnoreRequest; res: EmptyResponse };
 	'chat/rooms/invitations/inbox': { req: ChatRoomsInvitationsInboxRequest; res: ChatRoomsInvitationsInboxResponse };
 	'chat/rooms/invitations/outbox': { req: ChatRoomsInvitationsOutboxRequest; res: ChatRoomsInvitationsOutboxResponse };
+	'chat/rooms/invitations/revoke': { req: ChatRoomsInvitationsRevokeRequest; res: EmptyResponse };
 	'chat/rooms/join': { req: ChatRoomsJoinRequest; res: EmptyResponse };
 	'chat/rooms/joining': { req: ChatRoomsJoiningRequest; res: ChatRoomsJoiningResponse };
 	'chat/rooms/leave': { req: ChatRoomsLeaveRequest; res: EmptyResponse };
 	'chat/rooms/members': { req: ChatRoomsMembersRequest; res: ChatRoomsMembersResponse };
+	'chat/rooms/members/ban': { req: ChatRoomsMembersBanRequest; res: EmptyResponse };
+	'chat/rooms/members/kick': { req: ChatRoomsMembersKickRequest; res: EmptyResponse };
+	'chat/rooms/members/unban': { req: ChatRoomsMembersUnbanRequest; res: EmptyResponse };
 	'chat/rooms/mute': { req: ChatRoomsMuteRequest; res: EmptyResponse };
 	'chat/rooms/owned': { req: ChatRoomsOwnedRequest; res: ChatRoomsOwnedResponse };
 	'chat/rooms/requests/accept': { req: ChatRoomsRequestsAcceptRequest; res: ChatRoomsRequestsAcceptResponse };
 	'chat/rooms/requests/cancel': { req: ChatRoomsRequestsCancelRequest; res: EmptyResponse };
 	'chat/rooms/requests/create': { req: ChatRoomsRequestsCreateRequest; res: ChatRoomsRequestsCreateResponse };
 	'chat/rooms/requests/list': { req: ChatRoomsRequestsListRequest; res: ChatRoomsRequestsListResponse };
+	'chat/rooms/requests/mine': { req: ChatRoomsRequestsMineRequest; res: ChatRoomsRequestsMineResponse };
+	'chat/rooms/requests/pending-count': { req: ChatRoomsRequestsPendingCountRequest; res: ChatRoomsRequestsPendingCountResponse };
 	'chat/rooms/requests/reject': { req: ChatRoomsRequestsRejectRequest; res: EmptyResponse };
 	'chat/rooms/show': { req: ChatRoomsShowRequest; res: ChatRoomsShowResponse };
+	'chat/rooms/transfer-owner': { req: ChatRoomsTransferOwnerRequest; res: ChatRoomsTransferOwnerResponse };
 	'chat/rooms/update': { req: ChatRoomsUpdateRequest; res: ChatRoomsUpdateResponse };
+	'chat/rooms/update-settings': { req: ChatRoomsUpdateSettingsRequest; res: ChatRoomsUpdateSettingsResponse };
 	'clips/add-note': { req: ClipsAddNoteRequest; res: EmptyResponse };
 	'clips/create': { req: ClipsCreateRequest; res: ClipsCreateResponse };
 	'clips/delete': { req: ClipsDeleteRequest; res: EmptyResponse };

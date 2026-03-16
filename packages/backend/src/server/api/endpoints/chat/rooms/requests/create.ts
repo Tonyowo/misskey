@@ -56,6 +56,16 @@ export const meta = {
 			code: 'ALREADY_REQUESTED',
 			id: '7d49d89f-e6d3-4601-a337-5afee4c5501c',
 		},
+		requestDisabled: {
+			message: 'Room join requests are not allowed.',
+			code: 'REQUEST_DISABLED',
+			id: '36fba498-01cf-4af5-8a09-f3ec06b01760',
+		},
+		banned: {
+			message: 'You are banned from this room.',
+			code: 'BANNED',
+			id: '10fd6df1-94e2-41f1-a591-a8eb0313b4f9',
+		},
 	},
 } as const;
 
@@ -63,6 +73,7 @@ export const paramDef = {
 	type: 'object',
 	properties: {
 		roomId: { type: 'string', format: 'misskey:id' },
+		message: { type: 'string', maxLength: 1024, nullable: true },
 	},
 	required: ['roomId'],
 } as const;
@@ -82,7 +93,7 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 			}
 
 			try {
-				const request = await this.chatService.createRoomJoinRequest(me.id, room.id);
+				const request = await this.chatService.createRoomJoinRequest(me.id, room.id, ps.message ?? null);
 				return await this.chatEntityService.packRoomJoinRequest(request, me);
 			} catch (err) {
 				if (err instanceof Error) {
@@ -95,6 +106,10 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 							throw new ApiError(meta.errors.alreadyInvited);
 						case 'already requested':
 							throw new ApiError(meta.errors.alreadyRequested);
+						case 'request disabled':
+							throw new ApiError(meta.errors.requestDisabled);
+						case 'banned':
+							throw new ApiError(meta.errors.banned);
 					}
 				}
 

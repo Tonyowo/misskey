@@ -20,17 +20,12 @@ export const meta = {
 		noSuchRoom: {
 			message: 'No such room.',
 			code: 'NO_SUCH_ROOM',
-			id: 'c9056df2-0a2f-4ac3-a2bf-bc0dbb3cd030',
+			id: 'ff9a0f40-e0c9-4ea0-9e77-be31fc7d094b',
 		},
-		noSuchRequest: {
-			message: 'No such room join request.',
-			code: 'NO_SUCH_REQUEST',
-			id: '449b1ef0-e0af-4ca3-b162-bd9bb7d5c5b8',
-		},
-		forbidden: {
-			message: 'You are not allowed to reject requests for this room.',
-			code: 'FORBIDDEN',
-			id: '5f03fd53-4fa9-4523-82d9-c6c248c34786',
+		noSuchMembership: {
+			message: 'No such room member.',
+			code: 'NO_SUCH_MEMBERSHIP',
+			id: 'da31dc29-16dc-4517-9f96-337f1d43fba4',
 		},
 	},
 } as const;
@@ -51,22 +46,16 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 	) {
 		super(meta, paramDef, async (ps, me) => {
 			await this.chatService.checkChatAvailability(me.id, 'write');
-
-			const room = await this.chatService.findRoomById(ps.roomId);
+			const room = await this.chatService.findMyRoomById(me.id, ps.roomId);
 			if (room == null) {
 				throw new ApiError(meta.errors.noSuchRoom);
 			}
-
 			try {
-				await this.chatService.rejectRoomJoinRequest(me.id, room.id, ps.userId);
+				await this.chatService.removeRoomAdmin(me.id, ps.roomId, ps.userId);
 			} catch (err) {
 				if (err instanceof EntityNotFoundError) {
-					throw new ApiError(meta.errors.noSuchRequest);
+					throw new ApiError(meta.errors.noSuchMembership);
 				}
-				if (err instanceof Error && err.message === 'forbidden') {
-					throw new ApiError(meta.errors.forbidden);
-				}
-
 				throw err;
 			}
 		});

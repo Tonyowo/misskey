@@ -37,4 +37,11 @@ export class MiChatRoomJoinRequest {
 	})
 	@JoinColumn()
 	public room: MiChatRoom | null;
+
+	@Column('varchar', {
+		length: 1024,
+		nullable: true,
+		default: null,
+	})
+	public message: string | null;
 }

@@ -17,20 +17,20 @@ export const meta = {
 	kind: 'write:chat',
 
 	errors: {
-		noSuchRoom: {
-			message: 'No such room.',
-			code: 'NO_SUCH_ROOM',
-			id: 'c9056df2-0a2f-4ac3-a2bf-bc0dbb3cd030',
-		},
-		noSuchRequest: {
-			message: 'No such room join request.',
-			code: 'NO_SUCH_REQUEST',
-			id: '449b1ef0-e0af-4ca3-b162-bd9bb7d5c5b8',
+		noSuchMembership: {
+			message: 'No such room member.',
+			code: 'NO_SUCH_MEMBERSHIP',
+			id: 'ee7f9ef6-18d2-499f-bf77-86524af93e85',
 		},
 		forbidden: {
-			message: 'You are not allowed to reject requests for this room.',
+			message: 'You are not allowed to kick this member.',
 			code: 'FORBIDDEN',
-			id: '5f03fd53-4fa9-4523-82d9-c6c248c34786',
+			id: '5cd84fc4-6a1d-4178-adcb-a9362c62b070',
+		},
+		cannotKickOwner: {
+			message: 'Owner cannot be kicked.',
+			code: 'CANNOT_KICK_OWNER',
+			id: '80eecb1f-4ec1-4d2f-a7e9-a669f95bf7aa',
 		},
 	},
 } as const;
@@ -51,22 +51,20 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 	) {
 		super(meta, paramDef, async (ps, me) => {
 			await this.chatService.checkChatAvailability(me.id, 'write');
-
-			const room = await this.chatService.findRoomById(ps.roomId);
-			if (room == null) {
-				throw new ApiError(meta.errors.noSuchRoom);
-			}
-
 			try {
-				await this.chatService.rejectRoomJoinRequest(me.id, room.id, ps.userId);
+				await this.chatService.kickRoomMember(me.id, ps.roomId, ps.userId);
 			} catch (err) {
 				if (err instanceof EntityNotFoundError) {
-					throw new ApiError(meta.errors.noSuchRequest);
+					throw new ApiError(meta.errors.noSuchMembership);
 				}
-				if (err instanceof Error && err.message === 'forbidden') {
-					throw new ApiError(meta.errors.forbidden);
+				if (err instanceof Error) {
+					switch (err.message) {
+						case 'forbidden':
+							throw new ApiError(meta.errors.forbidden);
+						case 'cannot kick owner':
+							throw new ApiError(meta.errors.cannotKickOwner);
+					}
 				}
-
 				throw err;
 			}
 		});

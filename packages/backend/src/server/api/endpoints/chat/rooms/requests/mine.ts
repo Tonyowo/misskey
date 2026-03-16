@@ -3,11 +3,8 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
-import { Inject, Injectable } from '@nestjs/common';
-import ms from 'ms';
+import { Injectable } from '@nestjs/common';
 import { Endpoint } from '@/server/api/endpoint-base.js';
-import { DI } from '@/di-symbols.js';
-import { ApiError } from '@/server/api/error.js';
 import { ChatService } from '@/core/ChatService.js';
 import { ChatEntityService } from '@/core/entities/ChatEntityService.js';
 import { IdService } from '@/core/IdService.js';
@@ -25,35 +22,22 @@ export const meta = {
 		items: {
 			type: 'object',
 			optional: false, nullable: false,
-			ref: 'ChatRoomInvitation',
+			ref: 'ChatRoomJoinRequest',
 		},
 	},
 
-	errors: {
-		noSuchRoom: {
-			message: 'No such room.',
-			code: 'NO_SUCH_ROOM',
-			id: 'a3c6b309-9717-4316-ae94-a69b53437237',
-		},
-		forbidden: {
-			message: 'You are not allowed to view this room invitations.',
-			code: 'FORBIDDEN',
-			id: '2f8c4aca-d013-421f-a3d0-6d851dbf13f8',
-		},
-	},
+	errors: {},
 } as const;
 
 export const paramDef = {
 	type: 'object',
 	properties: {
-		roomId: { type: 'string', format: 'misskey:id' },
 		limit: { type: 'integer', minimum: 1, maximum: 100, default: 30 },
 		sinceId: { type: 'string', format: 'misskey:id' },
 		untilId: { type: 'string', format: 'misskey:id' },
 		sinceDate: { type: 'integer' },
 		untilDate: { type: 'integer' },
 	},
-	required: ['roomId'],
 } as const;
 
 @Injectable()
@@ -69,16 +53,8 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 
 			await this.chatService.checkChatAvailability(me.id, 'read');
 
-			const room = await this.chatService.findRoomById(ps.roomId);
-			if (room == null) {
-				throw new ApiError(meta.errors.noSuchRoom);
-			}
-			if (!await this.chatService.isRoomAdmin(room, me.id)) {
-				throw new ApiError(meta.errors.forbidden);
-			}
-
-			const invitations = await this.chatService.getSentRoomInvitationsWithPagination(ps.roomId, ps.limit, sinceId, untilId);
-			return this.chatEntityService.packRoomInvitations(invitations, me);
+			const requests = await this.chatService.getMyRoomJoinRequestsWithPagination(me.id, ps.limit, sinceId, untilId);
+			return this.chatEntityService.packRoomJoinRequests(requests, me);
 		});
 	}
 }

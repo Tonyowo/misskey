@@ -8,23 +8,11 @@ import { id } from './util/id.js';
 import { MiUser } from './User.js';
 import { MiChatRoom } from './ChatRoom.js';
 
-@Entity('chat_room_invitation')
-@Index(['userId', 'roomId'], { unique: true })
-export class MiChatRoomInvitation {
+@Entity('chat_room_ban')
+@Index(['roomId', 'userId'], { unique: true })
+export class MiChatRoomBan {
 	@PrimaryColumn(id())
 	public id: string;
-
-	@Index()
-	@Column({
-		...id(),
-	})
-	public userId: MiUser['id'];
-
-	@ManyToOne(() => MiUser, {
-		onDelete: 'CASCADE',
-	})
-	@JoinColumn()
-	public user: MiUser | null;
 
 	@Index()
 	@Column({
@@ -42,22 +30,30 @@ export class MiChatRoomInvitation {
 	@Column({
 		...id(),
 	})
+	public userId: MiUser['id'];
+
+	@ManyToOne(() => MiUser, {
+		onDelete: 'CASCADE',
+	})
+	@JoinColumn()
+	public user: MiUser | null;
+
+	@Index()
+	@Column({
+		...id(),
+	})
 	public createdById: MiUser['id'];
 
-	@Column('boolean', {
-		default: false,
+	@Column('varchar', {
+		length: 1024,
+		nullable: true,
+		default: null,
 	})
-	public ignored: boolean;
+	public reason: string | null;
 
 	@Column('timestamp with time zone', {
 		nullable: true,
 		default: null,
 	})
 	public expiresAt: Date | null;
-
-	@Column('timestamp with time zone', {
-		nullable: true,
-		default: null,
-	})
-	public revokedAt: Date | null;
 }

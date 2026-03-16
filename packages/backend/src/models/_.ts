@@ -26,6 +26,7 @@ import { MiChannelFollowing } from '@/models/ChannelFollowing.js';
 import { MiChannelMuting } from '@/models/ChannelMuting.js';
 import { MiChatApproval } from '@/models/ChatApproval.js';
 import { MiChatMessage } from '@/models/ChatMessage.js';
+import { MiChatRoomBan } from '@/models/ChatRoomBan.js';
 import { MiChatRoom } from '@/models/ChatRoom.js';
 import { MiChatRoomInvitation } from '@/models/ChatRoomInvitation.js';
 import { MiChatRoomJoinRequest } from '@/models/ChatRoomJoinRequest.js';
@@ -168,6 +169,7 @@ export {
 	MiFlashLike,
 	MiUserMemo,
 	MiChatMessage,
+	MiChatRoomBan,
 	MiChatRoom,
 	MiChatRoomMembership,
 	MiChatRoomInvitation,
@@ -249,6 +251,7 @@ export type FlashsRepository = Repository<MiFlash> & MiRepository<MiFlash>;
 export type FlashLikesRepository = Repository<MiFlashLike> & MiRepository<MiFlashLike>;
 export type UserMemoRepository = Repository<MiUserMemo> & MiRepository<MiUserMemo>;
 export type ChatMessagesRepository = Repository<MiChatMessage> & MiRepository<MiChatMessage>;
+export type ChatRoomBansRepository = Repository<MiChatRoomBan> & MiRepository<MiChatRoomBan>;
 export type ChatRoomsRepository = Repository<MiChatRoom> & MiRepository<MiChatRoom>;
 export type ChatRoomMembershipsRepository = Repository<MiChatRoomMembership> & MiRepository<MiChatRoomMembership>;
 export type ChatRoomInvitationsRepository = Repository<MiChatRoomInvitation> & MiRepository<MiChatRoomInvitation>;

@@ -33,5 +33,9 @@ export const packedChatRoomJoinRequestSchema = {
 			optional: false, nullable: false,
 			ref: 'ChatRoom',
 		},
+		message: {
+			type: 'string',
+			optional: false, nullable: true,
+		},
 	},
 } as const;

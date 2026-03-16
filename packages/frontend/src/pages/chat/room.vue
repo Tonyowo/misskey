@@ -20,7 +20,16 @@ SPDX-License-Identifier: AGPL-3.0-only
 					</MkInfo>
 					<div :class="$style.roomActions">
 						<MkButton
-							v-if="!room.joinRequestExists"
+							v-if="room.joinPolicy === 'public'"
+							primary
+							rounded
+							:disabled="$i.policies.chatAvailability !== 'available'"
+							@click="joinRoomDirectly"
+						>
+							<i class="ti ti-plus"></i> {{ i18n.ts._chat.join }}
+						</MkButton>
+						<MkButton
+							v-else-if="!room.joinRequestExists && room.allowJoinRequest && room.joinPolicy !== 'invite_only'"
 							primary
 							rounded
 							:disabled="$i.policies.chatAvailability !== 'available'"
@@ -459,6 +468,15 @@ async function requestToJoinRoom() {
 	};
 }
 
+async function joinRoomDirectly() {
+	if (room.value == null || room.value.isJoined) return;
+
+	await os.apiWithDialog('chat/rooms/join', {
+		roomId: room.value.id,
+	});
+	initialize();
+}
+
 async function cancelJoinRequest() {
 	if (room.value == null || room.value.isJoined || !room.value.joinRequestExists) return;
 
@@ -491,7 +509,7 @@ function showMenu(ev: PointerEvent) {
 	const menuItems: MenuItem[] = [];
 
 	if (room.value) {
-		if (room.value.ownerId === $i.id) {
+		if (room.value.canInvite) {
 			menuItems.push({
 				text: i18n.ts._chat.inviteUser,
 				icon: 'ti ti-user-plus',
@@ -499,7 +517,9 @@ function showMenu(ev: PointerEvent) {
 					inviteUser();
 				},
 			});
-		} else if (room.value.isJoined) {
+		}
+
+		if (room.value.isJoined && room.value.ownerId !== $i.id) {
 			menuItems.push({
 				text: i18n.ts._chat.leave,
 				icon: 'ti ti-x',
