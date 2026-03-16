@@ -27,34 +27,34 @@ export const meta = {
 	res: {
 		type: 'object',
 		optional: false, nullable: false,
-		ref: 'ChatRoomInvitation',
+		ref: 'ChatRoomJoinRequest',
 	},
 
 	errors: {
 		noSuchRoom: {
 			message: 'No such room.',
 			code: 'NO_SUCH_ROOM',
-			id: '916f9507-49ba-4e90-b57f-1fd4deaa47a5',
+			id: '56af7cb5-5c36-4d35-b98a-ce4f53f18f8a',
 		},
 		isYourself: {
-			message: 'Target user is yourself.',
+			message: 'You cannot request to join your own room.',
 			code: 'IS_YOURSELF',
-			id: 'f24758f4-d12e-47f9-86d2-95a4d1c78029',
+			id: '41333c6f-0e26-46d7-8f2b-c47f714b4d87',
 		},
 		alreadyMember: {
-			message: 'Target user is already a member.',
+			message: 'You are already a member of this room.',
 			code: 'ALREADY_MEMBER',
-			id: '09d36d36-2eff-49cf-ad9c-714f2f22f061',
+			id: 'b304846f-e151-434c-88a5-f3961473f679',
 		},
 		alreadyInvited: {
-			message: 'Target user has already been invited.',
+			message: 'You have already been invited to this room.',
 			code: 'ALREADY_INVITED',
-			id: 'cf4f7a0e-18fe-46b5-b768-9950defa1681',
+			id: 'e4c83205-738b-4ee5-89fc-7c0b7081e609',
 		},
-		roomIsFull: {
-			message: 'This room is full.',
-			code: 'ROOM_IS_FULL',
-			id: '2fe10100-3628-4960-a8ca-2d7f1996758f',
+		alreadyRequested: {
+			message: 'You have already requested to join this room.',
+			code: 'ALREADY_REQUESTED',
+			id: '7d49d89f-e6d3-4601-a337-5afee4c5501c',
 		},
 	},
 } as const;
@@ -63,9 +63,8 @@ export const paramDef = {
 	type: 'object',
 	properties: {
 		roomId: { type: 'string', format: 'misskey:id' },
-		userId: { type: 'string', format: 'misskey:id' },
 	},
-	required: ['roomId', 'userId'],
+	required: ['roomId'],
 } as const;
 
 @Injectable()
@@ -77,14 +76,14 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 		super(meta, paramDef, async (ps, me) => {
 			await this.chatService.checkChatAvailability(me.id, 'write');
 
-			const room = await this.chatService.findMyRoomById(me.id, ps.roomId);
+			const room = await this.chatService.findRoomById(ps.roomId);
 			if (room == null) {
 				throw new ApiError(meta.errors.noSuchRoom);
 			}
 
 			try {
-				const invitation = await this.chatService.createRoomInvitation(me.id, room.id, ps.userId);
-				return await this.chatEntityService.packRoomInvitation(invitation, me);
+				const request = await this.chatService.createRoomJoinRequest(me.id, room.id);
+				return await this.chatEntityService.packRoomJoinRequest(request, me);
 			} catch (err) {
 				if (err instanceof Error) {
 					switch (err.message) {
@@ -94,8 +93,8 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 							throw new ApiError(meta.errors.alreadyMember);
 						case 'already invited':
 							throw new ApiError(meta.errors.alreadyInvited);
-						case 'room is full':
-							throw new ApiError(meta.errors.roomIsFull);
+						case 'already requested':
+							throw new ApiError(meta.errors.alreadyRequested);
 					}
 				}
 

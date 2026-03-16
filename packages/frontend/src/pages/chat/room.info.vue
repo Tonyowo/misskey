@@ -19,7 +19,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 	<MkButton v-if="isOwner || ($i.isAdmin || $i.isModerator)" danger @click="del">{{ i18n.ts._chat.deleteRoom }}</MkButton>
 
-	<MkSwitch v-if="!isOwner" v-model="isMuted">
+	<MkSwitch v-if="!isOwner && isJoined" v-model="isMuted">
 		<template #label>{{ i18n.ts._chat.muteThisRoom }}</template>
 	</MkSwitch>
 </div>
@@ -47,9 +47,22 @@ const props = defineProps<{
 const isOwner = computed(() => {
 	return props.room.ownerId === $i.id;
 });
+const isJoined = computed(() => props.room.isJoined ?? false);
 
-const name_ = ref(props.room.name);
-const description_ = ref(props.room.description);
+const name_ = ref('');
+const description_ = ref('');
+const isMuted = ref(false);
+let syncingRoomState = false;
+
+watch(() => props.room, (room) => {
+	syncingRoomState = true;
+	name_.value = room.name;
+	description_.value = room.description;
+	isMuted.value = room.isMuted ?? false;
+	syncingRoomState = false;
+}, {
+	immediate: true,
+});
 
 function save() {
 	os.apiWithDialog('chat/rooms/update', {
@@ -72,9 +85,9 @@ async function del() {
 	router.push('/chat');
 }
 
-const isMuted = ref(props.room.isMuted ?? false);
-
 watch(isMuted, async () => {
+	if (syncingRoomState) return;
+
 	await os.apiWithDialog('chat/rooms/mute', {
 		roomId: props.room.id,
 		mute: isMuted.value,

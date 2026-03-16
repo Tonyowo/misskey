@@ -1141,26 +1141,6 @@ export interface Locale extends ILocale {
      */
     "noSuchUser": string;
     /**
-     * アカウントが見つかりません
-     */
-    "signinAccountNotFoundTitle": string;
-    /**
-     * 入力されたユーザー名に対応するアカウントが見つかりません
-     */
-    "signinUsernameNotFound": string;
-    /**
-     * 入力されたメールアドレスに対応するアカウントが見つかりません
-     */
-    "signinEmailNotFound": string;
-    /**
-     * メールアドレスの形式が正しくありません
-     */
-    "signinInvalidEmailTitle": string;
-    /**
-     * 正しいメールアドレスを入力してください
-     */
-    "signinInvalidEmail": string;
-    /**
      * 照会
      */
     "lookup": string;
@@ -2637,11 +2617,11 @@ export interface Locale extends ILocale {
      */
     "cwReplyRequired": string;
     /**
-     * 返信可視の内容はローカルのみに投稿され、リモートには連合されません
+     * 返信可視の投稿はローカルのみ
      */
     "cwReplyRequiredLocalOnly": string;
     /**
-     * 公开正文
+     * 公開本文
      */
     "publicText": string;
     /**
@@ -5221,11 +5201,11 @@ export interface Locale extends ILocale {
      */
     "useNativeUIForVideoAudioPlayer": string;
     /**
-     * オリジナルのファイル名を保持
+     * 画像以外は元のファイル名を保持
      */
     "keepOriginalFilename": string;
     /**
-     * この設定をオフにすると、アップロード時にファイル名が自動でランダム文字列に置き換えられます。
+     * 画像はアップロード時に常にランダムなファイル名になります。この設定は画像以外のファイルにのみ適用され、オンで元の名前を保持し、オフでランダム文字列に置き換えます。
      */
     "keepOriginalFilenameDescription": string;
     /**
@@ -5955,6 +5935,54 @@ export interface Locale extends ILocale {
          * ユーザーを招待
          */
         "inviteUser": string;
+        /**
+         * このユーザーはすでにこのグループに招待されています。
+         */
+        "userAlreadyInvitedToThisRoom": string;
+        /**
+         * このユーザーはすでにこのグループに参加しています。
+         */
+        "userAlreadyInThisRoom": string;
+        /**
+         * このグループは満員です。
+         */
+        "roomIsFull": string;
+        /**
+         * 自分自身を招待することはできません。
+         */
+        "cannotInviteYourself": string;
+        /**
+         * 参加を申請
+         */
+        "requestToJoinRoom": string;
+        /**
+         * 参加申請を取り消す
+         */
+        "cancelJoinRequest": string;
+        /**
+         * 参加申請を送信しました。承認をお待ちください。
+         */
+        "joinRequestPending": string;
+        /**
+         * 参加申請
+         */
+        "joinRequests": string;
+        /**
+         * あなたはこのグループの参加者ではありません。
+         */
+        "youAreNotAMemberOfThisRoom": string;
+        /**
+         * あなたはすでにこのグループに招待されています。
+         */
+        "youHaveAlreadyBeenInvitedToThisRoom": string;
+        /**
+         * あなたはすでにこのグループに参加しています。
+         */
+        "youAreAlreadyInThisRoom": string;
+        /**
+         * 自分が作成したグループに参加申請することはできません。
+         */
+        "cannotRequestToJoinYourOwnRoom": string;
         /**
          * 送信した招待
          */

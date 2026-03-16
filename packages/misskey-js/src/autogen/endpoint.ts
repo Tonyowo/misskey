@@ -258,6 +258,14 @@ import type {
 	ChatRoomsMuteRequest,
 	ChatRoomsOwnedRequest,
 	ChatRoomsOwnedResponse,
+	ChatRoomsRequestsAcceptRequest,
+	ChatRoomsRequestsAcceptResponse,
+	ChatRoomsRequestsCancelRequest,
+	ChatRoomsRequestsCreateRequest,
+	ChatRoomsRequestsCreateResponse,
+	ChatRoomsRequestsListRequest,
+	ChatRoomsRequestsListResponse,
+	ChatRoomsRequestsRejectRequest,
 	ChatRoomsShowRequest,
 	ChatRoomsShowResponse,
 	ChatRoomsUpdateRequest,
@@ -546,6 +554,8 @@ import type {
 	NotesTranslateRequest,
 	NotesTranslateResponse,
 	NotesUnrenoteRequest,
+	NotesUpdateRequest,
+	NotesUpdateResponse,
 	NotesUserListTimelineRequest,
 	NotesUserListTimelineResponse,
 	NotificationsCreateRequest,
@@ -833,6 +843,11 @@ export type Endpoints = {
 	'chat/rooms/members': { req: ChatRoomsMembersRequest; res: ChatRoomsMembersResponse };
 	'chat/rooms/mute': { req: ChatRoomsMuteRequest; res: EmptyResponse };
 	'chat/rooms/owned': { req: ChatRoomsOwnedRequest; res: ChatRoomsOwnedResponse };
+	'chat/rooms/requests/accept': { req: ChatRoomsRequestsAcceptRequest; res: ChatRoomsRequestsAcceptResponse };
+	'chat/rooms/requests/cancel': { req: ChatRoomsRequestsCancelRequest; res: EmptyResponse };
+	'chat/rooms/requests/create': { req: ChatRoomsRequestsCreateRequest; res: ChatRoomsRequestsCreateResponse };
+	'chat/rooms/requests/list': { req: ChatRoomsRequestsListRequest; res: ChatRoomsRequestsListResponse };
+	'chat/rooms/requests/reject': { req: ChatRoomsRequestsRejectRequest; res: EmptyResponse };
 	'chat/rooms/show': { req: ChatRoomsShowRequest; res: ChatRoomsShowResponse };
 	'chat/rooms/update': { req: ChatRoomsUpdateRequest; res: ChatRoomsUpdateResponse };
 	'clips/add-note': { req: ClipsAddNoteRequest; res: EmptyResponse };
@@ -1019,6 +1034,7 @@ export type Endpoints = {
 	'notes/timeline': { req: NotesTimelineRequest; res: NotesTimelineResponse };
 	'notes/translate': { req: NotesTranslateRequest; res: NotesTranslateResponse };
 	'notes/unrenote': { req: NotesUnrenoteRequest; res: EmptyResponse };
+	'notes/update': { req: NotesUpdateRequest; res: NotesUpdateResponse };
 	'notes/user-list-timeline': { req: NotesUserListTimelineRequest; res: NotesUserListTimelineResponse };
 	'notifications/create': { req: NotificationsCreateRequest; res: EmptyResponse };
 	'notifications/flush': { req: EmptyRequest; res: EmptyResponse };

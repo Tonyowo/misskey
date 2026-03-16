@@ -4,57 +4,40 @@
  */
 
 import { Injectable } from '@nestjs/common';
-import ms from 'ms';
+import { EntityNotFoundError } from 'typeorm';
 import { Endpoint } from '@/server/api/endpoint-base.js';
-import { ApiError } from '@/server/api/error.js';
 import { ChatService } from '@/core/ChatService.js';
 import { ChatEntityService } from '@/core/entities/ChatEntityService.js';
+import { ApiError } from '@/server/api/error.js';
 
 export const meta = {
 	tags: ['chat'],
 
 	requireCredential: true,
 
-	prohibitMoved: true,
-
 	kind: 'write:chat',
-
-	limit: {
-		duration: ms('1day'),
-		max: 50,
-	},
 
 	res: {
 		type: 'object',
 		optional: false, nullable: false,
-		ref: 'ChatRoomInvitation',
+		ref: 'ChatRoomMembership',
 	},
 
 	errors: {
 		noSuchRoom: {
 			message: 'No such room.',
 			code: 'NO_SUCH_ROOM',
-			id: '916f9507-49ba-4e90-b57f-1fd4deaa47a5',
+			id: '8bfc838f-21a7-4b50-b95a-7828ced76e34',
 		},
-		isYourself: {
-			message: 'Target user is yourself.',
-			code: 'IS_YOURSELF',
-			id: 'f24758f4-d12e-47f9-86d2-95a4d1c78029',
-		},
-		alreadyMember: {
-			message: 'Target user is already a member.',
-			code: 'ALREADY_MEMBER',
-			id: '09d36d36-2eff-49cf-ad9c-714f2f22f061',
-		},
-		alreadyInvited: {
-			message: 'Target user has already been invited.',
-			code: 'ALREADY_INVITED',
-			id: 'cf4f7a0e-18fe-46b5-b768-9950defa1681',
+		noSuchRequest: {
+			message: 'No such room join request.',
+			code: 'NO_SUCH_REQUEST',
+			id: '3f26c5aa-5bb7-4320-b0a7-c787f4cebca1',
 		},
 		roomIsFull: {
 			message: 'This room is full.',
 			code: 'ROOM_IS_FULL',
-			id: '2fe10100-3628-4960-a8ca-2d7f1996758f',
+			id: 'a8844dab-b854-4c8c-ba88-f8eb4a93a71b',
 		},
 	},
 } as const;
@@ -83,17 +66,17 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 			}
 
 			try {
-				const invitation = await this.chatService.createRoomInvitation(me.id, room.id, ps.userId);
-				return await this.chatEntityService.packRoomInvitation(invitation, me);
+				const membership = await this.chatService.approveRoomJoinRequest(me.id, room.id, ps.userId);
+				return await this.chatEntityService.packRoomMembership(membership, me, {
+					populateUser: true,
+				});
 			} catch (err) {
+				if (err instanceof EntityNotFoundError) {
+					throw new ApiError(meta.errors.noSuchRequest);
+				}
+
 				if (err instanceof Error) {
 					switch (err.message) {
-						case 'yourself':
-							throw new ApiError(meta.errors.isYourself);
-						case 'already member':
-							throw new ApiError(meta.errors.alreadyMember);
-						case 'already invited':
-							throw new ApiError(meta.errors.alreadyInvited);
 						case 'room is full':
 							throw new ApiError(meta.errors.roomIsFull);
 					}

@@ -16,12 +16,13 @@ import { ChatEntityService } from '@/core/entities/ChatEntityService.js';
 import { ApRendererService } from '@/core/activitypub/ApRendererService.js';
 import { PushNotificationService } from '@/core/PushNotificationService.js';
 import { bindThis } from '@/decorators.js';
-import type { ChatApprovalsRepository, ChatMessagesRepository, ChatRoomInvitationsRepository, ChatRoomMembershipsRepository, ChatRoomsRepository, MiChatMessage, MiChatRoom, MiChatRoomMembership, MiDriveFile, MiUser, MutingsRepository, UsersRepository } from '@/models/_.js';
+import type { ChatApprovalsRepository, ChatMessagesRepository, ChatRoomInvitationsRepository, ChatRoomJoinRequestsRepository, ChatRoomMembershipsRepository, ChatRoomsRepository, MiChatMessage, MiChatRoom, MiChatRoomMembership, MiDriveFile, MiUser, MutingsRepository, UsersRepository } from '@/models/_.js';
 import { UserBlockingService } from '@/core/UserBlockingService.js';
 import { QueryService } from '@/core/QueryService.js';
 import { RoleService } from '@/core/RoleService.js';
 import { UserFollowingService } from '@/core/UserFollowingService.js';
 import { MiChatRoomInvitation } from '@/models/ChatRoomInvitation.js';
+import { MiChatRoomJoinRequest } from '@/models/ChatRoomJoinRequest.js';
 import { Packed } from '@/misc/json-schema.js';
 import { sqlLikeEscape } from '@/misc/sql-like-escape.js';
 import { CustomEmojiService } from '@/core/CustomEmojiService.js';
@@ -70,6 +71,9 @@ export class ChatService {
 
 		@Inject(DI.chatRoomInvitationsRepository)
 		private chatRoomInvitationsRepository: ChatRoomInvitationsRepository,
+
+		@Inject(DI.chatRoomJoinRequestsRepository)
+		private chatRoomJoinRequestsRepository: ChatRoomJoinRequestsRepository,
 
 		@Inject(DI.chatRoomMembershipsRepository)
 		private chatRoomMembershipsRepository: ChatRoomMembershipsRepository,
@@ -633,6 +637,23 @@ export class ChatService {
 		return membership != null;
 	}
 
+	private async addUserToRoom(roomId: MiChatRoom['id'], userId: MiUser['id']) {
+		const membership = {
+			id: this.idService.gen(),
+			roomId,
+			userId,
+		} satisfies Partial<MiChatRoomMembership>;
+
+		return await this.chatRoomMembershipsRepository.insertOne(membership);
+	}
+
+	private async ensureRoomHasSpace(roomId: MiChatRoom['id']) {
+		const membershipsCount = await this.chatRoomMembershipsRepository.countBy({ roomId });
+		if (membershipsCount >= MAX_ROOM_MEMBERS) {
+			throw new Error('room is full');
+		}
+	}
+
 	@bindThis
 	public async createRoomInvitation(inviterId: MiUser['id'], roomId: MiChatRoom['id'], inviteeId: MiUser['id']) {
 		if (inviterId === inviteeId) {
@@ -650,10 +671,7 @@ export class ChatService {
 			throw new Error('already invited');
 		}
 
-		const membershipsCount = await this.chatRoomMembershipsRepository.countBy({ roomId });
-		if (membershipsCount >= MAX_ROOM_MEMBERS) {
-			throw new Error('room is full');
-		}
+		await this.ensureRoomHasSpace(roomId);
 
 		// TODO: cehck block
 
@@ -664,6 +682,7 @@ export class ChatService {
 		} satisfies Partial<MiChatRoomInvitation>;
 
 		const created = await this.chatRoomInvitationsRepository.insertOne(invitation);
+		await this.chatRoomJoinRequestsRepository.delete({ roomId, userId: inviteeId });
 
 		this.notificationService.createNotification(inviteeId, 'chatRoomInvitationReceived', {
 			invitationId: invitation.id,
@@ -704,23 +723,85 @@ export class ChatService {
 	}
 
 	@bindThis
+	public async createRoomJoinRequest(requesterId: MiUser['id'], roomId: MiChatRoom['id']) {
+		const room = await this.chatRoomsRepository.findOneByOrFail({ id: roomId });
+
+		if (room.ownerId === requesterId) {
+			throw new Error('yourself');
+		}
+
+		if (await this.isRoomMember(room, requesterId)) {
+			throw new Error('already member');
+		}
+
+		const existingInvitation = await this.chatRoomInvitationsRepository.findOneBy({ roomId, userId: requesterId });
+		if (existingInvitation) {
+			throw new Error('already invited');
+		}
+
+		const existingRequest = await this.chatRoomJoinRequestsRepository.findOneBy({ roomId, userId: requesterId });
+		if (existingRequest) {
+			throw new Error('already requested');
+		}
+
+		const request = {
+			id: this.idService.gen(),
+			roomId: room.id,
+			userId: requesterId,
+		} satisfies Partial<MiChatRoomJoinRequest>;
+
+		return await this.chatRoomJoinRequestsRepository.insertOne(request);
+	}
+
+	@bindThis
+	public async cancelRoomJoinRequest(userId: MiUser['id'], roomId: MiChatRoom['id']) {
+		const request = await this.chatRoomJoinRequestsRepository.findOneByOrFail({ roomId, userId });
+		await this.chatRoomJoinRequestsRepository.delete(request.id);
+	}
+
+	@bindThis
+	public async getRoomJoinRequestsWithPagination(roomId: MiChatRoom['id'], limit: number, sinceId?: MiChatRoomJoinRequest['id'] | null, untilId?: MiChatRoomJoinRequest['id'] | null) {
+		const query = this.queryService.makePaginationQuery(this.chatRoomJoinRequestsRepository.createQueryBuilder('request'), sinceId, untilId)
+			.andWhere('request.roomId = :roomId', { roomId });
+
+		const requests = await query.take(limit).getMany();
+
+		return requests;
+	}
+
+	@bindThis
+	public async approveRoomJoinRequest(ownerId: MiUser['id'], roomId: MiChatRoom['id'], userId: MiUser['id']) {
+		await this.chatRoomsRepository.findOneByOrFail({ id: roomId, ownerId });
+		const request = await this.chatRoomJoinRequestsRepository.findOneByOrFail({ roomId, userId });
+
+		await this.ensureRoomHasSpace(roomId);
+
+		const membership = await this.addUserToRoom(roomId, userId);
+
+		// TODO: transaction
+		await this.chatRoomJoinRequestsRepository.delete(request.id);
+		await this.chatRoomInvitationsRepository.delete({ roomId, userId });
+
+		return membership;
+	}
+
+	@bindThis
+	public async rejectRoomJoinRequest(ownerId: MiUser['id'], roomId: MiChatRoom['id'], userId: MiUser['id']) {
+		await this.chatRoomsRepository.findOneByOrFail({ id: roomId, ownerId });
+		const request = await this.chatRoomJoinRequestsRepository.findOneByOrFail({ roomId, userId });
+		await this.chatRoomJoinRequestsRepository.delete(request.id);
+	}
+
+	@bindThis
 	public async joinToRoom(userId: MiUser['id'], roomId: MiChatRoom['id']) {
 		const invitation = await this.chatRoomInvitationsRepository.findOneByOrFail({ roomId, userId });
 
-		const membershipsCount = await this.chatRoomMembershipsRepository.countBy({ roomId });
-		if (membershipsCount >= MAX_ROOM_MEMBERS) {
-			throw new Error('room is full');
-		}
-
-		const membership = {
-			id: this.idService.gen(),
-			roomId: roomId,
-			userId: userId,
-		} satisfies Partial<MiChatRoomMembership>;
+		await this.ensureRoomHasSpace(roomId);
 
 		// TODO: transaction
-		await this.chatRoomMembershipsRepository.insertOne(membership);
+		await this.addUserToRoom(roomId, userId);
 		await this.chatRoomInvitationsRepository.delete(invitation.id);
+		await this.chatRoomJoinRequestsRepository.delete({ roomId, userId });
 	}
 
 	@bindThis

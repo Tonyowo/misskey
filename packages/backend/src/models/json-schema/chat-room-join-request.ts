@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
-export const packedChatRoomSchema = {
+export const packedChatRoomJoinRequestSchema = {
 	type: 'object',
 	properties: {
 		id: {
@@ -15,38 +15,23 @@ export const packedChatRoomSchema = {
 			format: 'date-time',
 			optional: false, nullable: false,
 		},
-		ownerId: {
+		userId: {
 			type: 'string',
 			optional: false, nullable: false,
 		},
-		owner: {
+		user: {
 			type: 'object',
 			optional: false, nullable: false,
 			ref: 'UserLite',
 		},
-		name: {
+		roomId: {
 			type: 'string',
 			optional: false, nullable: false,
 		},
-		description: {
-			type: 'string',
+		room: {
+			type: 'object',
 			optional: false, nullable: false,
-		},
-		isMuted: {
-			type: 'boolean',
-			optional: true, nullable: false,
-		},
-		isJoined: {
-			type: 'boolean',
-			optional: true, nullable: false,
-		},
-		invitationExists: {
-			type: 'boolean',
-			optional: true, nullable: false,
-		},
-		joinRequestExists: {
-			type: 'boolean',
-			optional: true, nullable: false,
+			ref: 'ChatRoom',
 		},
 	},
 } as const;

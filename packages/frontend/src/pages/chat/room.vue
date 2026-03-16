@@ -11,6 +11,34 @@ SPDX-License-Identifier: AGPL-3.0-only
 				<MkLoading/>
 			</div>
 
+			<div v-else-if="room && !room.isJoined">
+				<div class="_gaps" style="text-align: center;">
+					<div>{{ i18n.ts._chat.youAreNotAMemberOfThisRoom }}</div>
+					<div v-if="room.description" :class="$style.roomDescription">{{ room.description }}</div>
+					<MkInfo v-if="room.joinRequestExists">
+						{{ i18n.ts._chat.joinRequestPending }}
+					</MkInfo>
+					<div :class="$style.roomActions">
+						<MkButton
+							v-if="!room.joinRequestExists"
+							primary
+							rounded
+							:disabled="$i.policies.chatAvailability !== 'available'"
+							@click="requestToJoinRoom"
+						>
+							<i class="ti ti-user-plus"></i> {{ i18n.ts._chat.requestToJoinRoom }}
+						</MkButton>
+						<MkButton
+							v-else
+							rounded
+							@click="cancelJoinRequest"
+						>
+							<i class="ti ti-x"></i> {{ i18n.ts._chat.cancelJoinRequest }}
+						</MkButton>
+					</div>
+				</div>
+			</div>
+
 			<div v-else-if="messages.length === 0">
 				<div class="_gaps" style="text-align: center;">
 					<div>{{ i18n.ts._chat.noMessagesYet }}</div>
@@ -71,7 +99,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 	</div>
 
 	<template #footer>
-		<div v-if="tab === 'chat'" :class="$style.footer">
+		<div v-if="tab === 'chat' && canUseChatForm" :class="$style.footer">
 			<div class="_gaps">
 				<Transition name="fade">
 					<div v-show="showIndicator" :class="$style.new">
@@ -88,7 +116,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script lang="ts" setup>
-import { ref, useTemplateRef, computed, onMounted, onBeforeUnmount, onDeactivated, onActivated } from 'vue';
+import { ref, useTemplateRef, computed, onMounted, onBeforeUnmount, onDeactivated, onActivated, watch } from 'vue';
 import * as Misskey from 'misskey-js';
 import { getScrollContainer } from '@@/js/scroll.js';
 import XMessage from './XMessage.vue';
@@ -138,6 +166,8 @@ const connection = ref<Misskey.IChannelConnection<Misskey.Channels['chatUser']> 
 const showIndicator = ref(false);
 const timelineEl = useTemplateRef('timelineEl');
 const timeline = makeDateSeparatedTimelineComputedRef(messages);
+const isJoinedRoom = computed(() => room.value?.isJoined ?? false);
+const canUseChatForm = computed(() => user.value != null || isJoinedRoom.value);
 
 const SCROLL_HEAD_THRESHOLD = 200;
 
@@ -176,6 +206,14 @@ async function initialize() {
 
 	initializing.value = true;
 	initialized.value = false;
+	canFetchMore.value = false;
+	user.value = null;
+	room.value = null;
+	messages.value = [];
+	showIndicator.value = false;
+	connection.value?.dispose();
+	connection.value = null;
+	window.document.removeEventListener('visibilitychange', onVisibilitychange);
 
 	if (props.userId) {
 		const [u, m] = await Promise.all([
@@ -237,17 +275,19 @@ async function initialize() {
 		room.value = r;
 		messages.value = m.map(x => normalizeMessage(x));
 
-		if (messages.value.length === LIMIT) {
+		if (room.value.isJoined && messages.value.length === LIMIT) {
 			canFetchMore.value = true;
 		}
 
-		connection.value = useStream().useChannel('chatRoom', {
-			roomId: room.value.id,
-		});
-		connection.value.on('message', onMessage);
-		connection.value.on('deleted', onDeleted);
-		connection.value.on('react', onReact);
-		connection.value.on('unreact', onUnreact);
+		if (room.value.isJoined) {
+			connection.value = useStream().useChannel('chatRoom', {
+				roomId: room.value.id,
+			});
+			connection.value.on('message', onMessage);
+			connection.value.on('deleted', onDeleted);
+			connection.value.on('react', onReact);
+			connection.value.on('unreact', onUnreact);
+		}
 	}
 
 	window.document.addEventListener('visibilitychange', onVisibilitychange);
@@ -342,10 +382,6 @@ function onIndicatorClick() {
 	showIndicator.value = false;
 }
 
-function notifyNewMessage() {
-	showIndicator.value = true;
-}
-
 function onVisibilitychange() {
 	if (window.document.hidden) return;
 	// TODO
@@ -373,7 +409,67 @@ async function inviteUser() {
 	os.apiWithDialog('chat/rooms/invitations/create', {
 		roomId: room.value.id,
 		userId: invitee.id,
+	}, undefined, {
+		'cf4f7a0e-18fe-46b5-b768-9950defa1681': {
+			title: i18n.ts._chat.inviteUser,
+			text: i18n.ts._chat.userAlreadyInvitedToThisRoom,
+		},
+		'09d36d36-2eff-49cf-ad9c-714f2f22f061': {
+			title: i18n.ts._chat.inviteUser,
+			text: i18n.ts._chat.userAlreadyInThisRoom,
+		},
+		'2fe10100-3628-4960-a8ca-2d7f1996758f': {
+			title: i18n.ts._chat.inviteUser,
+			text: i18n.ts._chat.roomIsFull,
+		},
+		'f24758f4-d12e-47f9-86d2-95a4d1c78029': {
+			title: i18n.ts._chat.inviteUser,
+			text: i18n.ts._chat.cannotInviteYourself,
+		},
 	});
+}
+
+async function requestToJoinRoom() {
+	if (room.value == null || room.value.isJoined) return;
+
+	await os.apiWithDialog('chat/rooms/requests/create', {
+		roomId: room.value.id,
+	}, undefined, {
+		'41333c6f-0e26-46d7-8f2b-c47f714b4d87': {
+			title: i18n.ts._chat.requestToJoinRoom,
+			text: i18n.ts._chat.cannotRequestToJoinYourOwnRoom,
+		},
+		'b304846f-e151-434c-88a5-f3961473f679': {
+			title: i18n.ts._chat.requestToJoinRoom,
+			text: i18n.ts._chat.youAreAlreadyInThisRoom,
+		},
+		'e4c83205-738b-4ee5-89fc-7c0b7081e609': {
+			title: i18n.ts._chat.requestToJoinRoom,
+			text: i18n.ts._chat.youHaveAlreadyBeenInvitedToThisRoom,
+		},
+		'7d49d89f-e6d3-4601-a337-5afee4c5501c': {
+			title: i18n.ts._chat.requestToJoinRoom,
+			text: i18n.ts._chat.joinRequestPending,
+		},
+	});
+
+	room.value = {
+		...room.value,
+		joinRequestExists: true,
+	};
+}
+
+async function cancelJoinRequest() {
+	if (room.value == null || room.value.isJoined || !room.value.joinRequestExists) return;
+
+	await os.apiWithDialog('chat/rooms/requests/cancel', {
+		roomId: room.value.id,
+	});
+
+	room.value = {
+		...room.value,
+		joinRequestExists: false,
+	};
 }
 
 async function leaveRoom() {
@@ -403,7 +499,7 @@ function showMenu(ev: PointerEvent) {
 					inviteUser();
 				},
 			});
-		} else {
+		} else if (room.value.isJoined) {
 			menuItems.push({
 				text: i18n.ts._chat.leave,
 				icon: 'ti ti-x',
@@ -423,7 +519,7 @@ const headerTabs = computed(() => room.value ? [{
 	key: 'chat',
 	title: i18n.ts._chat.messages,
 	icon: 'ti ti-messages',
-}, {
+}, ...(room.value.isJoined ? [{
 	key: 'members',
 	title: i18n.ts._chat.members,
 	icon: 'ti ti-users',
@@ -431,7 +527,7 @@ const headerTabs = computed(() => room.value ? [{
 	key: 'search',
 	title: i18n.ts.search,
 	icon: 'ti ti-search',
-}, {
+}] : []), {
 	key: 'info',
 	title: i18n.ts.info,
 	icon: 'ti ti-info-circle',
@@ -445,10 +541,18 @@ const headerTabs = computed(() => room.value ? [{
 	icon: 'ti ti-search',
 }]);
 
-const headerActions = computed<PageHeaderItem[]>(() => [{
+watch(headerTabs, () => {
+	if (!headerTabs.value.some(headerTab => headerTab.key === tab.value)) {
+		tab.value = 'chat';
+	}
+}, {
+	immediate: true,
+});
+
+const headerActions = computed<PageHeaderItem[]>(() => room.value && room.value.isJoined ? [{
 	icon: 'ti ti-dots',
 	handler: showMenu,
-}]);
+}] : []);
 
 definePage(computed(() => {
 	if (initialized.value) {
@@ -525,6 +629,16 @@ definePage(computed(() => {
 
 .footer {
 
+}
+
+.roomDescription {
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+
+.roomActions {
+	display: flex;
+	justify-content: center;
 }
 
 .form {
