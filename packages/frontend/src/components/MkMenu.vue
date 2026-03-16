@@ -346,7 +346,7 @@ async function showRadioOptions(item: MenuRadio, ev: MouseEvent | PointerEvent |
 		};
 	});
 
-	if (preferClick) {
+	if (props.asDrawer) {
 		await openStackedChildMenu(children);
 	} else {
 		childTarget.value = (ev.currentTarget ?? ev.target) as HTMLElement;
@@ -372,7 +372,7 @@ async function showChildren(item: MenuParent, ev: MouseEvent | PointerEvent | Ke
 
 	childrenCache.set(item, children);
 
-	if (preferClick) {
+	if (props.asDrawer) {
 		await openStackedChildMenu(children);
 	} else {
 		childTarget.value = (ev.currentTarget ?? ev.target) as HTMLElement;

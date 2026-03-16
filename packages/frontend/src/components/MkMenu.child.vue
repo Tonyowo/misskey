@@ -31,6 +31,7 @@ provide('isNestingMenu', true);
 const el = useTemplateRef('el');
 const align = 'left';
 
+const OVERLAP_OFFSET = 32;
 const VIEWPORT_MARGIN = 16;
 const SCROLLBAR_THICKNESS = 16;
 
@@ -40,10 +41,10 @@ function setPosition() {
 	const parentRect = props.anchorElement.getBoundingClientRect();
 	const myRect = el.value.getBoundingClientRect();
 
-	let left = props.anchorElement.offsetWidth;
+	let left = props.anchorElement.offsetWidth - OVERLAP_OFFSET;
 	let top = (parentRect.top - rootRect.top) - 8;
 	if (rootRect.left + left + myRect.width >= (window.innerWidth - SCROLLBAR_THICKNESS)) {
-		left = -myRect.width;
+		left = -(myRect.width - OVERLAP_OFFSET);
 	}
 	if (rootRect.top + top + myRect.height >= (window.innerHeight - SCROLLBAR_THICKNESS)) {
 		top = top - ((rootRect.top + top + myRect.height) - (window.innerHeight - SCROLLBAR_THICKNESS));
@@ -99,5 +100,6 @@ defineExpose({
 <style lang="scss" module>
 .root {
 	position: absolute;
+	z-index: 1;
 }
 </style>

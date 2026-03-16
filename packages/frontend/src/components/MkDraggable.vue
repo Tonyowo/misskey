@@ -35,7 +35,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 			@dragleave="onDragleave($event, item)"
 			@drop.prevent.stop="onDrop($event, item, false)"
 		></div>
-		<div :key="`MkDraggableItem:${item.id}`" style="position: relative; z-index: 0;">
+		<div :key="`MkDraggableItem:${item.id}`" style="position: relative;">
 			<slot :item="item" :index="i" :dragStart="(ev) => onDragstart(ev, item)"></slot>
 		</div>
 		<div
