@@ -12,8 +12,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 <script lang="ts" setup>
 import { nextTick, onMounted, onUnmounted, provide, useTemplateRef, watch } from 'vue';
 import MkMenu from './MkMenu.vue';
+import { calculateNestedMenuPosition } from './MkMenu.position.js';
 import type { MenuItem } from '@/types/menu.js';
-import { isTouchUsing } from '@/utility/touch.js';
 
 const props = defineProps<{
 	items: MenuItem[];
@@ -41,29 +41,17 @@ function setPosition() {
 	const parentRect = props.anchorElement.getBoundingClientRect();
 	const myRect = el.value.getBoundingClientRect();
 
-	let left = props.anchorElement.offsetWidth;
-	let top = (parentRect.top - rootRect.top) - 8;
-	const rightBoundary = window.innerWidth - SCROLLBAR_THICKNESS - VIEWPORT_MARGIN;
-	const rightOverflow = (rootRect.left + left + myRect.width) - rightBoundary;
-	if (rightOverflow > 0) {
-		if (isTouchUsing) {
-			left -= rightOverflow;
-		} else {
-			left = -myRect.width;
-		}
-	}
-	if (rootRect.top + top + myRect.height >= (window.innerHeight - SCROLLBAR_THICKNESS)) {
-		top = top - ((rootRect.top + top + myRect.height) - (window.innerHeight - SCROLLBAR_THICKNESS));
-	}
-	if (rootRect.left + left < VIEWPORT_MARGIN) {
-		left += VIEWPORT_MARGIN - (rootRect.left + left);
-	}
-	if (rootRect.left + left + myRect.width > (window.innerWidth - SCROLLBAR_THICKNESS - VIEWPORT_MARGIN)) {
-		left -= (rootRect.left + left + myRect.width) - (window.innerWidth - SCROLLBAR_THICKNESS - VIEWPORT_MARGIN);
-	}
-	if (rootRect.top + top < VIEWPORT_MARGIN) {
-		top += VIEWPORT_MARGIN - (rootRect.top + top);
-	}
+	const { left, top } = calculateNestedMenuPosition({
+		rootRect,
+		parentRect,
+		menuRect: myRect,
+		anchorWidth: props.anchorElement.offsetWidth,
+		viewportWidth: window.innerWidth,
+		viewportHeight: window.innerHeight,
+		viewportMargin: VIEWPORT_MARGIN,
+		scrollbarThickness: SCROLLBAR_THICKNESS,
+	});
+
 	el.value.style.left = left + 'px';
 	el.value.style.top = top + 'px';
 }
