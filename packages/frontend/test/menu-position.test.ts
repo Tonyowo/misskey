@@ -23,7 +23,23 @@ describe('nested menu positioning', () => {
 		});
 	});
 
-	test('flips submenu to the left before overlapping the parent menu', () => {
+	test('keeps submenu on the right and only overlaps slightly when the overflow is small', () => {
+		const position = calculateNestedMenuPosition({
+			rootRect: new DOMRect(100, 80, 260, 420),
+			parentRect: new DOMRect(120, 120, 220, 56),
+			menuRect: new DOMRect(0, 0, 170, 160),
+			anchorWidth: 220,
+			viewportWidth: 520,
+			viewportHeight: 900,
+		});
+
+		assert.deepEqual(position, {
+			left: 218,
+			top: 32,
+		});
+	});
+
+	test('flips submenu to the left when keeping it on the right would overlap too much', () => {
 		const position = calculateNestedMenuPosition({
 			rootRect: new DOMRect(200, 80, 260, 420),
 			parentRect: new DOMRect(220, 120, 220, 56),
@@ -39,10 +55,10 @@ describe('nested menu positioning', () => {
 		});
 	});
 
-	test('only overlaps when the flipped submenu would leave the viewport', () => {
+	test('slightly overlaps on the left when the flipped submenu would otherwise leave the viewport', () => {
 		const position = calculateNestedMenuPosition({
-			rootRect: new DOMRect(100, 80, 260, 420),
-			parentRect: new DOMRect(120, 120, 220, 56),
+			rootRect: new DOMRect(170, 80, 260, 420),
+			parentRect: new DOMRect(190, 120, 220, 56),
 			menuRect: new DOMRect(0, 0, 170, 160),
 			anchorWidth: 220,
 			viewportWidth: 520,
@@ -50,7 +66,7 @@ describe('nested menu positioning', () => {
 		});
 
 		assert.deepEqual(position, {
-			left: -84,
+			left: -154,
 			top: 32,
 		});
 	});
