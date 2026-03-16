@@ -229,6 +229,8 @@ async function transferOwner(membership: Misskey.entities.ChatRoomMembership) {
 
 .invitation {
 	display: flex;
+	align-items: center;
+	gap: 8px;
 }
 
 .invitationBody {
