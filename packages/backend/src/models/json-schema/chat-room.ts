@@ -32,6 +32,10 @@ export const packedChatRoomSchema = {
 			type: 'string',
 			optional: false, nullable: false,
 		},
+		announcement: {
+			type: 'string',
+			optional: false, nullable: false,
+		},
 		joinPolicy: {
 			type: 'string',
 			optional: false, nullable: false,
@@ -46,6 +50,10 @@ export const packedChatRoomSchema = {
 			type: 'string',
 			optional: false, nullable: true,
 		},
+		pinnedMessageId: {
+			type: 'string',
+			optional: false, nullable: true,
+		},
 		memberCanInvite: {
 			type: 'boolean',
 			optional: false, nullable: false,
@@ -55,6 +63,10 @@ export const packedChatRoomSchema = {
 			optional: false, nullable: false,
 		},
 		maxMembers: {
+			type: 'integer',
+			optional: false, nullable: false,
+		},
+		memberCount: {
 			type: 'integer',
 			optional: false, nullable: false,
 		},
@@ -81,6 +93,10 @@ export const packedChatRoomSchema = {
 		},
 		canManageAdmins: {
 			type: 'boolean',
+			optional: true, nullable: false,
+		},
+		pendingRequestCount: {
+			type: 'integer',
 			optional: true, nullable: false,
 		},
 		invitationExists: {

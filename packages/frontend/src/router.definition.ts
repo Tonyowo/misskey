@@ -64,6 +64,9 @@ export const ROUTE_DEF = [{
 	path: '/chat/room/:roomId',
 	component: chatPage(() => import('@/pages/chat/room.vue')),
 	loginRequired: true,
+	query: {
+		inviteCode: 'inviteCode',
+	},
 }, {
 	path: '/chat/messages/:messageId',
 	component: chatPage(() => import('@/pages/chat/message.vue')),

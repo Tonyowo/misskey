@@ -56,7 +56,11 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 			if (message == null) {
 				throw new ApiError(meta.errors.noSuchMessage);
 			}
-			if (message.fromUserId !== me.id && message.toUserId !== me.id && !(await this.roleService.isModerator(me))) {
+			const room = message.toRoomId != null ? await this.chatService.findRoomById(message.toRoomId) : null;
+			const canView = room != null
+				? await this.chatService.hasPermissionToViewRoomTimeline(me.id, room)
+				: message.fromUserId === me.id || message.toUserId === me.id;
+			if (!canView && !(await this.roleService.isModerator(me))) {
 				throw new ApiError(meta.errors.noSuchMessage);
 			}
 			return this.chatEntityService.packMessageDetailed(message, me);

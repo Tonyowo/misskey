@@ -16,7 +16,7 @@ import { ChatEntityService } from '@/core/entities/ChatEntityService.js';
 import { ApRendererService } from '@/core/activitypub/ApRendererService.js';
 import { PushNotificationService } from '@/core/PushNotificationService.js';
 import { bindThis } from '@/decorators.js';
-import type { ChatApprovalsRepository, ChatMessagesRepository, ChatRoomBansRepository, ChatRoomInvitationsRepository, ChatRoomJoinRequestsRepository, ChatRoomMembershipsRepository, ChatRoomsRepository, MiChatMessage, MiChatRoom, MiChatRoomMembership, MiDriveFile, MiUser, MutingsRepository, UsersRepository } from '@/models/_.js';
+import type { ChatApprovalsRepository, ChatMessagesRepository, ChatRoomBansRepository, ChatRoomInviteLinksRepository, ChatRoomInvitationsRepository, ChatRoomJoinRequestsRepository, ChatRoomMembershipsRepository, ChatRoomsRepository, MiChatMessage, MiChatRoom, MiChatRoomInviteLink, MiChatRoomMembership, MiDriveFile, MiUser, MutingsRepository, UsersRepository } from '@/models/_.js';
 import { UserBlockingService } from '@/core/UserBlockingService.js';
 import { QueryService } from '@/core/QueryService.js';
 import { RoleService } from '@/core/RoleService.js';
@@ -31,9 +31,11 @@ import { CustomEmojiService } from '@/core/CustomEmojiService.js';
 import { emojiRegex } from '@/misc/emoji-regex.js';
 import { NotificationService } from '@/core/NotificationService.js';
 import { ModerationLogService } from '@/core/ModerationLogService.js';
+import { L_CHARS, secureRndstr } from '@/misc/secure-rndstr.js';
 
 const DEFAULT_ROOM_MAX_MEMBERS = 50;
 const DEFAULT_INVITATION_EXPIRATION_MS = 1000 * 60 * 60 * 24 * 7;
+const ROOM_INVITE_LINK_CODE_LENGTH = 12;
 const MAX_REACTIONS_PER_MESSAGE = 100;
 const isCustomEmojiRegexp = /^:([\w+-]+)(?:@\.)?:$/;
 
@@ -74,6 +76,9 @@ export class ChatService {
 
 		@Inject(DI.chatRoomInvitationsRepository)
 		private chatRoomInvitationsRepository: ChatRoomInvitationsRepository,
+
+		@Inject(DI.chatRoomInviteLinksRepository)
+		private chatRoomInviteLinksRepository: ChatRoomInviteLinksRepository,
 
 		@Inject(DI.chatRoomBansRepository)
 		private chatRoomBansRepository: ChatRoomBansRepository,
@@ -393,6 +398,12 @@ export class ChatService {
 				//this.queueService.deliver(fromUser, activity, toUser.inbox);
 			}
 		} else if (message.toRoomId) {
+			await this.chatRoomsRepository.update({
+				id: message.toRoomId,
+				pinnedMessageId: message.id,
+			}, {
+				pinnedMessageId: null,
+			});
 			this.globalEventService.publishChatRoomStream(message.toRoomId, 'deleted', message.id);
 		}
 	}
@@ -569,6 +580,7 @@ export class ChatService {
 	public async createRoom(owner: MiUser, params: Partial<{
 		name: string;
 		description: string;
+		announcement: string;
 		joinPolicy: ChatRoomJoinPolicy;
 		discoverability: ChatRoomDiscoverability;
 		avatarFileId: string | null;
@@ -585,6 +597,7 @@ export class ChatService {
 			id: this.idService.gen(),
 			name: params.name,
 			description: params.description,
+			announcement: params.announcement ?? '',
 			ownerId: owner.id,
 			joinPolicy: params.joinPolicy ?? 'invite_only',
 			discoverability: params.discoverability ?? 'private',
@@ -730,6 +743,29 @@ export class ChatService {
 				{ roomId, userId, ignored: false, revokedAt: IsNull(), expiresAt: MoreThan(now) },
 			],
 		});
+	}
+
+	private generateRoomInviteLinkCode() {
+		return secureRndstr(ROOM_INVITE_LINK_CODE_LENGTH, { chars: L_CHARS });
+	}
+
+	private async createUniqueRoomInviteLinkCode() {
+		for (let i = 0; i < 10; i++) {
+			const code = this.generateRoomInviteLinkCode();
+			const exists = await this.chatRoomInviteLinksRepository.existsBy({ code });
+			if (!exists) {
+				return code;
+			}
+		}
+
+		throw new Error('failed to generate invite code');
+	}
+
+	private isRoomInviteLinkActive(inviteLink: MiChatRoomInviteLink) {
+		if (inviteLink.revokedAt != null) return false;
+		if (inviteLink.expiresAt != null && inviteLink.expiresAt.getTime() <= Date.now()) return false;
+		if (inviteLink.maxUses != null && inviteLink.uses >= inviteLink.maxUses) return false;
+		return true;
 	}
 
 	@bindThis
@@ -977,6 +1013,108 @@ export class ChatService {
 	}
 
 	@bindThis
+	public async createRoomInviteLink(actorId: MiUser['id'], roomId: MiChatRoom['id'], params?: {
+		expiresAt?: Date | null;
+		maxUses?: number | null;
+	}) {
+		const room = await this.chatRoomsRepository.findOneByOrFail({ id: roomId });
+		if (!(await this.canInviteToRoom(room, actorId))) {
+			throw new Error('forbidden');
+		}
+
+		const inviteLink = {
+			id: this.idService.gen(),
+			code: await this.createUniqueRoomInviteLinkCode(),
+			roomId: room.id,
+			createdById: actorId,
+			expiresAt: params?.expiresAt ?? null,
+			maxUses: params?.maxUses ?? null,
+		} satisfies Partial<MiChatRoomInviteLink>;
+
+		return await this.chatRoomInviteLinksRepository.insertOne(inviteLink);
+	}
+
+	@bindThis
+	public async getRoomInviteLinksWithPagination(actorId: MiUser['id'], roomId: MiChatRoom['id'], limit: number, sinceId?: MiChatRoomInviteLink['id'] | null, untilId?: MiChatRoomInviteLink['id'] | null) {
+		const room = await this.chatRoomsRepository.findOneByOrFail({ id: roomId });
+		const actorRole = await this.getRoomActorRole(room, actorId);
+		if (actorRole == null) {
+			throw new Error('forbidden');
+		}
+
+		const query = this.queryService.makePaginationQuery(this.chatRoomInviteLinksRepository.createQueryBuilder('inviteLink'), sinceId, untilId)
+			.andWhere('inviteLink.roomId = :roomId', { roomId });
+
+		if (actorRole !== 'owner' && actorRole !== 'admin') {
+			query.andWhere('inviteLink.createdById = :actorId', { actorId });
+		}
+
+		return await query.take(limit).getMany();
+	}
+
+	@bindThis
+	public async revokeRoomInviteLink(actorId: MiUser['id'], inviteLinkId: MiChatRoomInviteLink['id']) {
+		const inviteLink = await this.chatRoomInviteLinksRepository.findOneByOrFail({ id: inviteLinkId });
+		const room = await this.chatRoomsRepository.findOneByOrFail({ id: inviteLink.roomId });
+		const actorRole = await this.getRoomActorRole(room, actorId);
+		if (actorRole == null) {
+			throw new Error('forbidden');
+		}
+
+		if (actorRole !== 'owner' && actorRole !== 'admin' && inviteLink.createdById !== actorId) {
+			throw new Error('forbidden');
+		}
+
+		await this.chatRoomInviteLinksRepository.update(inviteLink.id, {
+			revokedAt: new Date(),
+		});
+	}
+
+	@bindThis
+	public async useRoomInviteLink(userId: MiUser['id'], code: string, roomId?: MiChatRoom['id']) {
+		const inviteLink = await this.chatRoomInviteLinksRepository.findOneByOrFail({ code });
+		if (!this.isRoomInviteLinkActive(inviteLink)) {
+			throw new Error('invalid invite link');
+		}
+		if (roomId != null && inviteLink.roomId !== roomId) {
+			throw new Error('invalid invite link');
+		}
+
+		const room = await this.chatRoomsRepository.findOneByOrFail({ id: inviteLink.roomId });
+
+		if (await this.isRoomBanned(room.id, userId)) {
+			throw new Error('banned');
+		}
+
+		if (await this.isRoomMember(room, userId)) {
+			throw new Error('already member');
+		}
+
+		await this.ensureRoomHasSpace(room);
+
+		await this.chatRoomsRepository.manager.transaction(async (manager) => {
+			const managedInviteLink = await manager.getRepository(this.chatRoomInviteLinksRepository.target).findOneByOrFail({ id: inviteLink.id });
+			if (!this.isRoomInviteLinkActive(managedInviteLink)) {
+				throw new Error('invalid invite link');
+			}
+
+			await manager.getRepository(this.chatRoomMembershipsRepository.target).insert({
+				id: this.idService.gen(),
+				roomId: room.id,
+				userId,
+				role: 'member',
+			});
+			await manager.getRepository(this.chatRoomInviteLinksRepository.target).update(managedInviteLink.id, {
+				uses: managedInviteLink.uses + 1,
+			});
+			await manager.getRepository(this.chatRoomJoinRequestsRepository.target).delete({ roomId: room.id, userId });
+			await manager.getRepository(this.chatRoomInvitationsRepository.target).delete({ roomId: room.id, userId });
+		});
+
+		return room;
+	}
+
+	@bindThis
 	public async ignoreRoomInvitation(userId: MiUser['id'], roomId: MiChatRoom['id']) {
 		const invitation = await this.chatRoomInvitationsRepository.findOneByOrFail({ roomId, userId });
 		await this.chatRoomInvitationsRepository.update(invitation.id, { ignored: true });
@@ -1004,6 +1142,7 @@ export class ChatService {
 	public async updateRoom(room: MiChatRoom, params: {
 		name?: string;
 		description?: string;
+		announcement?: string;
 		joinPolicy?: ChatRoomJoinPolicy;
 		discoverability?: ChatRoomDiscoverability;
 		avatarFileId?: string | null;
@@ -1024,6 +1163,43 @@ export class ChatService {
 			.then((response) => {
 				return response.raw[0];
 			});
+	}
+
+	@bindThis
+	public async updateRoomAnnouncement(actorId: MiUser['id'], roomId: MiChatRoom['id'], announcement: string) {
+		const room = await this.chatRoomsRepository.findOneByOrFail({ id: roomId });
+		if (!(await this.isRoomAdmin(room, actorId))) {
+			throw new Error('forbidden');
+		}
+
+		return this.chatRoomsRepository.createQueryBuilder().update()
+			.set({ announcement })
+			.where('id = :id', { id: roomId })
+			.returning('*')
+			.execute()
+			.then((response) => response.raw[0]);
+	}
+
+	@bindThis
+	public async pinRoomMessage(actorId: MiUser['id'], roomId: MiChatRoom['id'], messageId: MiChatMessage['id'] | null) {
+		const room = await this.chatRoomsRepository.findOneByOrFail({ id: roomId });
+		if (!(await this.isRoomAdmin(room, actorId))) {
+			throw new Error('forbidden');
+		}
+
+		if (messageId != null) {
+			const message = await this.chatMessagesRepository.findOneByOrFail({ id: messageId });
+			if (message.toRoomId !== roomId) {
+				throw new Error('invalid message');
+			}
+		}
+
+		return this.chatRoomsRepository.createQueryBuilder().update()
+			.set({ pinnedMessageId: messageId })
+			.where('id = :id', { id: roomId })
+			.returning('*')
+			.execute()
+			.then((response) => response.raw[0]);
 	}
 
 	@bindThis

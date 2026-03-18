@@ -41,6 +41,12 @@ export class MiChatRoom {
 	public description: string;
 
 	@Column('varchar', {
+		length: 4096,
+		default: '',
+	})
+	public announcement: string;
+
+	@Column('varchar', {
 		length: 16,
 		default: 'invite_only',
 	})
@@ -58,6 +64,13 @@ export class MiChatRoom {
 		default: null,
 	})
 	public avatarFileId: string | null;
+
+	@Column('varchar', {
+		...id(),
+		nullable: true,
+		default: null,
+	})
+	public pinnedMessageId: string | null;
 
 	@Column('boolean', {
 		default: false,

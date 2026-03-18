@@ -5,7 +5,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 <template>
 <div class="_gaps">
-	<MkButton v-if="$i.policies.chatAvailability === 'available'" primary gradate rounded :class="$style.start" @click="start"><i class="ti ti-plus"></i> {{ i18n.ts.startChat }}</MkButton>
+	<MkButton v-if="$i.policies.chatAvailability === 'available'" primary gradate rounded :class="$style.start" @click="start"><i class="ti ti-plus"></i> 开始聊天</MkButton>
 
 	<MkInfo v-else>{{ $i.policies.chatAvailability === 'readonly' ? i18n.ts._chat.chatIsReadOnlyForThisAccountOrServer : i18n.ts._chat.chatNotAvailableForThisAccountOrServer }}</MkInfo>
 
@@ -13,16 +13,16 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 	<MkInput
 		v-model="searchQuery"
-		:placeholder="i18n.ts._chat.searchMessages"
+		placeholder="搜索消息"
 		type="search"
 	>
 		<template #prefix><i class="ti ti-search"></i></template>
 	</MkInput>
 
-	<MkButton v-if="searchQuery.length > 0" primary rounded @click="search">{{ i18n.ts.search }}</MkButton>
+	<MkButton v-if="searchQuery.length > 0" primary rounded @click="search">搜索</MkButton>
 
 	<MkFoldableSection v-if="searched">
-		<template #header>{{ i18n.ts.searchResult }}</template>
+		<template #header>搜索结果</template>
 
 		<div class="_gaps_s">
 			<div v-for="message in searchResults" :key="message.id" :class="$style.searchResultItem">
@@ -32,7 +32,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 	</MkFoldableSection>
 
 	<MkFoldableSection>
-		<template #header>{{ i18n.ts._chat.history }}</template>
+		<template #header>历史会话</template>
 
 		<MkChatHistories/>
 	</MkFoldableSection>
@@ -40,9 +40,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script lang="ts" setup>
-import { onActivated, onDeactivated, onMounted, ref } from 'vue';
+import { onMounted, ref } from 'vue';
 import * as Misskey from 'misskey-js';
-import { useInterval } from '@@/js/use-interval.js';
 import XMessage from './XMessage.vue';
 import MkButton from '@/components/MkButton.vue';
 import { i18n } from '@/i18n.js';
@@ -66,17 +65,17 @@ const searchResults = ref<Misskey.entities.ChatMessage[]>([]);
 
 function start(ev: PointerEvent) {
 	os.popupMenu([{
-		text: i18n.ts._chat.individualChat,
+		text: '单人聊天',
 		caption: i18n.ts._chat.individualChat_description,
 		icon: 'ti ti-user',
 		action: () => { startUser(); },
 	}, { type: 'divider' }, {
 		type: 'parent',
-		text: i18n.ts._chat.roomChat,
+		text: '群聊',
 		caption: i18n.ts._chat.roomChat_description,
 		icon: 'ti ti-users-group',
 		children: [{
-			text: i18n.ts._chat.createRoom,
+			text: '创建群聊',
 			icon: 'ti ti-plus',
 			action: () => { createRoom(); },
 		}],
@@ -96,7 +95,7 @@ async function startUser() {
 
 async function createRoom() {
 	const { canceled, result } = await os.inputText({
-		title: i18n.ts.name,
+		title: '群聊名称',
 		minLength: 1,
 	});
 	if (canceled) return;

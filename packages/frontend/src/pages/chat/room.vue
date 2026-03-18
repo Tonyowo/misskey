@@ -7,6 +7,20 @@ SPDX-License-Identifier: AGPL-3.0-only
 <PageWithHeader v-model:tab="tab" :reversed="tab === 'chat'" :tabs="headerTabs" :actions="headerActions">
 	<div v-if="tab === 'chat'" class="_spacer" style="--MI_SPACER-w: 700px;">
 		<div class="_gaps">
+			<div v-if="!initializing && room?.isJoined && (room.announcement || pinnedMessage)" class="_gaps">
+				<MkInfo v-if="room.announcement">{{ room.announcement }}</MkInfo>
+
+				<div v-if="pinnedMessage" :class="$style.pinnedBox">
+					<div :class="$style.pinnedTitle"><i class="ti ti-pin"></i> 置顶消息</div>
+					<XMessage
+						:message="pinnedMessage"
+						:allowPin="room?.canManageMembers ?? false"
+						:isPinned="true"
+						@togglePin="togglePinnedMessage"
+					/>
+				</div>
+			</div>
+
 			<div v-if="initializing">
 				<MkLoading/>
 			</div>
@@ -26,7 +40,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 							:disabled="$i.policies.chatAvailability !== 'available'"
 							@click="joinRoomDirectly"
 						>
-							<i class="ti ti-plus"></i> {{ i18n.ts._chat.join }}
+							<i class="ti ti-plus"></i> 加入群聊
 						</MkButton>
 						<MkButton
 							v-else-if="!room.joinRequestExists && room.allowJoinRequest && room.joinPolicy !== 'invite_only'"
@@ -35,14 +49,14 @@ SPDX-License-Identifier: AGPL-3.0-only
 							:disabled="$i.policies.chatAvailability !== 'available'"
 							@click="requestToJoinRoom"
 						>
-							<i class="ti ti-user-plus"></i> {{ i18n.ts._chat.requestToJoinRoom }}
+							<i class="ti ti-user-plus"></i> 申请加入
 						</MkButton>
 						<MkButton
 							v-else
 							rounded
 							@click="cancelJoinRequest"
 						>
-							<i class="ti ti-x"></i> {{ i18n.ts._chat.cancelJoinRequest }}
+							<i class="ti ti-x"></i> 取消申请
 						</MkButton>
 					</div>
 				</div>
@@ -65,7 +79,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 			<div v-else ref="timelineEl" class="_gaps">
 				<div v-if="canFetchMore">
-					<MkButton :class="$style.more" :wait="moreFetching" primary rounded @click="fetchMore">{{ i18n.ts.loadMore }}</MkButton>
+					<MkButton :class="$style.more" :wait="moreFetching" primary rounded @click="fetchMore">加载更多</MkButton>
 				</div>
 
 				<TransitionGroup
@@ -77,7 +91,13 @@ SPDX-License-Identifier: AGPL-3.0-only
 					tag="div" class="_gaps"
 				>
 					<template v-for="item in timeline.toReversed()" :key="item.id">
-						<XMessage v-if="item.type === 'item'" :message="item.data"/>
+						<XMessage
+							v-if="item.type === 'item'"
+							:message="item.data"
+							:allowPin="room?.canManageMembers ?? false"
+							:isPinned="room?.pinnedMessageId === item.data.id"
+							@togglePin="togglePinnedMessage"
+						/>
 						<div v-else-if="item.type === 'date'" :class="$style.dateDivider">
 							<span><i class="ti ti-chevron-up"></i> {{ item.nextText }}</span>
 							<span style="height: 1em; width: 1px; background: var(--MI_THEME-divider);"></span>
@@ -100,11 +120,11 @@ SPDX-License-Identifier: AGPL-3.0-only
 	</div>
 
 	<div v-else-if="tab === 'members'" class="_spacer" style="--MI_SPACER-w: 700px;">
-		<XMembers v-if="room != null" :room="room" @inviteUser="inviteUser"/>
+		<XMembers v-if="room != null" :room="room" @inviteUser="inviteUser" @updated="onRoomUpdated"/>
 	</div>
 
 	<div v-else-if="tab === 'info'" class="_spacer" style="--MI_SPACER-w: 700px;">
-		<XInfo v-if="room != null" :room="room"/>
+		<XInfo v-if="room != null" :room="room" @updated="onRoomUpdated"/>
 	</div>
 
 	<template #footer>
@@ -155,6 +175,7 @@ const router = useRouter();
 const props = defineProps<{
 	userId?: string;
 	roomId?: string;
+	inviteCode?: string;
 }>();
 
 export type NormalizedChatMessage = Omit<Misskey.entities.ChatMessageLite, 'fromUser' | 'reactions'> & {
@@ -171,12 +192,14 @@ const messages = ref<NormalizedChatMessage[]>([]);
 const canFetchMore = ref(false);
 const user = ref<Misskey.entities.UserDetailed | null>(null);
 const room = ref<Misskey.entities.ChatRoom | null>(null);
+const pinnedMessage = ref<Misskey.entities.ChatMessage | null>(null);
 const connection = ref<Misskey.IChannelConnection<Misskey.Channels['chatUser']> | Misskey.IChannelConnection<Misskey.Channels['chatRoom']> | null>(null);
 const showIndicator = ref(false);
 const timelineEl = useTemplateRef('timelineEl');
 const timeline = makeDateSeparatedTimelineComputedRef(messages);
 const isJoinedRoom = computed(() => room.value?.isJoined ?? false);
 const canUseChatForm = computed(() => user.value != null || isJoinedRoom.value);
+const handledInviteCodeKey = ref<string | null>(null);
 
 const SCROLL_HEAD_THRESHOLD = 200;
 
@@ -218,6 +241,7 @@ async function initialize() {
 	canFetchMore.value = false;
 	user.value = null;
 	room.value = null;
+	pinnedMessage.value = null;
 	messages.value = [];
 	showIndicator.value = false;
 	connection.value?.dispose();
@@ -253,7 +277,7 @@ async function initialize() {
 		if (rResult.status === 'rejected') {
 			os.alert({
 				type: 'error',
-				text: i18n.ts.somethingHappened,
+				text: '加载群聊失败。',
 			});
 			initializing.value = false;
 			return;
@@ -261,11 +285,43 @@ async function initialize() {
 
 		const r = rResult.value as Misskey.entities.ChatRoomsShowResponse;
 
+		if (props.inviteCode && !r.isJoined) {
+			const inviteKey = `${r.id}:${props.inviteCode}`;
+			if (handledInviteCodeKey.value !== inviteKey) {
+				handledInviteCodeKey.value = inviteKey;
+				try {
+					await os.apiWithDialog('chat/rooms/invite-links/use', {
+						code: props.inviteCode,
+						roomId: r.id,
+					}, undefined, {
+						'84af6cb9-e7e1-4855-aefc-c6441c4e9836': {
+							title: r.name,
+							text: '邀请链接无效、已失效或已被撤销。',
+						},
+						'85ae18cb-d955-4487-a181-b5d7d0915687': {
+							title: r.name,
+							text: '群成员已达上限。',
+						},
+						'6ea4ef33-0e90-44f7-af68-21cece7f69e4': {
+							title: r.name,
+							text: '你已被该群封禁，无法通过邀请链接加入。',
+						},
+					});
+
+					initializing.value = false;
+					await initialize();
+					return;
+				} catch {
+					// Keep showing the room details so the user can still understand the current state.
+				}
+			}
+		}
+
 		if (r.invitationExists) {
 			const confirm = await os.confirm({
 				type: 'question',
 				title: r.name,
-				text: i18n.ts._chat.youAreNotAMemberOfThisRoomButInvited + '\n' + i18n.ts._chat.doYouAcceptInvitation,
+				text: '你已收到这个群聊的邀请。\n是否现在加入？',
 			});
 			if (confirm.canceled) {
 				initializing.value = false;
@@ -289,6 +345,8 @@ async function initialize() {
 		}
 
 		if (room.value.isJoined) {
+			await loadPinnedMessage();
+
 			connection.value = useStream().useChannel('chatRoom', {
 				roomId: room.value.id,
 			});
@@ -334,6 +392,21 @@ async function fetchMore() {
 
 	canFetchMore.value = newMessages.length === LIMIT;
 	moreFetching.value = false;
+}
+
+async function loadPinnedMessage() {
+	if (room.value == null || !room.value.isJoined || room.value.pinnedMessageId == null) {
+		pinnedMessage.value = null;
+		return;
+	}
+
+	try {
+		pinnedMessage.value = await misskeyApi('chat/messages/show', {
+			messageId: room.value.pinnedMessageId,
+		});
+	} catch {
+		pinnedMessage.value = null;
+	}
 }
 
 function onMessage(message: Misskey.entities.ChatMessageLite) {
@@ -411,54 +484,64 @@ onBeforeUnmount(() => {
 	window.document.removeEventListener('visibilitychange', onVisibilitychange);
 });
 
-async function inviteUser() {
+async function inviteUser(onInvited?: () => Promise<void> | void) {
 	if (room.value == null) return;
 
 	const invitee = await os.selectUser({ includeSelf: false, localOnly: true });
-	os.apiWithDialog('chat/rooms/invitations/create', {
+	await os.apiWithDialog('chat/rooms/invitations/create', {
 		roomId: room.value.id,
 		userId: invitee.id,
 	}, undefined, {
 		'cf4f7a0e-18fe-46b5-b768-9950defa1681': {
-			title: i18n.ts._chat.inviteUser,
-			text: i18n.ts._chat.userAlreadyInvitedToThisRoom,
+			title: '邀请成员',
+			text: '该用户已经收到过这个群聊的邀请。',
 		},
 		'09d36d36-2eff-49cf-ad9c-714f2f22f061': {
-			title: i18n.ts._chat.inviteUser,
-			text: i18n.ts._chat.userAlreadyInThisRoom,
+			title: '邀请成员',
+			text: '该用户已经在这个群聊中。',
 		},
 		'2fe10100-3628-4960-a8ca-2d7f1996758f': {
-			title: i18n.ts._chat.inviteUser,
-			text: i18n.ts._chat.roomIsFull,
+			title: '邀请成员',
+			text: '群成员已达上限。',
 		},
 		'f24758f4-d12e-47f9-86d2-95a4d1c78029': {
-			title: i18n.ts._chat.inviteUser,
-			text: i18n.ts._chat.cannotInviteYourself,
+			title: '邀请成员',
+			text: '不能邀请自己。',
 		},
 	});
+
+	await onInvited?.();
 }
 
 async function requestToJoinRoom() {
 	if (room.value == null || room.value.isJoined) return;
 
+	const { canceled, result } = await os.inputText({
+		title: '申请加入群聊',
+		text: '申请理由（选填）',
+		maxLength: 1024,
+	});
+	if (canceled) return;
+
 	await os.apiWithDialog('chat/rooms/requests/create', {
 		roomId: room.value.id,
+		message: result ?? undefined,
 	}, undefined, {
 		'41333c6f-0e26-46d7-8f2b-c47f714b4d87': {
-			title: i18n.ts._chat.requestToJoinRoom,
-			text: i18n.ts._chat.cannotRequestToJoinYourOwnRoom,
+			title: '申请加入群聊',
+			text: '不能向自己创建的群聊提交申请。',
 		},
 		'b304846f-e151-434c-88a5-f3961473f679': {
-			title: i18n.ts._chat.requestToJoinRoom,
-			text: i18n.ts._chat.youAreAlreadyInThisRoom,
+			title: '申请加入群聊',
+			text: '你已经在这个群聊中。',
 		},
 		'e4c83205-738b-4ee5-89fc-7c0b7081e609': {
-			title: i18n.ts._chat.requestToJoinRoom,
-			text: i18n.ts._chat.youHaveAlreadyBeenInvitedToThisRoom,
+			title: '申请加入群聊',
+			text: '你已经收到该群聊邀请，无需重复申请。',
 		},
 		'7d49d89f-e6d3-4601-a337-5afee4c5501c': {
-			title: i18n.ts._chat.requestToJoinRoom,
-			text: i18n.ts._chat.joinRequestPending,
+			title: '申请加入群聊',
+			text: '你的入群申请正在处理中。',
 		},
 	});
 
@@ -495,14 +578,29 @@ async function leaveRoom() {
 
 	const { canceled } = await os.confirm({
 		type: 'warning',
-		text: i18n.ts.areYouSure,
+		text: '确定要退出这个群聊吗？',
 	});
 	if (canceled) return;
 
-	misskeyApi('chat/rooms/leave', {
+	await misskeyApi('chat/rooms/leave', {
 		roomId: room.value.id,
 	});
 	router.push('/chat');
+}
+
+async function togglePinnedMessage(messageId: string | null) {
+	if (room.value == null) return;
+
+	const updated = await os.apiWithDialog('chat/rooms/pin-message', {
+		roomId: room.value.id,
+		messageId,
+	});
+	room.value = updated;
+	await loadPinnedMessage();
+}
+
+function onRoomUpdated(updated: Misskey.entities.ChatRoom) {
+	room.value = updated;
 }
 
 function showMenu(ev: PointerEvent) {
@@ -511,7 +609,7 @@ function showMenu(ev: PointerEvent) {
 	if (room.value) {
 		if (room.value.canInvite) {
 			menuItems.push({
-				text: i18n.ts._chat.inviteUser,
+				text: '邀请成员',
 				icon: 'ti ti-user-plus',
 				action: () => {
 					inviteUser();
@@ -521,7 +619,7 @@ function showMenu(ev: PointerEvent) {
 
 		if (room.value.isJoined && room.value.ownerId !== $i.id) {
 			menuItems.push({
-				text: i18n.ts._chat.leave,
+				text: '退出群聊',
 				icon: 'ti ti-x',
 				action: () => {
 					leaveRoom();
@@ -537,27 +635,27 @@ const tab = ref('chat');
 
 const headerTabs = computed(() => room.value ? [{
 	key: 'chat',
-	title: i18n.ts._chat.messages,
+	title: '消息',
 	icon: 'ti ti-messages',
 }, ...(room.value.isJoined ? [{
 	key: 'members',
-	title: i18n.ts._chat.members,
+	title: '成员',
 	icon: 'ti ti-users',
 }, {
 	key: 'search',
-	title: i18n.ts.search,
+	title: '搜索',
 	icon: 'ti ti-search',
 }] : []), {
 	key: 'info',
-	title: i18n.ts.info,
+	title: '设置',
 	icon: 'ti ti-info-circle',
 }] : [{
 	key: 'chat',
-	title: i18n.ts._chat.messages,
+	title: '消息',
 	icon: 'ti ti-messages',
 }, {
 	key: 'search',
-	title: i18n.ts.search,
+	title: '搜索',
 	icon: 'ti ti-search',
 }]);
 
@@ -574,6 +672,12 @@ const headerActions = computed<PageHeaderItem[]>(() => room.value && room.value.
 	handler: showMenu,
 }] : []);
 
+watch(() => [room.value?.id, room.value?.isJoined, room.value?.pinnedMessageId] as const, () => {
+	loadPinnedMessage();
+}, {
+	immediate: true,
+});
+
 definePage(computed(() => {
 	if (initialized.value) {
 		if (user.value) {
@@ -589,12 +693,12 @@ definePage(computed(() => {
 			};
 		} else {
 			return {
-				title: i18n.ts.directMessage,
+				title: '聊天',
 			};
 		}
 	} else {
 		return {
-			title: i18n.ts.directMessage,
+			title: '聊天',
 		};
 	}
 }));
@@ -659,6 +763,22 @@ definePage(computed(() => {
 .roomActions {
 	display: flex;
 	justify-content: center;
+}
+
+.pinnedBox {
+	border: solid 1px var(--MI_THEME-divider);
+	border-radius: 18px;
+	padding: 16px;
+	background: color-mix(in srgb, var(--MI_THEME-panel) 92%, var(--MI_THEME-accent) 8%);
+}
+
+.pinnedTitle {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-bottom: 12px;
+	font-weight: 700;
+	color: var(--MI_THEME-accent);
 }
 
 .form {

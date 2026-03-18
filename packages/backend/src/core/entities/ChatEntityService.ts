@@ -6,7 +6,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { In, IsNull, MoreThan } from 'typeorm';
 import { DI } from '@/di-symbols.js';
-import type { MiUser, ChatMessagesRepository, MiChatMessage, ChatRoomsRepository, MiChatRoom, MiChatRoomInvitation, ChatRoomInvitationsRepository, MiChatRoomJoinRequest, ChatRoomJoinRequestsRepository, MiChatRoomMembership, ChatRoomMembershipsRepository } from '@/models/_.js';
+import type { MiUser, ChatMessagesRepository, MiChatMessage, ChatRoomsRepository, MiChatRoom, MiChatRoomInvitation, ChatRoomInvitationsRepository, MiChatRoomInviteLink, ChatRoomInviteLinksRepository, MiChatRoomJoinRequest, ChatRoomJoinRequestsRepository, MiChatRoomMembership, ChatRoomMembershipsRepository } from '@/models/_.js';
 import type { Packed } from '@/misc/json-schema.js';
 import type { } from '@/models/Blocking.js';
 import { bindThis } from '@/decorators.js';
@@ -25,6 +25,9 @@ export class ChatEntityService {
 
 		@Inject(DI.chatRoomInvitationsRepository)
 		private chatRoomInvitationsRepository: ChatRoomInvitationsRepository,
+
+		@Inject(DI.chatRoomInviteLinksRepository)
+		private chatRoomInviteLinksRepository: ChatRoomInviteLinksRepository,
 
 		@Inject(DI.chatRoomJoinRequestsRepository)
 		private chatRoomJoinRequestsRepository: ChatRoomJoinRequestsRepository,
@@ -246,6 +249,8 @@ export class ChatEntityService {
 				myMemberships?: Map<MiChatRoom['id'], MiChatRoomMembership | null | undefined>;
 				myInvitations?: Map<MiChatRoom['id'], MiChatRoomInvitation | null | undefined>;
 				myJoinRequests?: Map<MiChatRoom['id'], MiChatRoomJoinRequest | null | undefined>;
+				memberCounts?: Map<MiChatRoom['id'], number>;
+				pendingRequestCounts?: Map<MiChatRoom['id'], number>;
 			};
 		},
 	): Promise<Packed<'ChatRoom'>> {
@@ -261,29 +266,36 @@ export class ChatEntityService {
 		})) : null;
 		const joinRequest = me && me.id !== room.ownerId ? (options?._hint_?.myJoinRequests?.get(room.id) ?? await this.chatRoomJoinRequestsRepository.findOneBy({ roomId: room.id, userId: me.id })) : null;
 		const myRole = room.ownerId === me?.id ? 'owner' : membership?.role ?? null;
+		const isJoined = room.ownerId === me?.id || membership != null;
 		const canManageAdmins = myRole === 'owner';
 		const canManageMembers = myRole === 'owner' || myRole === 'admin';
 		const canInvite = myRole === 'owner' || myRole === 'admin' || (myRole === 'member' && room.memberCanInvite);
+		const memberCount = options?._hint_?.memberCounts?.get(room.id) ?? (1 + await this.chatRoomMembershipsRepository.countBy({ roomId: room.id }));
+		const pendingRequestCount = canManageMembers ? (options?._hint_?.pendingRequestCounts?.get(room.id) ?? await this.chatRoomJoinRequestsRepository.countBy({ roomId: room.id })) : 0;
 
 		return {
 			id: room.id,
 			createdAt: this.idService.parse(room.id).date.toISOString(),
 			name: room.name,
 			description: room.description,
+			announcement: isJoined ? room.announcement : '',
 			ownerId: room.ownerId,
 			owner: options?._hint_?.packedOwners.get(room.ownerId) ?? await this.userEntityService.pack(room.owner ?? room.ownerId, me),
 			joinPolicy: room.joinPolicy,
 			discoverability: room.discoverability,
 			avatarFileId: room.avatarFileId,
+			pinnedMessageId: isJoined ? room.pinnedMessageId : null,
 			memberCanInvite: room.memberCanInvite,
 			allowJoinRequest: room.allowJoinRequest,
 			maxMembers: room.maxMembers,
+			memberCount,
 			isMuted: membership != null ? membership.isMuted : false,
-			isJoined: room.ownerId === me?.id || membership != null,
+			isJoined,
 			myRole,
 			canInvite,
 			canManageMembers,
 			canManageAdmins,
+			pendingRequestCount,
 			invitationExists: invitation != null,
 			joinRequestExists: joinRequest != null,
 		};
@@ -310,7 +322,7 @@ export class ChatEntityService {
 
 		const owners = _rooms.map(x => x.owner ?? x.ownerId);
 
-		const [packedOwners, myMemberships, myInvitations, myJoinRequests] = await Promise.all([
+		const [packedOwners, myMemberships, myInvitations, myJoinRequests, memberCounts, pendingRequestCounts] = await Promise.all([
 			this.userEntityService.packMany(owners, me)
 				.then(users => new Map(users.map(u => [u.id, u]))),
 			this.chatRoomMembershipsRepository.find({
@@ -343,9 +355,23 @@ export class ChatEntityService {
 					userId: me.id,
 				},
 			}).then(requests => new Map(_rooms.map(r => [r.id, requests.find(request => request.roomId === r.id)]))),
+			this.chatRoomMembershipsRepository.createQueryBuilder('membership')
+				.select('membership.roomId', 'roomId')
+				.addSelect('COUNT(*)', 'count')
+				.where('membership.roomId IN (:...roomIds)', { roomIds: _rooms.map(x => x.id) })
+				.groupBy('membership.roomId')
+				.getRawMany<{ roomId: string; count: string; }>()
+				.then(rows => new Map(_rooms.map(r => [r.id, 1 + Number(rows.find(row => row.roomId === r.id)?.count ?? 0)]))),
+			this.chatRoomJoinRequestsRepository.createQueryBuilder('request')
+				.select('request.roomId', 'roomId')
+				.addSelect('COUNT(*)', 'count')
+				.where('request.roomId IN (:...roomIds)', { roomIds: _rooms.map(x => x.id) })
+				.groupBy('request.roomId')
+				.getRawMany<{ roomId: string; count: string; }>()
+				.then(rows => new Map(_rooms.map(r => [r.id, Number(rows.find(row => row.roomId === r.id)?.count ?? 0)]))),
 		]);
 
-		return Promise.all(_rooms.map(room => this.packRoom(room, me, { _hint_: { packedOwners, myMemberships, myInvitations, myJoinRequests } })));
+		return Promise.all(_rooms.map(room => this.packRoom(room, me, { _hint_: { packedOwners, myMemberships, myInvitations, myJoinRequests, memberCounts, pendingRequestCounts } })));
 	}
 
 	@bindThis
@@ -383,6 +409,54 @@ export class ChatEntityService {
 		if (invitations.length === 0) return [];
 
 		return Promise.all(invitations.map(invitation => this.packRoomInvitation(invitation, me)));
+	}
+
+	@bindThis
+	public async packRoomInviteLink(
+		src: MiChatRoomInviteLink['id'] | MiChatRoomInviteLink,
+		me: { id: MiUser['id'] },
+		options?: {
+			_hint_?: {
+				packedRooms?: Map<MiChatRoomInviteLink['roomId'], Packed<'ChatRoom'>>;
+				packedUsers?: Map<MiChatRoomInviteLink['createdById'], Packed<'UserLite'>>;
+			};
+		},
+	): Promise<Packed<'ChatRoomInviteLink'>> {
+		const inviteLink = typeof src === 'object' ? src : await this.chatRoomInviteLinksRepository.findOneByOrFail({ id: src });
+
+		return {
+			id: inviteLink.id,
+			createdAt: this.idService.parse(inviteLink.id).date.toISOString(),
+			code: inviteLink.code,
+			roomId: inviteLink.roomId,
+			room: options?._hint_?.packedRooms?.get(inviteLink.roomId) ?? await this.packRoom(inviteLink.room ?? inviteLink.roomId, me),
+			createdById: inviteLink.createdById,
+			createdBy: options?._hint_?.packedUsers?.get(inviteLink.createdById) ?? await this.userEntityService.pack(inviteLink.createdBy ?? inviteLink.createdById, me),
+			uses: inviteLink.uses,
+			maxUses: inviteLink.maxUses,
+			expiresAt: inviteLink.expiresAt ? inviteLink.expiresAt.toISOString() : null,
+			revokedAt: inviteLink.revokedAt ? inviteLink.revokedAt.toISOString() : null,
+		};
+	}
+
+	@bindThis
+	public async packRoomInviteLinks(
+		inviteLinks: MiChatRoomInviteLink[],
+		me: { id: MiUser['id'] },
+	) {
+		if (inviteLinks.length === 0) return [];
+
+		const rooms = inviteLinks.map(x => x.room ?? x.roomId);
+		const creators = inviteLinks.map(x => x.createdBy ?? x.createdById);
+
+		const [packedRooms, packedUsers] = await Promise.all([
+			this.packRooms(rooms, me)
+				.then(items => new Map(items.map(room => [room.id, room]))),
+			this.userEntityService.packMany(creators, me)
+				.then(items => new Map(items.map(user => [user.id, user]))),
+		]);
+
+		return Promise.all(inviteLinks.map(inviteLink => this.packRoomInviteLink(inviteLink, me, { _hint_: { packedRooms, packedUsers } })));
 	}
 
 	@bindThis

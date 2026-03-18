@@ -12,8 +12,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 			<template #suffix><MkTime :time="invitation.createdAt"/></template>
 			<template #footer>
 				<div class="_buttons">
-					<MkButton primary @click="join(invitation)"><i class="ti ti-plus"></i> {{ i18n.ts._chat.join }}</MkButton>
-					<MkButton danger @click="ignore(invitation)"><i class="ti ti-x"></i> {{ i18n.ts._chat.ignore }}</MkButton>
+					<MkButton primary @click="join(invitation)"><i class="ti ti-plus"></i> 接受邀请</MkButton>
+					<MkButton danger @click="ignore(invitation)"><i class="ti ti-x"></i> 忽略</MkButton>
 				</div>
 			</template>
 

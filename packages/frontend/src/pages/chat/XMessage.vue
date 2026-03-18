@@ -88,6 +88,12 @@ const $i = ensureSignin();
 const props = defineProps<{
 	message: NormalizedChatMessage | Misskey.entities.ChatMessage;
 	isSearchResult?: boolean;
+	allowPin?: boolean;
+	isPinned?: boolean;
+}>();
+
+const emit = defineEmits<{
+	(ev: 'togglePin', messageId: string | null): void;
 }>();
 
 const isMe = computed(() => props.message.fromUserId === $i.id);
@@ -157,7 +163,7 @@ function showMenu(ev: PointerEvent, contextmenu = false) {
 
 	if (!isMe.value && $i.policies.chatAvailability === 'available') {
 		menu.push({
-			text: i18n.ts.reaction,
+			text: '回应',
 			icon: 'ti ti-mood-plus',
 			action: (ev) => {
 				react(ev);
@@ -170,7 +176,7 @@ function showMenu(ev: PointerEvent, contextmenu = false) {
 	}
 
 	menu.push({
-		text: i18n.ts.copyContent,
+		text: '复制内容',
 		icon: 'ti ti-copy',
 		action: () => {
 			copyToClipboard(props.message.text ?? '');
@@ -181,9 +187,23 @@ function showMenu(ev: PointerEvent, contextmenu = false) {
 		type: 'divider',
 	});
 
+	if (props.allowPin && isRoomMessage.value) {
+		menu.push({
+			text: props.isPinned ? '取消置顶' : '置顶消息',
+			icon: props.isPinned ? 'ti ti-pin-off' : 'ti ti-pin',
+			action: () => {
+				emit('togglePin', props.isPinned ? null : props.message.id);
+			},
+		});
+
+		menu.push({
+			type: 'divider',
+		});
+	}
+
 	if (isMe.value && $i.policies.chatAvailability === 'available') {
 		menu.push({
-			text: i18n.ts.delete,
+			text: '删除消息',
 			icon: 'ti ti-trash',
 			danger: true,
 			action: () => {
@@ -196,7 +216,7 @@ function showMenu(ev: PointerEvent, contextmenu = false) {
 
 	if (!isMe.value && props.message.fromUser != null) {
 		menu.push({
-			text: i18n.ts.reportAbuse,
+			text: '举报',
 			icon: 'ti ti-exclamation-circle',
 			action: async () => {
 				const localUrl = `${url}/chat/messages/${props.message.id}`;
@@ -259,14 +279,6 @@ function showMenu(ev: PointerEvent, contextmenu = false) {
 }
 
 @container (max-width: 450px) {
-	.root {
-		&.isMe {
-			.avatar {
-				display: none;
-			}
-		}
-	}
-
 	.avatar {
 		width: 42px;
 		height: 42px;

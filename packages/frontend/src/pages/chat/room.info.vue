@@ -33,11 +33,52 @@ SPDX-License-Identifier: AGPL-3.0-only
 		<template #label>允许提交入群申请</template>
 	</MkSwitch>
 
-	<MkButton v-if="isOwner" primary @click="save">{{ i18n.ts.save }}</MkButton>
+	<MkButton v-if="isOwner" primary @click="save">保存设置</MkButton>
+
+	<hr v-if="canManageMembers">
+
+	<MkTextarea v-if="canManageMembers" v-model="announcement_" :disabled="!canManageMembers">
+		<template #label>群公告</template>
+	</MkTextarea>
+
+	<MkButton v-if="canManageMembers" primary @click="saveAnnouncement">保存群公告</MkButton>
+
+	<hr v-if="canInvite">
+
+	<div v-if="canInvite" class="_gaps">
+		<div class="_buttons">
+			<MkButton primary @click="createInviteLink"><i class="ti ti-link-plus"></i> 创建邀请链接</MkButton>
+		</div>
+
+		<div v-if="inviteLinks.length === 0" style="opacity: 0.7;">暂无邀请链接</div>
+
+		<div v-for="inviteLink in inviteLinks" :key="inviteLink.id" :class="$style.inviteLink">
+			<div :class="$style.inviteLinkBody">
+				<div :class="$style.inviteLinkCode">{{ inviteLink.code }}</div>
+				<div :class="$style.inviteLinkMeta">
+					<span>{{ formatInviteLinkStatus(inviteLink) }}</span>
+					<span v-if="inviteLink.maxUses != null">已使用 {{ inviteLink.uses }}/{{ inviteLink.maxUses }}</span>
+					<span v-else>已使用 {{ inviteLink.uses }} 次</span>
+					<span v-if="inviteLink.expiresAt">到期时间 <MkTime :time="inviteLink.expiresAt" mode="detail"/></span>
+				</div>
+			</div>
+
+			<div :class="$style.inviteLinkActions">
+				<MkButton rounded small @click="copyInviteLink(inviteLink)"><i class="ti ti-copy"></i> 复制</MkButton>
+				<MkButton
+					v-if="inviteLink.revokedAt == null"
+					rounded
+					small
+					danger
+					@click="revokeInviteLink(inviteLink)"
+				><i class="ti ti-link-off"></i> 撤销</MkButton>
+			</div>
+		</div>
+	</div>
 
 	<hr>
 
-	<MkButton v-if="isOwner || ($i.isAdmin || $i.isModerator)" danger @click="del">{{ i18n.ts._chat.deleteRoom }}</MkButton>
+	<MkButton v-if="isOwner || ($i.isAdmin || $i.isModerator)" danger @click="del">删除群聊</MkButton>
 
 	<MkSwitch v-if="!isOwner && isJoined" v-model="isMuted">
 		<template #label>{{ i18n.ts._chat.muteThisRoom }}</template>
@@ -58,6 +99,10 @@ import MkSwitch from '@/components/MkSwitch.vue';
 import MkSelect from '@/components/MkSelect.vue';
 import type { MkSelectItem } from '@/components/MkSelect.vue';
 import { useRouter } from '@/router.js';
+import { misskeyApi } from '@/utility/misskey-api.js';
+import { copyToClipboard } from '@/utility/copy-to-clipboard.js';
+import { url } from '@@/js/config.js';
+import MkTime from '@/components/global/MkTime.vue';
 
 const router = useRouter();
 const $i = ensureSignin();
@@ -66,19 +111,27 @@ const props = defineProps<{
 	room: Misskey.entities.ChatRoom;
 }>();
 
+const emit = defineEmits<{
+	(ev: 'updated', room: Misskey.entities.ChatRoom): void;
+}>();
+
 const isOwner = computed(() => {
 	return props.room.ownerId === $i.id;
 });
 const isJoined = computed(() => props.room.isJoined ?? false);
+const canManageMembers = computed(() => props.room.canManageMembers ?? false);
+const canInvite = computed(() => props.room.canInvite ?? false);
 
 const name_ = ref('');
 const description_ = ref('');
+const announcement_ = ref('');
 const joinPolicy_ = ref<Misskey.entities.ChatRoom['joinPolicy']>('invite_only');
 const discoverability_ = ref<Misskey.entities.ChatRoom['discoverability']>('private');
 const maxMembers_ = ref(50);
 const memberCanInvite_ = ref(false);
 const allowJoinRequest_ = ref(true);
 const isMuted = ref(false);
+const inviteLinks = ref<Misskey.entities.ChatRoomInviteLink[]>([]);
 let syncingRoomState = false;
 
 const joinPolicyItems: MkSelectItem<string>[] = [{
@@ -107,6 +160,7 @@ watch(() => props.room, (room) => {
 	syncingRoomState = true;
 	name_.value = room.name;
 	description_.value = room.description;
+	announcement_.value = room.announcement;
 	joinPolicy_.value = room.joinPolicy;
 	discoverability_.value = room.discoverability;
 	maxMembers_.value = room.maxMembers;
@@ -118,8 +172,22 @@ watch(() => props.room, (room) => {
 	immediate: true,
 });
 
-function save() {
-	os.apiWithDialog('chat/rooms/update-settings', {
+watch(() => [props.room.id, canInvite.value] as const, async ([roomId, canInviteNow]) => {
+	if (!canInviteNow) {
+		inviteLinks.value = [];
+		return;
+	}
+
+	inviteLinks.value = await misskeyApi('chat/rooms/invite-links/list', {
+		roomId,
+		limit: 50,
+	});
+}, {
+	immediate: true,
+});
+
+async function save() {
+	const updated = await os.apiWithDialog('chat/rooms/update-settings', {
 		roomId: props.room.id,
 		name: name_.value,
 		description: description_.value,
@@ -129,12 +197,21 @@ function save() {
 		allowJoinRequest: allowJoinRequest_.value,
 		maxMembers: maxMembers_.value,
 	});
+	emit('updated', updated);
+}
+
+async function saveAnnouncement() {
+	const updated = await os.apiWithDialog('chat/rooms/update-announcement', {
+		roomId: props.room.id,
+		announcement: announcement_.value,
+	});
+	emit('updated', updated);
 }
 
 async function del() {
 	const { canceled } = await os.confirm({
 		type: 'warning',
-		text: i18n.tsx.deleteAreYouSure({ x: name_.value }),
+		text: `确定要删除“${name_.value}”吗？`,
 	});
 	if (canceled) return;
 
@@ -152,6 +229,62 @@ watch(isMuted, async () => {
 		mute: isMuted.value,
 	});
 });
+
+function formatInviteLinkStatus(inviteLink: Misskey.entities.ChatRoomInviteLink) {
+	if (inviteLink.revokedAt != null) return '已撤销';
+	if (inviteLink.expiresAt != null && new Date(inviteLink.expiresAt).getTime() <= Date.now()) return '已过期';
+	if (inviteLink.maxUses != null && inviteLink.uses >= inviteLink.maxUses) return '次数已用尽';
+	return '可用';
+}
+
+async function createInviteLink() {
+	const expiresInDays = await os.inputText({
+		title: '创建邀请链接',
+		text: '有效期天数（留空表示永不过期）',
+		placeholder: '例如 7',
+	});
+	if (expiresInDays.canceled) return;
+
+	const maxUsesInput = await os.inputText({
+		title: '创建邀请链接',
+		text: '可使用次数（留空表示不限次数）',
+		placeholder: '例如 20',
+	});
+	if (maxUsesInput.canceled) return;
+
+	const expiresAtDays = expiresInDays.result ? Number.parseInt(expiresInDays.result, 10) : null;
+	const maxUses = maxUsesInput.result ? Number.parseInt(maxUsesInput.result, 10) : null;
+
+	if ((expiresInDays.result && (expiresAtDays == null || !Number.isFinite(expiresAtDays) || expiresAtDays <= 0)) || (maxUsesInput.result && (maxUses == null || !Number.isFinite(maxUses) || maxUses <= 0))) {
+		await os.alert({
+			type: 'warning',
+			text: '请输入有效的正整数。',
+		});
+		return;
+	}
+
+	const inviteLink = await os.apiWithDialog('chat/rooms/invite-links/create', {
+		roomId: props.room.id,
+		...(expiresAtDays != null ? { expiresAt: Date.now() + (expiresAtDays as number) * 24 * 60 * 60 * 1000 } : {}),
+		...(maxUses != null ? { maxUses: maxUses as number } : {}),
+	});
+
+	inviteLinks.value.unshift(inviteLink);
+}
+
+function copyInviteLink(inviteLink: Misskey.entities.ChatRoomInviteLink) {
+	copyToClipboard(`${url}/chat/room/${props.room.id}?inviteCode=${inviteLink.code}`);
+}
+
+async function revokeInviteLink(inviteLink: Misskey.entities.ChatRoomInviteLink) {
+	await os.apiWithDialog('chat/rooms/invite-links/revoke', {
+		inviteLinkId: inviteLink.id,
+	});
+	inviteLinks.value = inviteLinks.value.map(item => item.id === inviteLink.id ? {
+		...item,
+		revokedAt: new Date().toISOString(),
+	} : item);
+}
 </script>
 
 <style lang="scss" module>
@@ -167,5 +300,41 @@ watch(isMuted, async () => {
 	&:hover {
 		text-decoration: none;
 	}
+}
+
+.inviteLink {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding: 12px 14px;
+	border: solid 1px var(--MI_THEME-divider);
+	border-radius: 16px;
+}
+
+.inviteLinkBody {
+	flex: 1;
+	min-width: 0;
+}
+
+.inviteLinkCode {
+	font-family: monospace;
+	font-size: 1rem;
+	font-weight: 700;
+}
+
+.inviteLinkMeta {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 10px;
+	margin-top: 6px;
+	font-size: 0.9em;
+	opacity: 0.75;
+}
+
+.inviteLinkActions {
+	display: flex;
+	gap: 8px;
+	flex-wrap: wrap;
+	justify-content: flex-end;
 }
 </style>

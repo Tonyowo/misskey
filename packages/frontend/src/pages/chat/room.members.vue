@@ -5,7 +5,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 <template>
 <div class="_gaps">
-	<MkButton v-if="canInvite" primary rounded style="margin: 0 auto;" @click="emit('inviteUser')"><i class="ti ti-plus"></i> {{ i18n.ts._chat.inviteUser }}</MkButton>
+	<MkButton v-if="canInvite" primary rounded style="margin: 0 auto;" @click="inviteUser"><i class="ti ti-plus"></i> 邀请成员</MkButton>
 
 	<MkA :class="$style.membershipBody" :to="`${userPage(room.owner)}`">
 		<MkUserCardMini :user="room.owner"/>
@@ -26,21 +26,27 @@ SPDX-License-Identifier: AGPL-3.0-only
 				rounded
 				small
 				@click="addAdmin(membership)"
-			><i class="ti ti-shield-check"></i> 设为管理员</MkButton>
+			>
+				<i class="ti ti-shield-check"></i> 设为管理员
+			</MkButton>
 			<MkButton
 				v-if="canManageAdmins && membership.role === 'admin'"
 				rounded
 				small
 				@click="removeAdmin(membership)"
-			><i class="ti ti-shield-x"></i> 取消管理员</MkButton>
+			>
+				<i class="ti ti-shield-x"></i> 取消管理员
+			</MkButton>
 			<MkButton
 				v-if="canManageAdmins"
 				rounded
 				small
 				@click="transferOwner(membership)"
-			><i class="ti ti-crown"></i> 转让群主</MkButton>
-			<MkButton rounded small danger @click="kickMember(membership)"><i class="ti ti-user-minus"></i> {{ i18n.ts.remove }}</MkButton>
-			<MkButton rounded small danger @click="banMember(membership)"><i class="ti ti-ban"></i> {{ i18n.ts.block }}</MkButton>
+			>
+				<i class="ti ti-crown"></i> 转让群主
+			</MkButton>
+			<MkButton rounded small danger @click="kickMember(membership)"><i class="ti ti-user-minus"></i> 删除</MkButton>
+			<MkButton rounded small danger @click="banMember(membership)"><i class="ti ti-ban"></i> 封禁</MkButton>
 		</div>
 	</div>
 
@@ -48,16 +54,19 @@ SPDX-License-Identifier: AGPL-3.0-only
 		<template v-if="joinRequests.length > 0">
 			<hr>
 
-			<div>{{ i18n.ts._chat.joinRequests }}</div>
+			<div>入群申请</div>
 
 			<div v-for="joinRequest in joinRequests" :key="joinRequest.id" :class="$style.request">
-				<MkA :class="$style.requestBody" :to="`${userPage(joinRequest.user)}`">
-					<MkUserCardMini :user="joinRequest.user"/>
-				</MkA>
+				<div :class="$style.requestBody">
+					<MkA :class="$style.requestUser" :to="`${userPage(joinRequest.user)}`">
+						<MkUserCardMini :user="joinRequest.user"/>
+					</MkA>
+					<div v-if="joinRequest.message" :class="$style.requestMessage">{{ joinRequest.message }}</div>
+				</div>
 
 				<div :class="$style.requestActions">
-					<MkButton rounded small @click="acceptJoinRequest(joinRequest)"><i class="ti ti-check"></i> {{ i18n.ts.accept }}</MkButton>
-					<MkButton rounded small danger @click="rejectJoinRequest(joinRequest)"><i class="ti ti-x"></i> {{ i18n.ts.reject }}</MkButton>
+					<MkButton rounded small @click="acceptJoinRequest(joinRequest)"><i class="ti ti-check"></i> 通过</MkButton>
+					<MkButton rounded small danger @click="rejectJoinRequest(joinRequest)"><i class="ti ti-x"></i> 拒绝</MkButton>
 				</div>
 			</div>
 		</template>
@@ -65,13 +74,13 @@ SPDX-License-Identifier: AGPL-3.0-only
 		<template v-if="invitations.length > 0">
 			<hr>
 
-			<div>{{ i18n.ts._chat.sentInvitations }}</div>
+			<div>已发送的邀请</div>
 
 			<div v-for="invitation in invitations" :key="invitation.id" :class="$style.invitation">
 				<MkA :class="$style.invitationBody" :to="`${userPage(invitation.user)}`">
 					<MkUserCardMini :user="invitation.user"/>
 				</MkA>
-				<MkButton rounded small danger @click="revokeInvitation(invitation)"><i class="ti ti-x"></i> {{ i18n.ts.cancel }}</MkButton>
+				<MkButton rounded small danger @click="revokeInvitation(invitation)"><i class="ti ti-x"></i> 取消</MkButton>
 			</div>
 		</template>
 	</template>
@@ -79,10 +88,9 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script lang="ts" setup>
-import { computed, onMounted, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import * as Misskey from 'misskey-js';
 import MkButton from '@/components/MkButton.vue';
-import { i18n } from '@/i18n.js';
 import * as os from '@/os.js';
 import { misskeyApi } from '@/utility/misskey-api.js';
 import MkUserCardMini from '@/components/MkUserCardMini.vue';
@@ -93,7 +101,8 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-	(ev: 'inviteUser'): void,
+	(ev: 'inviteUser', onInvited?: () => Promise<void> | void): void,
+	(ev: 'updated', room: Misskey.entities.ChatRoom): void,
 }>();
 
 const canInvite = computed(() => props.room.canInvite ?? false);
@@ -112,7 +121,11 @@ async function fetchMemberships() {
 }
 
 async function fetchOwnerData() {
-	if (!canManageMembers.value) return;
+	if (!canManageMembers.value) {
+		invitations.value = [];
+		joinRequests.value = [];
+		return;
+	}
 
 	const [sentInvitations, pendingJoinRequests] = await Promise.all([
 		misskeyApi('chat/rooms/invitations/outbox', {
@@ -129,9 +142,11 @@ async function fetchOwnerData() {
 	joinRequests.value = pendingJoinRequests;
 }
 
-onMounted(async () => {
+watch(() => [props.room.id, canManageMembers.value] as const, async () => {
 	await fetchMemberships();
 	await fetchOwnerData();
+}, {
+	immediate: true,
 });
 
 async function acceptJoinRequest(joinRequest: Misskey.entities.ChatRoomJoinRequest) {
@@ -140,13 +155,17 @@ async function acceptJoinRequest(joinRequest: Misskey.entities.ChatRoomJoinReque
 		userId: joinRequest.userId,
 	}, undefined, {
 		'a8844dab-b854-4c8c-ba88-f8eb4a93a71b': {
-			title: i18n.ts._chat.joinRequests,
-			text: i18n.ts._chat.roomIsFull,
+			title: '入群申请',
+			text: '群成员已达上限。',
 		},
 	});
 
 	joinRequests.value = joinRequests.value.filter(request => request.id !== joinRequest.id);
 	memberships.value.unshift(membership);
+}
+
+function inviteUser() {
+	emit('inviteUser', fetchOwnerData);
 }
 
 async function rejectJoinRequest(joinRequest: Misskey.entities.ChatRoomJoinRequest) {
@@ -200,15 +219,16 @@ async function removeAdmin(membership: Misskey.entities.ChatRoomMembership) {
 async function transferOwner(membership: Misskey.entities.ChatRoomMembership) {
 	const { canceled } = await os.confirm({
 		type: 'warning',
-		text: i18n.ts.areYouSure,
+		text: `确定要将群主转让给 ${membership.user?.name ?? membership.user?.username ?? '该成员'} 吗？`,
 	});
 	if (canceled) return;
 
-	await os.apiWithDialog('chat/rooms/transfer-owner', {
+	const updated = await os.apiWithDialog('chat/rooms/transfer-owner', {
 		roomId: props.room.id,
 		userId: membership.userId,
 	});
 
+	emit('updated', updated);
 	await fetchMemberships();
 	await fetchOwnerData();
 }
@@ -248,6 +268,18 @@ async function transferOwner(membership: Misskey.entities.ChatRoomMembership) {
 .requestBody {
 	flex: 1;
 	min-width: 0;
+}
+
+.requestUser {
+	display: block;
+}
+
+.requestMessage {
+	margin-top: 6px;
+	font-size: 0.9em;
+	opacity: 0.75;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
 }
 
 .requestActions {

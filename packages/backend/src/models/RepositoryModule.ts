@@ -84,6 +84,7 @@ import {
 	MiChatRoom,
 	MiChatRoomMembership,
 	MiChatRoomInvitation,
+	MiChatRoomInviteLink,
 	MiChatRoomJoinRequest,
 	MiChatApproval,
 } from './_.js';
@@ -534,6 +535,12 @@ const $chatRoomInvitationsRepository: Provider = {
 	inject: [DI.db],
 };
 
+const $chatRoomInviteLinksRepository: Provider = {
+	provide: DI.chatRoomInviteLinksRepository,
+	useFactory: (db: DataSource) => db.getRepository(MiChatRoomInviteLink).extend(miRepository as MiRepository<MiChatRoomInviteLink>),
+	inject: [DI.db],
+};
+
 const $chatRoomJoinRequestsRepository: Provider = {
 	provide: DI.chatRoomJoinRequestsRepository,
 	useFactory: (db: DataSource) => db.getRepository(MiChatRoomJoinRequest).extend(miRepository as MiRepository<MiChatRoomJoinRequest>),
@@ -635,6 +642,7 @@ const $reversiGamesRepository: Provider = {
 		$chatRoomsRepository,
 		$chatRoomMembershipsRepository,
 		$chatRoomInvitationsRepository,
+		$chatRoomInviteLinksRepository,
 		$chatRoomJoinRequestsRepository,
 		$chatApprovalsRepository,
 		$bubbleGameRecordsRepository,
@@ -715,6 +723,7 @@ const $reversiGamesRepository: Provider = {
 		$chatRoomsRepository,
 		$chatRoomMembershipsRepository,
 		$chatRoomInvitationsRepository,
+		$chatRoomInviteLinksRepository,
 		$chatRoomJoinRequestsRepository,
 		$chatApprovalsRepository,
 		$bubbleGameRecordsRepository,
