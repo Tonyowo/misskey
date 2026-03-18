@@ -81,7 +81,7 @@ onMounted(() => {
 });
 
 definePage(() => ({
-	title: '聊天',
+	title: '消息',
 	icon: 'ti ti-messages',
 }));
 </script>

@@ -14,8 +14,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 		v-model="text"
 		:class="$style.textarea"
 		class="_acrylic"
-		placeholder="输入消息"
-		:readonly="textareaReadOnly"
+		:placeholder="textareaPlaceholder"
+		:readonly="textareaReadOnly || isSpeakMuted"
 		@keydown="onKeydown"
 		@paste="onPaste"
 	></textarea>
@@ -24,7 +24,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 		<div :class="$style.buttons">
 			<button class="_button" :class="$style.button" @click="chooseFile"><i class="ti ti-photo-plus"></i></button>
 			<button class="_button" :class="$style.button" @click="insertEmoji"><i class="ti ti-mood-happy"></i></button>
-			<button class="_button" :class="[$style.button, $style.send]" :disabled="!canSend || sending" title="发送" @click="send">
+			<button class="_button" :class="[$style.button, $style.send]" :disabled="!canSend || sending" :title="sendButtonTitle" @click="send">
 				<template v-if="!sending"><i class="ti ti-send"></i></template><template v-if="sending"><MkLoading :em="true"/></template>
 			</button>
 		</div>
@@ -61,7 +61,10 @@ const sending = ref(false);
 const textareaReadOnly = ref(false);
 let autocompleteInstance: Autocomplete | null = null;
 
-const canSend = computed(() => (text.value != null && text.value !== '') || file.value != null);
+const isSpeakMuted = computed(() => props.room?.isSpeakMuted ?? false);
+const canSend = computed(() => !isSpeakMuted.value && ((text.value != null && text.value !== '') || file.value != null));
+const textareaPlaceholder = computed(() => isSpeakMuted.value ? '你已被禁言，暂时无法发言' : '输入消息');
+const sendButtonTitle = computed(() => isSpeakMuted.value ? '你已被禁言，暂时无法发言' : '发送');
 
 function getDraftKey() {
 	return props.user ? 'user:' + props.user.id : 'room:' + props.room?.id;
@@ -130,7 +133,9 @@ function onDrop(ev: DragEvent): void {
 	// ファイルだったら
 	if (ev.dataTransfer.files.length === 1) {
 		ev.preventDefault();
-		os.launchUploader([Array.from(ev.dataTransfer.files)[0]], { multiple: false });
+		os.launchUploader([Array.from(ev.dataTransfer.files)[0]], { multiple: false }).then(driveFiles => {
+			file.value = driveFiles[0];
+		});
 		return;
 	} else if (ev.dataTransfer.files.length > 1) {
 		ev.preventDefault();
@@ -186,35 +191,36 @@ function onChangeFile() {
 	}
 }
 
-function send() {
+async function send() {
 	if (!canSend.value) return;
 
 	sending.value = true;
 
-	if (props.user) {
-		misskeyApi('chat/messages/create-to-user', {
-			toUserId: props.user.id,
-			text: text.value ? text.value : undefined,
-			fileId: file.value ? file.value.id : undefined,
-		}).then(() => {
+	try {
+		if (props.user) {
+			await misskeyApi('chat/messages/create-to-user', {
+				toUserId: props.user.id,
+				text: text.value ? text.value : undefined,
+				fileId: file.value ? file.value.id : undefined,
+			});
 			clear();
-		}).catch(err => {
-			console.error(err);
-		}).then(() => {
-			sending.value = false;
-		});
-	} else if (props.room) {
-		misskeyApi('chat/messages/create-to-room', {
-			toRoomId: props.room.id,
-			text: text.value ? text.value : undefined,
-			fileId: file.value ? file.value.id : undefined,
-		}).then(() => {
+		} else if (props.room) {
+			await os.apiWithDialog('chat/messages/create-to-room', {
+				toRoomId: props.room.id,
+				text: text.value ? text.value : undefined,
+				fileId: file.value ? file.value.id : undefined,
+			}, undefined, {
+				'67512792-fd66-4f82-a4ac-44ec9c75005e': {
+					title: '群聊发言',
+					text: '你已被禁言，暂时无法发送消息。',
+				},
+			});
 			clear();
-		}).catch(err => {
-			console.error(err);
-		}).then(() => {
-			sending.value = false;
-		});
+		}
+	} catch (err) {
+		console.error(err);
+	} finally {
+		sending.value = false;
 	}
 }
 

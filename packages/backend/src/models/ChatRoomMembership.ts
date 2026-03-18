@@ -46,6 +46,26 @@ export class MiChatRoomMembership {
 	})
 	public isMuted: boolean;
 
+	@Column('timestamp with time zone', {
+		nullable: true,
+		default: null,
+	})
+	public speakMutedUntil: Date | null;
+
+	@Column({
+		...id(),
+		nullable: true,
+		default: null,
+	})
+	public speakMutedById: MiUser['id'] | null;
+
+	@Column('varchar', {
+		length: 1024,
+		nullable: true,
+		default: null,
+	})
+	public speakMuteReason: string | null;
+
 	@Column('varchar', {
 		length: 16,
 		default: 'member',

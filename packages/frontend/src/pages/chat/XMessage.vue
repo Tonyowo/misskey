@@ -4,7 +4,12 @@ SPDX-License-Identifier: AGPL-3.0-only
 -->
 
 <template>
-<div :class="[$style.root, { [$style.isMe]: isMe }]">
+<div v-if="isSystemMessage" :class="$style.systemRoot">
+	<div :class="$style.systemChip">{{ systemEventText }}</div>
+	<MkTime :class="$style.systemTime" :time="message.createdAt"/>
+</div>
+
+<div v-else :class="[$style.root, { [$style.isMe]: isMe }]">
 	<MkAvatar :class="[$style.avatar, prefer.s.useStickyIcons ? $style.useSticky : null]" :user="message.fromUser!" :link="!isMe" :preview="false"/>
 	<div :class="[$style.body, message.file != null ? $style.fullWidth : null]" @contextmenu.stop="onContextmenu">
 		<div :class="$style.header">
@@ -59,7 +64,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script lang="ts" setup>
-import { computed, defineAsyncComponent, provide } from 'vue';
+import { computed, provide } from 'vue';
 import * as mfm from 'mfm-js';
 import * as Misskey from 'misskey-js';
 import { url } from '@@/js/config.js';
@@ -67,10 +72,10 @@ import { isLink } from '@@/js/is-link.js';
 import type { MenuItem } from '@/types/menu.js';
 import type { NormalizedChatMessage } from './room.vue';
 import { extractUrlFromMfm } from '@/utility/extract-url-from-mfm.js';
+import { formatChatSystemEventText, isSystemChatMessage } from '@/utility/chat-system-event-text.js';
 import MkUrlPreview from '@/components/MkUrlPreview.vue';
 import { ensureSignin } from '@/i.js';
 import { misskeyApi } from '@/utility/misskey-api.js';
-import { i18n } from '@/i18n.js';
 import MkFukidashi from '@/components/MkFukidashi.vue';
 import * as os from '@/os.js';
 import { copyToClipboard } from '@/utility/copy-to-clipboard.js';
@@ -96,19 +101,22 @@ const emit = defineEmits<{
 	(ev: 'togglePin', messageId: string | null): void;
 }>();
 
+const isSystemMessage = computed(() => isSystemChatMessage(props.message));
+const systemEventText = computed(() => formatChatSystemEventText(props.message));
 const isMe = computed(() => props.message.fromUserId === $i.id);
 const isRoomMessage = computed(() => {
 	return 'toRoomId' in props.message && props.message.toRoomId != null;
 });
 const showSenderHeader = computed(() => {
+	if (isSystemMessage.value) return false;
 	if (props.message.fromUser == null) return false;
 	if (isRoomMessage.value) return true;
 	return !isMe.value && prefer.s['chat.showSenderName'];
 });
-const urls = computed(() => props.message.text ? extractUrlFromMfm(mfm.parse(props.message.text)) : []);
+const urls = computed(() => props.message.text && !isSystemMessage.value ? extractUrlFromMfm(mfm.parse(props.message.text)) : []);
 
 provide(DI.mfmEmojiReactCallback, (reaction) => {
-	if ($i.policies.chatAvailability !== 'available') return;
+	if ($i.policies.chatAvailability !== 'available' || isSystemMessage.value) return;
 
 	sound.playMisskeySfx('reaction');
 	misskeyApi('chat/messages/react', {
@@ -118,7 +126,7 @@ provide(DI.mfmEmojiReactCallback, (reaction) => {
 });
 
 function react(ev: PointerEvent) {
-	if ($i.policies.chatAvailability !== 'available') return;
+	if ($i.policies.chatAvailability !== 'available' || isSystemMessage.value) return;
 
 	const targetEl = getHTMLElementOrNull(ev.currentTarget ?? ev.target);
 	if (!targetEl) return;
@@ -133,7 +141,7 @@ function react(ev: PointerEvent) {
 }
 
 function onReactionClick(record: Misskey.entities.ChatMessage['reactions'][0]) {
-	if ($i.policies.chatAvailability !== 'available') return;
+	if ($i.policies.chatAvailability !== 'available' || isSystemMessage.value) return;
 
 	if (record.user.id === $i.id) {
 		misskeyApi('chat/messages/unreact', {
@@ -152,6 +160,7 @@ function onReactionClick(record: Misskey.entities.ChatMessage['reactions'][0]) {
 }
 
 function onContextmenu(ev: PointerEvent) {
+	if (isSystemMessage.value) return;
 	if (ev.target && isLink(ev.target as HTMLElement)) return;
 	if (window.getSelection()?.toString() !== '') return;
 
@@ -159,6 +168,8 @@ function onContextmenu(ev: PointerEvent) {
 }
 
 function showMenu(ev: PointerEvent, contextmenu = false) {
+	if (isSystemMessage.value) return;
+
 	const menu: MenuItem[] = [];
 
 	if (!isMe.value && $i.policies.chatAvailability === 'available') {
@@ -253,6 +264,32 @@ function showMenu(ev: PointerEvent, contextmenu = false) {
 	position: absolute;
 }
 
+.systemRoot {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 6px;
+	padding: 4px 0;
+}
+
+.systemChip {
+	max-width: min(100%, 560px);
+	padding: 10px 14px;
+	border-radius: 999px;
+	background: color-mix(in srgb, var(--MI_THEME-panel) 78%, var(--MI_THEME-accent) 22%);
+	color: var(--MI_THEME-fg);
+	font-size: 0.9em;
+	line-height: 1.5;
+	text-align: center;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+
+.systemTime {
+	font-size: 0.75em;
+	opacity: 0.6;
+}
+
 .root {
 	position: relative;
 	display: flex;
@@ -298,7 +335,7 @@ function showMenu(ev: PointerEvent, contextmenu = false) {
 }
 
 .header {
-	min-height: 4px; // fukidashiの位置調整も兼ねるため
+	min-height: 4px;
 	font-size: 80%;
 	display: flex;
 	align-items: center;

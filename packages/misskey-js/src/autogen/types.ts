@@ -1464,6 +1464,15 @@ export type paths = {
          */
         post: operations['chat___rooms___admins___remove'];
     };
+    '/chat/rooms/bans/list': {
+        /**
+         * chat/rooms/bans/list
+         * @description No description provided.
+         *
+         *     **Credential required**: *Yes* / **Permission**: *read:chat*
+         */
+        post: operations['chat___rooms___bans___list'];
+    };
     '/chat/rooms/create': {
         /**
          * chat/rooms/create
@@ -1617,6 +1626,15 @@ export type paths = {
          */
         post: operations['chat___rooms___members___kick'];
     };
+    '/chat/rooms/members/mute': {
+        /**
+         * chat/rooms/members/mute
+         * @description No description provided.
+         *
+         *     **Credential required**: *Yes* / **Permission**: *write:chat*
+         */
+        post: operations['chat___rooms___members___mute'];
+    };
     '/chat/rooms/members/unban': {
         /**
          * chat/rooms/members/unban
@@ -1625,6 +1643,15 @@ export type paths = {
          *     **Credential required**: *Yes* / **Permission**: *write:chat*
          */
         post: operations['chat___rooms___members___unban'];
+    };
+    '/chat/rooms/members/unmute': {
+        /**
+         * chat/rooms/members/unmute
+         * @description No description provided.
+         *
+         *     **Credential required**: *Yes* / **Permission**: *write:chat*
+         */
+        post: operations['chat___rooms___members___unmute'];
     };
     '/chat/rooms/mute': {
         /**
@@ -5795,6 +5822,8 @@ export type components = {
             id: string;
             /** Format: date-time */
             createdAt: string;
+            /** @enum {string} */
+            type: 'message' | 'system';
             fromUserId: string;
             fromUser: components['schemas']['UserLite'];
             toUserId?: string | null;
@@ -5809,11 +5838,24 @@ export type components = {
                 reaction: string;
                 user: components['schemas']['UserLite'];
             }[];
+            systemEvent?: {
+                /** @enum {string} */
+                type: 'member_joined' | 'member_left' | 'invitation_created' | 'join_request_accepted' | 'member_kicked' | 'member_banned' | 'member_unbanned' | 'member_muted' | 'member_unmuted' | 'member_promoted' | 'member_demoted' | 'owner_transferred' | 'announcement_updated' | 'message_pinned' | 'message_unpinned' | 'admin_permissions_updated';
+                targetUserId?: string | null;
+                targetUser?: components['schemas']['UserLite'] | null;
+                /** Format: date-time */
+                expiresAt?: string | null;
+                reason?: string | null;
+                permissions?: ('invite' | 'approve' | 'kick' | 'ban' | 'mute' | 'announcement' | 'pin')[] | null;
+                messageId?: string | null;
+            } | null;
         };
         ChatMessageLite: {
             id: string;
             /** Format: date-time */
             createdAt: string;
+            /** @enum {string} */
+            type: 'message' | 'system';
             fromUserId: string;
             fromUser?: components['schemas']['UserLite'];
             toUserId?: string | null;
@@ -5825,11 +5867,24 @@ export type components = {
                 reaction: string;
                 user?: components['schemas']['UserLite'] | null;
             }[];
+            systemEvent?: {
+                /** @enum {string} */
+                type: 'member_joined' | 'member_left' | 'invitation_created' | 'join_request_accepted' | 'member_kicked' | 'member_banned' | 'member_unbanned' | 'member_muted' | 'member_unmuted' | 'member_promoted' | 'member_demoted' | 'owner_transferred' | 'announcement_updated' | 'message_pinned' | 'message_unpinned' | 'admin_permissions_updated';
+                targetUserId?: string | null;
+                targetUser?: components['schemas']['UserLite'] | null;
+                /** Format: date-time */
+                expiresAt?: string | null;
+                reason?: string | null;
+                permissions?: ('invite' | 'approve' | 'kick' | 'ban' | 'mute' | 'announcement' | 'pin')[] | null;
+                messageId?: string | null;
+            } | null;
         };
         ChatMessageLiteFor1on1: {
             id: string;
             /** Format: date-time */
             createdAt: string;
+            /** @enum {string} */
+            type: 'message' | 'system';
             fromUserId: string;
             toUserId: string;
             text?: string | null;
@@ -5838,11 +5893,24 @@ export type components = {
             reactions: {
                 reaction: string;
             }[];
+            systemEvent?: {
+                /** @enum {string} */
+                type: 'member_joined' | 'member_left' | 'invitation_created' | 'join_request_accepted' | 'member_kicked' | 'member_banned' | 'member_unbanned' | 'member_muted' | 'member_unmuted' | 'member_promoted' | 'member_demoted' | 'owner_transferred' | 'announcement_updated' | 'message_pinned' | 'message_unpinned' | 'admin_permissions_updated';
+                targetUserId?: string | null;
+                targetUser?: components['schemas']['UserLite'] | null;
+                /** Format: date-time */
+                expiresAt?: string | null;
+                reason?: string | null;
+                permissions?: ('invite' | 'approve' | 'kick' | 'ban' | 'mute' | 'announcement' | 'pin')[] | null;
+                messageId?: string | null;
+            } | null;
         };
         ChatMessageLiteForRoom: {
             id: string;
             /** Format: date-time */
             createdAt: string;
+            /** @enum {string} */
+            type: 'message' | 'system';
             fromUserId: string;
             fromUser: components['schemas']['UserLite'];
             toRoomId: string;
@@ -5853,6 +5921,17 @@ export type components = {
                 reaction: string;
                 user: components['schemas']['UserLite'];
             }[];
+            systemEvent?: {
+                /** @enum {string} */
+                type: 'member_joined' | 'member_left' | 'invitation_created' | 'join_request_accepted' | 'member_kicked' | 'member_banned' | 'member_unbanned' | 'member_muted' | 'member_unmuted' | 'member_promoted' | 'member_demoted' | 'owner_transferred' | 'announcement_updated' | 'message_pinned' | 'message_unpinned' | 'admin_permissions_updated';
+                targetUserId?: string | null;
+                targetUser?: components['schemas']['UserLite'] | null;
+                /** Format: date-time */
+                expiresAt?: string | null;
+                reason?: string | null;
+                permissions?: ('invite' | 'approve' | 'kick' | 'ban' | 'mute' | 'announcement' | 'pin')[] | null;
+                messageId?: string | null;
+            } | null;
         };
         ChatRoom: {
             id: string;
@@ -5870,6 +5949,7 @@ export type components = {
             avatarFileId: string | null;
             pinnedMessageId: string | null;
             memberCanInvite: boolean;
+            adminPermissions: ('invite' | 'approve' | 'kick' | 'ban' | 'mute' | 'announcement' | 'pin')[];
             allowJoinRequest: boolean;
             maxMembers: number;
             memberCount: number;
@@ -5880,6 +5960,16 @@ export type components = {
             canInvite?: boolean;
             canManageMembers?: boolean;
             canManageAdmins?: boolean;
+            canManageJoinRequests?: boolean;
+            canKickMembers?: boolean;
+            canBanMembers?: boolean;
+            canMuteMembers?: boolean;
+            canManageAnnouncement?: boolean;
+            canPinMessages?: boolean;
+            isSpeakMuted?: boolean;
+            /** Format: date-time */
+            speakMutedUntil?: string | null;
+            speakMuteReason?: string | null;
             pendingRequestCount?: number;
             invitationExists?: boolean;
             joinRequestExists?: boolean;
@@ -5935,6 +6025,25 @@ export type components = {
             room?: components['schemas']['ChatRoom'];
             /** @enum {string} */
             role: 'member' | 'admin';
+            isSpeakMuted: boolean;
+            /** Format: date-time */
+            speakMutedUntil: string | null;
+            speakMuteReason: string | null;
+            speakMutedById: string | null;
+            speakMutedBy?: components['schemas']['UserLite'] | null;
+        };
+        ChatRoomBan: {
+            id: string;
+            /** Format: date-time */
+            createdAt: string;
+            roomId: string;
+            userId: string;
+            user?: components['schemas']['UserLite'] | null;
+            createdById: string;
+            createdBy?: components['schemas']['UserLite'] | null;
+            reason: string | null;
+            /** Format: date-time */
+            expiresAt: string | null;
         };
     };
     responses: never;
@@ -17752,6 +17861,80 @@ export interface operations {
             };
         };
     };
+    chat___rooms___bans___list: {
+        requestBody: {
+            content: {
+                'application/json': {
+                    /** Format: misskey:id */
+                    roomId: string;
+                    /** @default 30 */
+                    limit?: number;
+                    /** Format: misskey:id */
+                    sinceId?: string;
+                    /** Format: misskey:id */
+                    untilId?: string;
+                    sinceDate?: number;
+                    untilDate?: number;
+                };
+            };
+        };
+        responses: {
+            /** @description OK (with results) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['ChatRoomBan'][];
+                };
+            };
+            /** @description Client error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Authentication error */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Forbidden error */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description I'm Ai */
+            418: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+        };
+    };
     chat___rooms___create: {
         requestBody: {
             content: {
@@ -18924,7 +19107,139 @@ export interface operations {
             };
         };
     };
+    chat___rooms___members___mute: {
+        requestBody: {
+            content: {
+                'application/json': {
+                    /** Format: misskey:id */
+                    roomId: string;
+                    /** Format: misskey:id */
+                    userId: string;
+                    reason?: string | null;
+                    expiresAt?: number | null;
+                };
+            };
+        };
+        responses: {
+            /** @description OK (without any results) */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+            };
+            /** @description Client error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Authentication error */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Forbidden error */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description I'm Ai */
+            418: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+        };
+    };
     chat___rooms___members___unban: {
+        requestBody: {
+            content: {
+                'application/json': {
+                    /** Format: misskey:id */
+                    roomId: string;
+                    /** Format: misskey:id */
+                    userId: string;
+                };
+            };
+        };
+        responses: {
+            /** @description OK (without any results) */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+            };
+            /** @description Client error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Authentication error */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Forbidden error */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description I'm Ai */
+            418: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+        };
+    };
+    chat___rooms___members___unmute: {
         requestBody: {
             content: {
                 'application/json': {
@@ -19963,6 +20278,7 @@ export interface operations {
                     /** Format: misskey:id */
                     avatarFileId?: string | null;
                     memberCanInvite?: boolean;
+                    adminPermissions?: ('invite' | 'approve' | 'kick' | 'ban' | 'mute' | 'announcement' | 'pin')[];
                     allowJoinRequest?: boolean;
                     maxMembers?: number;
                 };

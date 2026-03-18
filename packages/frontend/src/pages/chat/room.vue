@@ -14,7 +14,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 					<div :class="$style.pinnedTitle"><i class="ti ti-pin"></i> 置顶消息</div>
 					<XMessage
 						:message="pinnedMessage"
-						:allowPin="room?.canManageMembers ?? false"
+						:allowPin="room?.canPinMessages ?? false"
 						:isPinned="true"
 						@togglePin="togglePinnedMessage"
 					/>
@@ -94,7 +94,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 						<XMessage
 							v-if="item.type === 'item'"
 							:message="item.data"
-							:allowPin="room?.canManageMembers ?? false"
+							:allowPin="room?.canPinMessages ?? false"
 							:isPinned="room?.pinnedMessageId === item.data.id"
 							@togglePin="togglePinnedMessage"
 						/>
@@ -137,6 +137,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 						</button>
 					</div>
 				</Transition>
+				<MkInfo v-if="room?.isSpeakMuted" warn>{{ speakMuteNotice }}</MkInfo>
 				<XForm v-if="initialized" :user="user" :room="room" :class="$style.form"/>
 			</div>
 		</div>
@@ -200,6 +201,19 @@ const timeline = makeDateSeparatedTimelineComputedRef(messages);
 const isJoinedRoom = computed(() => room.value?.isJoined ?? false);
 const canUseChatForm = computed(() => user.value != null || isJoinedRoom.value);
 const handledInviteCodeKey = ref<string | null>(null);
+const speakMuteNotice = computed(() => {
+	if (room.value?.isSpeakMuted !== true) return '';
+
+	const parts = ['你已被禁言，当前无法发送消息。'];
+	if (room.value.speakMutedUntil) {
+		parts.push(`解除时间：${new Date(room.value.speakMutedUntil).toLocaleString('zh-CN')}`);
+	}
+	if (room.value.speakMuteReason) {
+		parts.push(`原因：${room.value.speakMuteReason}`);
+	}
+
+	return parts.join(' ');
+});
 
 const SCROLL_HEAD_THRESHOLD = 200;
 
@@ -409,10 +423,31 @@ async function loadPinnedMessage() {
 	}
 }
 
+async function refreshRoomState() {
+	if (props.roomId == null) return;
+
+	try {
+		const updatedRoom = await misskeyApi('chat/rooms/show', {
+			roomId: props.roomId,
+		});
+		room.value = updatedRoom;
+		if (!updatedRoom.isJoined) {
+			connection.value?.dispose();
+			connection.value = null;
+		}
+	} catch {
+		// noop
+	}
+}
+
 function onMessage(message: Misskey.entities.ChatMessageLite) {
 	sound.playMisskeySfx('chatMessage');
 
 	messages.value.unshift(normalizeMessage(message));
+
+	if (room.value != null && message.type === 'system') {
+		void refreshRoomState();
+	}
 
 	// TODO: DOM的にバックグラウンドになっていないかどうかも考慮する
 	if (message.fromUserId !== $i.id && !window.document.hidden && isActivated) {
@@ -430,6 +465,10 @@ function onDeleted(id: string) {
 	const index = messages.value.findIndex(m => m.id === id);
 	if (index !== -1) {
 		messages.value.splice(index, 1);
+	}
+
+	if (room.value?.pinnedMessageId === id) {
+		void refreshRoomState();
 	}
 }
 

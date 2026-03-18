@@ -5,7 +5,7 @@
 
 import { Inject, Injectable } from '@nestjs/common';
 import * as Redis from 'ioredis';
-import { Brackets, IsNull, MoreThan } from 'typeorm';
+import { Brackets, EntityManager, IsNull, MoreThan } from 'typeorm';
 import { DI } from '@/di-symbols.js';
 import type { Config } from '@/config.js';
 import { QueueService } from '@/core/QueueService.js';
@@ -16,14 +16,15 @@ import { ChatEntityService } from '@/core/entities/ChatEntityService.js';
 import { ApRendererService } from '@/core/activitypub/ApRendererService.js';
 import { PushNotificationService } from '@/core/PushNotificationService.js';
 import { bindThis } from '@/decorators.js';
-import type { ChatApprovalsRepository, ChatMessagesRepository, ChatRoomBansRepository, ChatRoomInviteLinksRepository, ChatRoomInvitationsRepository, ChatRoomJoinRequestsRepository, ChatRoomMembershipsRepository, ChatRoomsRepository, MiChatMessage, MiChatRoom, MiChatRoomInviteLink, MiChatRoomMembership, MiDriveFile, MiUser, MutingsRepository, UsersRepository } from '@/models/_.js';
+import type { ChatApprovalsRepository, ChatMessagesRepository, ChatRoomBansRepository, ChatRoomInviteLinksRepository, ChatRoomInvitationsRepository, ChatRoomJoinRequestsRepository, ChatRoomMembershipsRepository, ChatRoomsRepository, MiChatMessage, MiChatRoom, MiChatRoomBan, MiChatRoomInviteLink, MiChatRoomMembership, MiDriveFile, MiUser, MutingsRepository, UsersRepository } from '@/models/_.js';
 import { UserBlockingService } from '@/core/UserBlockingService.js';
 import { QueryService } from '@/core/QueryService.js';
 import { RoleService } from '@/core/RoleService.js';
 import { UserFollowingService } from '@/core/UserFollowingService.js';
 import { MiChatRoomInvitation } from '@/models/ChatRoomInvitation.js';
 import { MiChatRoomJoinRequest } from '@/models/ChatRoomJoinRequest.js';
-import type { ChatRoomDiscoverability, ChatRoomJoinPolicy } from '@/models/ChatRoom.js';
+import { chatRoomAdminPermissions, type ChatRoomAdminPermission, type ChatRoomDiscoverability, type ChatRoomJoinPolicy } from '@/models/ChatRoom.js';
+import type { ChatMessageSystemEvent } from '@/models/ChatMessage.js';
 import type { ChatRoomMembershipRole } from '@/models/ChatRoomMembership.js';
 import { Packed } from '@/misc/json-schema.js';
 import { sqlLikeEscape } from '@/misc/sql-like-escape.js';
@@ -263,13 +264,19 @@ export class ChatService {
 		const memberships = (await this.chatRoomMembershipsRepository.findBy({ roomId: toRoom.id })).map(m => ({
 			userId: m.userId,
 			isMuted: m.isMuted,
+			isSpeakMuted: this.isRoomSpeakMuted(m),
 		})).concat({ // ownerはmembershipレコードを作らないため
 			userId: toRoom.ownerId,
 			isMuted: false,
+			isSpeakMuted: false,
 		});
 
 		if (!memberships.some(member => member.userId === fromUser.id)) {
 			throw new Error('you are not a member of the room');
+		}
+
+		if (memberships.some(member => member.userId === fromUser.id && member.isSpeakMuted)) {
+			throw new Error('you are muted in the room');
 		}
 
 		const membershipsOtherThanMe = memberships.filter(member => member.userId !== fromUser.id);
@@ -382,6 +389,10 @@ export class ChatService {
 
 	@bindThis
 	public async deleteMessage(message: MiChatMessage) {
+		if (message.type !== 'message') {
+			throw new Error('cannot delete system message');
+		}
+
 		await this.chatMessagesRepository.delete(message.id);
 
 		if (message.toUserId) {
@@ -585,6 +596,7 @@ export class ChatService {
 		discoverability: ChatRoomDiscoverability;
 		avatarFileId: string | null;
 		memberCanInvite: boolean;
+		adminPermissions: ChatRoomAdminPermission[];
 		allowJoinRequest: boolean;
 		maxMembers: number;
 	}>) {
@@ -603,6 +615,7 @@ export class ChatService {
 			discoverability: params.discoverability ?? 'private',
 			avatarFileId: params.avatarFileId ?? null,
 			memberCanInvite: params.memberCanInvite ?? false,
+			adminPermissions: params.adminPermissions ?? [...chatRoomAdminPermissions],
 			allowJoinRequest: params.allowJoinRequest ?? true,
 			maxMembers: params.maxMembers ?? DEFAULT_ROOM_MAX_MEMBERS,
 		} satisfies Partial<MiChatRoom>;
@@ -686,13 +699,52 @@ export class ChatService {
 		return role === 'owner' || role === 'admin';
 	}
 
+	private hasRoomPermissionByRole(room: MiChatRoom, role: 'owner' | ChatRoomMembershipRole | null, permission: ChatRoomAdminPermission): boolean {
+		if (role === 'owner') return true;
+		if (role === 'admin') return room.adminPermissions.includes(permission);
+		if (role === 'member') return permission === 'invite' && room.memberCanInvite;
+		return false;
+	}
+
+	@bindThis
+	public async hasRoomPermission(room: MiChatRoom, userId: MiUser['id'], permission: ChatRoomAdminPermission): Promise<boolean> {
+		const role = await this.getRoomActorRole(room, userId);
+		return this.hasRoomPermissionByRole(room, role, permission);
+	}
+
 	@bindThis
 	public async canInviteToRoom(room: MiChatRoom, userId: MiUser['id']): Promise<boolean> {
-		const role = await this.getRoomActorRole(room, userId);
-		if (role === 'owner' || role === 'admin') {
-			return true;
-		}
-		return role === 'member' && room.memberCanInvite;
+		return await this.hasRoomPermission(room, userId, 'invite');
+	}
+
+	@bindThis
+	public async canManageRoomJoinRequests(room: MiChatRoom, userId: MiUser['id']) {
+		return await this.hasRoomPermission(room, userId, 'approve');
+	}
+
+	@bindThis
+	public async canKickRoomMembers(room: MiChatRoom, userId: MiUser['id']) {
+		return await this.hasRoomPermission(room, userId, 'kick');
+	}
+
+	@bindThis
+	public async canBanRoomMembers(room: MiChatRoom, userId: MiUser['id']) {
+		return await this.hasRoomPermission(room, userId, 'ban');
+	}
+
+	@bindThis
+	public async canMuteRoomMembers(room: MiChatRoom, userId: MiUser['id']) {
+		return await this.hasRoomPermission(room, userId, 'mute');
+	}
+
+	@bindThis
+	public async canManageRoomAnnouncement(room: MiChatRoom, userId: MiUser['id']) {
+		return await this.hasRoomPermission(room, userId, 'announcement');
+	}
+
+	@bindThis
+	public async canPinRoomMessages(room: MiChatRoom, userId: MiUser['id']) {
+		return await this.hasRoomPermission(room, userId, 'pin');
 	}
 
 	@bindThis
@@ -718,8 +770,23 @@ export class ChatService {
 		return await this.chatRoomMembershipsRepository.insertOne(membership);
 	}
 
+	private isRoomSpeakMuted(membership: MiChatRoomMembership | null | undefined) {
+		if (membership == null) return false;
+		if (membership.speakMutedById == null) return false;
+		if (membership.speakMutedUntil == null) return true;
+		return membership.speakMutedUntil.getTime() > Date.now();
+	}
+
 	private async ensureRoomHasSpace(room: MiChatRoom) {
 		const membershipsCount = await this.chatRoomMembershipsRepository.countBy({ roomId: room.id });
+		const activeMembers = membershipsCount + 1;
+		if (activeMembers >= room.maxMembers) {
+			throw new Error('room is full');
+		}
+	}
+
+	private async ensureRoomHasSpaceInManager(manager: EntityManager, room: MiChatRoom) {
+		const membershipsCount = await manager.getRepository(this.chatRoomMembershipsRepository.target).countBy({ roomId: room.id });
 		const activeMembers = membershipsCount + 1;
 		if (activeMembers >= room.maxMembers) {
 			throw new Error('room is full');
@@ -743,6 +810,59 @@ export class ChatService {
 				{ roomId, userId, ignored: false, revokedAt: IsNull(), expiresAt: MoreThan(now) },
 			],
 		});
+	}
+
+	private async findActiveRoomInvitationInManager(manager: EntityManager, roomId: MiChatRoom['id'], userId: MiUser['id']) {
+		const now = new Date();
+		return await manager.getRepository(this.chatRoomInvitationsRepository.target).createQueryBuilder('invitation')
+			.setLock('pessimistic_write')
+			.where('invitation.roomId = :roomId', { roomId })
+			.andWhere('invitation.userId = :userId', { userId })
+			.andWhere('invitation.ignored = FALSE')
+			.andWhere('invitation.revokedAt IS NULL')
+			.andWhere(new Brackets((qb) => {
+				qb.where('invitation.expiresAt IS NULL')
+					.orWhere('invitation.expiresAt > :now', { now });
+			}))
+			.getOne();
+	}
+
+	private async lockRoomForMembershipMutation(manager: EntityManager, roomId: MiChatRoom['id']) {
+		return await manager.getRepository(this.chatRoomsRepository.target).createQueryBuilder('room')
+			.setLock('pessimistic_write')
+			.where('room.id = :roomId', { roomId })
+			.getOneOrFail();
+	}
+
+	private async createRoomSystemMessage(actorId: MiUser['id'], roomId: MiChatRoom['id'], systemEvent: ChatMessageSystemEvent) {
+		const message = await this.chatMessagesRepository.insertOne({
+			id: this.idService.gen(),
+			fromUserId: actorId,
+			toRoomId: roomId,
+			type: 'system',
+			text: null,
+			fileId: null,
+			reads: [],
+			uri: null,
+			reactions: [],
+			systemEvent,
+		});
+
+		const packedMessage = await this.chatEntityService.packMessageLiteForRoom(message);
+		this.globalEventService.publishChatRoomStream(roomId, 'message', packedMessage);
+
+		return message;
+	}
+
+	private hasSameAdminPermissions(a: ChatRoomAdminPermission[] | undefined, b: ChatRoomAdminPermission[] | undefined): boolean {
+		const aPermissions = a ?? [];
+		const bPermissions = b ?? [];
+
+		if (aPermissions.length !== bPermissions.length) {
+			return false;
+		}
+
+		return aPermissions.every(permission => bPermissions.includes(permission));
 	}
 
 	private generateRoomInviteLinkCode() {
@@ -810,6 +930,11 @@ export class ChatService {
 		this.notificationService.createNotification(inviteeId, 'chatRoomInvitationReceived', {
 			invitationId: invitation.id,
 		}, inviterId);
+
+		await this.createRoomSystemMessage(inviterId, room.id, {
+			type: 'invitation_created',
+			targetUserId: inviteeId,
+		});
 
 		return created;
 	}
@@ -928,7 +1053,10 @@ export class ChatService {
 			.leftJoin('chat_room_membership', 'membership', 'membership.roomId = room.id AND membership.userId = :actorId', { actorId })
 			.where(new Brackets((inner) => {
 				inner.where('room.ownerId = :actorId')
-					.orWhere('membership.role = :adminRole', { adminRole: 'admin' });
+					.orWhere(new Brackets((admin) => {
+						admin.where('membership.role = :adminRole', { adminRole: 'admin' })
+							.andWhere(':approvePermission = ANY(room."adminPermissions")', { approvePermission: 'approve' });
+					}));
 			}));
 
 		if (roomId) {
@@ -941,20 +1069,21 @@ export class ChatService {
 	@bindThis
 	public async approveRoomJoinRequest(actorId: MiUser['id'], roomId: MiChatRoom['id'], userId: MiUser['id']) {
 		const room = await this.chatRoomsRepository.findOneByOrFail({ id: roomId });
-		if (!(await this.isRoomAdmin(room, actorId))) {
+		if (!(await this.canManageRoomJoinRequests(room, actorId))) {
 			throw new Error('forbidden');
 		}
 
-		const request = await this.chatRoomJoinRequestsRepository.findOneByOrFail({ roomId, userId });
+		const membership = await this.chatRoomsRepository.manager.transaction(async (manager) => {
+			const managedRoom = await this.lockRoomForMembershipMutation(manager, roomId);
+			const request = await manager.getRepository(this.chatRoomJoinRequestsRepository.target).findOneByOrFail({ roomId, userId });
 
-		if (await this.isRoomBanned(room.id, userId)) {
-			throw new Error('banned');
-		}
+			if (await this.isRoomBanned(room.id, userId)) {
+				throw new Error('banned');
+			}
 
-		await this.ensureRoomHasSpace(room);
+			await this.ensureRoomHasSpaceInManager(manager, managedRoom);
 
-		return await this.chatRoomsRepository.manager.transaction(async (manager) => {
-			const membership = await manager.getRepository(this.chatRoomMembershipsRepository.target).insert({
+			const createdMembership = await manager.getRepository(this.chatRoomMembershipsRepository.target).insert({
 				id: this.idService.gen(),
 				roomId,
 				userId,
@@ -964,14 +1093,21 @@ export class ChatService {
 			await manager.getRepository(this.chatRoomJoinRequestsRepository.target).delete(request.id);
 			await manager.getRepository(this.chatRoomInvitationsRepository.target).delete({ roomId, userId });
 
-			return membership;
+			return createdMembership;
 		});
+
+		await this.createRoomSystemMessage(actorId, roomId, {
+			type: 'join_request_accepted',
+			targetUserId: userId,
+		});
+
+		return membership;
 	}
 
 	@bindThis
 	public async rejectRoomJoinRequest(actorId: MiUser['id'], roomId: MiChatRoom['id'], userId: MiUser['id']) {
 		const room = await this.chatRoomsRepository.findOneByOrFail({ id: roomId });
-		if (!(await this.isRoomAdmin(room, actorId))) {
+		if (!(await this.canManageRoomJoinRequests(room, actorId))) {
 			throw new Error('forbidden');
 		}
 
@@ -983,32 +1119,39 @@ export class ChatService {
 	public async joinToRoom(userId: MiUser['id'], roomId: MiChatRoom['id']) {
 		const room = await this.chatRoomsRepository.findOneByOrFail({ id: roomId });
 
-		if (await this.isRoomBanned(room.id, userId)) {
-			throw new Error('banned');
-		}
-
-		if (await this.isRoomMember(room, userId)) {
-			throw new Error('already member');
-		}
-
-		const invitation = await this.findActiveRoomInvitation(roomId, userId);
-		if (room.joinPolicy !== 'public' && invitation == null) {
-			throw new Error('not invited');
-		}
-
-		await this.ensureRoomHasSpace(room);
-
 		await this.chatRoomsRepository.manager.transaction(async (manager) => {
+			const managedRoom = await this.lockRoomForMembershipMutation(manager, roomId);
+
+			if (await this.isRoomBanned(managedRoom.id, userId)) {
+				throw new Error('banned');
+			}
+
+			if (managedRoom.ownerId === userId || await manager.getRepository(this.chatRoomMembershipsRepository.target).existsBy({ roomId, userId })) {
+				throw new Error('already member');
+			}
+
+			const invitation = managedRoom.joinPolicy !== 'public' ? await this.findActiveRoomInvitationInManager(manager, roomId, userId) : null;
+			if (managedRoom.joinPolicy !== 'public' && invitation == null) {
+				throw new Error('not invited');
+			}
+
+			await this.ensureRoomHasSpaceInManager(manager, managedRoom);
+
 			await manager.getRepository(this.chatRoomMembershipsRepository.target).insert({
 				id: this.idService.gen(),
 				roomId,
 				userId,
 				role: 'member',
 			});
+
 			if (invitation) {
 				await manager.getRepository(this.chatRoomInvitationsRepository.target).delete(invitation.id);
 			}
 			await manager.getRepository(this.chatRoomJoinRequestsRepository.target).delete({ roomId, userId });
+		});
+
+		await this.createRoomSystemMessage(userId, roomId, {
+			type: 'member_joined',
 		});
 	}
 
@@ -1031,14 +1174,18 @@ export class ChatService {
 			maxUses: params?.maxUses ?? null,
 		} satisfies Partial<MiChatRoomInviteLink>;
 
-		return await this.chatRoomInviteLinksRepository.insertOne(inviteLink);
+		const created = await this.chatRoomInviteLinksRepository.insertOne(inviteLink);
+		await this.createRoomSystemMessage(actorId, room.id, {
+			type: 'invitation_created',
+		});
+		return created;
 	}
 
 	@bindThis
 	public async getRoomInviteLinksWithPagination(actorId: MiUser['id'], roomId: MiChatRoom['id'], limit: number, sinceId?: MiChatRoomInviteLink['id'] | null, untilId?: MiChatRoomInviteLink['id'] | null) {
 		const room = await this.chatRoomsRepository.findOneByOrFail({ id: roomId });
 		const actorRole = await this.getRoomActorRole(room, actorId);
-		if (actorRole == null) {
+		if (!(await this.canInviteToRoom(room, actorId))) {
 			throw new Error('forbidden');
 		}
 
@@ -1058,6 +1205,10 @@ export class ChatService {
 		const room = await this.chatRoomsRepository.findOneByOrFail({ id: inviteLink.roomId });
 		const actorRole = await this.getRoomActorRole(room, actorId);
 		if (actorRole == null) {
+			throw new Error('forbidden');
+		}
+
+		if (!this.hasRoomPermissionByRole(room, actorRole, 'invite')) {
 			throw new Error('forbidden');
 		}
 
@@ -1082,33 +1233,42 @@ export class ChatService {
 
 		const room = await this.chatRoomsRepository.findOneByOrFail({ id: inviteLink.roomId });
 
-		if (await this.isRoomBanned(room.id, userId)) {
-			throw new Error('banned');
-		}
-
-		if (await this.isRoomMember(room, userId)) {
-			throw new Error('already member');
-		}
-
-		await this.ensureRoomHasSpace(room);
-
 		await this.chatRoomsRepository.manager.transaction(async (manager) => {
-			const managedInviteLink = await manager.getRepository(this.chatRoomInviteLinksRepository.target).findOneByOrFail({ id: inviteLink.id });
+			const managedInviteLink = await manager.getRepository(this.chatRoomInviteLinksRepository.target).createQueryBuilder('inviteLink')
+				.setLock('pessimistic_write')
+				.where('inviteLink.id = :id', { id: inviteLink.id })
+				.getOneOrFail();
 			if (!this.isRoomInviteLinkActive(managedInviteLink)) {
 				throw new Error('invalid invite link');
 			}
 
+			const managedRoom = await this.lockRoomForMembershipMutation(manager, managedInviteLink.roomId);
+
+			if (await this.isRoomBanned(managedRoom.id, userId)) {
+				throw new Error('banned');
+			}
+
+			if (managedRoom.ownerId === userId || await manager.getRepository(this.chatRoomMembershipsRepository.target).existsBy({ roomId: managedRoom.id, userId })) {
+				throw new Error('already member');
+			}
+
+			await this.ensureRoomHasSpaceInManager(manager, managedRoom);
+
 			await manager.getRepository(this.chatRoomMembershipsRepository.target).insert({
 				id: this.idService.gen(),
-				roomId: room.id,
+				roomId: managedRoom.id,
 				userId,
 				role: 'member',
 			});
 			await manager.getRepository(this.chatRoomInviteLinksRepository.target).update(managedInviteLink.id, {
 				uses: managedInviteLink.uses + 1,
 			});
-			await manager.getRepository(this.chatRoomJoinRequestsRepository.target).delete({ roomId: room.id, userId });
-			await manager.getRepository(this.chatRoomInvitationsRepository.target).delete({ roomId: room.id, userId });
+			await manager.getRepository(this.chatRoomJoinRequestsRepository.target).delete({ roomId: managedRoom.id, userId });
+			await manager.getRepository(this.chatRoomInvitationsRepository.target).delete({ roomId: managedRoom.id, userId });
+		});
+
+		await this.createRoomSystemMessage(userId, room.id, {
+			type: 'member_joined',
 		});
 
 		return room;
@@ -1130,6 +1290,10 @@ export class ChatService {
 		redisPipeline.del(`newRoomChatMessageExists:${userId}:${roomId}`);
 		redisPipeline.srem(`newChatMessagesExists:${userId}`, `room:${roomId}`);
 		await redisPipeline.exec();
+
+		await this.createRoomSystemMessage(userId, roomId, {
+			type: 'member_left',
+		});
 	}
 
 	@bindThis
@@ -1147,15 +1311,16 @@ export class ChatService {
 		discoverability?: ChatRoomDiscoverability;
 		avatarFileId?: string | null;
 		memberCanInvite?: boolean;
+		adminPermissions?: ChatRoomAdminPermission[];
 		allowJoinRequest?: boolean;
 		maxMembers?: number;
-	}): Promise<MiChatRoom> {
+	}, actorId?: MiUser['id']): Promise<MiChatRoom> {
 		this.ensureValidRoomSettingCombination({
 			joinPolicy: params.joinPolicy ?? room.joinPolicy,
 			discoverability: params.discoverability ?? room.discoverability,
 		});
 
-		return this.chatRoomsRepository.createQueryBuilder().update()
+		const updated = await this.chatRoomsRepository.createQueryBuilder().update()
 			.set(params)
 			.where('id = :id', { id: room.id })
 			.returning('*')
@@ -1163,43 +1328,65 @@ export class ChatService {
 			.then((response) => {
 				return response.raw[0];
 			});
+
+		if (actorId != null && params.adminPermissions != null && !this.hasSameAdminPermissions(room.adminPermissions, params.adminPermissions)) {
+			await this.createRoomSystemMessage(actorId, room.id, {
+				type: 'admin_permissions_updated',
+				permissions: updated.adminPermissions,
+			});
+		}
+
+		return updated;
 	}
 
 	@bindThis
 	public async updateRoomAnnouncement(actorId: MiUser['id'], roomId: MiChatRoom['id'], announcement: string) {
 		const room = await this.chatRoomsRepository.findOneByOrFail({ id: roomId });
-		if (!(await this.isRoomAdmin(room, actorId))) {
+		if (!(await this.canManageRoomAnnouncement(room, actorId))) {
 			throw new Error('forbidden');
 		}
 
-		return this.chatRoomsRepository.createQueryBuilder().update()
+		const updated = await this.chatRoomsRepository.createQueryBuilder().update()
 			.set({ announcement })
 			.where('id = :id', { id: roomId })
 			.returning('*')
 			.execute()
 			.then((response) => response.raw[0]);
+
+		await this.createRoomSystemMessage(actorId, roomId, {
+			type: 'announcement_updated',
+		});
+
+		return updated;
 	}
 
 	@bindThis
 	public async pinRoomMessage(actorId: MiUser['id'], roomId: MiChatRoom['id'], messageId: MiChatMessage['id'] | null) {
 		const room = await this.chatRoomsRepository.findOneByOrFail({ id: roomId });
-		if (!(await this.isRoomAdmin(room, actorId))) {
+		if (!(await this.canPinRoomMessages(room, actorId))) {
 			throw new Error('forbidden');
 		}
 
 		if (messageId != null) {
 			const message = await this.chatMessagesRepository.findOneByOrFail({ id: messageId });
-			if (message.toRoomId !== roomId) {
+			if (message.toRoomId !== roomId || message.type !== 'message') {
 				throw new Error('invalid message');
 			}
 		}
 
-		return this.chatRoomsRepository.createQueryBuilder().update()
+		const updated = await this.chatRoomsRepository.createQueryBuilder().update()
 			.set({ pinnedMessageId: messageId })
 			.where('id = :id', { id: roomId })
 			.returning('*')
 			.execute()
 			.then((response) => response.raw[0]);
+
+		await this.createRoomSystemMessage(actorId, roomId, {
+			type: messageId == null ? 'message_unpinned' : 'message_pinned',
+			messageId,
+		});
+
+		return updated;
 	}
 
 	@bindThis
@@ -1216,7 +1403,7 @@ export class ChatService {
 	public async revokeRoomInvitation(actorId: MiUser['id'], invitationId: MiChatRoomInvitation['id']) {
 		const invitation = await this.chatRoomInvitationsRepository.findOneByOrFail({ id: invitationId });
 		const room = await this.chatRoomsRepository.findOneByOrFail({ id: invitation.roomId });
-		if (!(await this.isRoomAdmin(room, actorId))) {
+		if (!(await this.canInviteToRoom(room, actorId))) {
 			throw new Error('forbidden');
 		}
 
@@ -1231,7 +1418,7 @@ export class ChatService {
 	public async kickRoomMember(actorId: MiUser['id'], roomId: MiChatRoom['id'], userId: MiUser['id']) {
 		const room = await this.chatRoomsRepository.findOneByOrFail({ id: roomId });
 		const actorRole = await this.getRoomActorRole(room, actorId);
-		if (actorRole !== 'owner' && actorRole !== 'admin') {
+		if (!this.hasRoomPermissionByRole(room, actorRole, 'kick')) {
 			throw new Error('forbidden');
 		}
 		if (room.ownerId === userId) {
@@ -1249,14 +1436,22 @@ export class ChatService {
 		redisPipeline.del(`newRoomChatMessageExists:${userId}:${roomId}`);
 		redisPipeline.srem(`newChatMessagesExists:${userId}`, `room:${roomId}`);
 		await redisPipeline.exec();
+
+		await this.createRoomSystemMessage(actorId, roomId, {
+			type: 'member_kicked',
+			targetUserId: userId,
+		});
 	}
 
 	@bindThis
 	public async banRoomMember(actorId: MiUser['id'], roomId: MiChatRoom['id'], userId: MiUser['id'], reason?: string | null, expiresAt?: Date | null) {
 		const room = await this.chatRoomsRepository.findOneByOrFail({ id: roomId });
 		const actorRole = await this.getRoomActorRole(room, actorId);
-		if (actorRole !== 'owner' && actorRole !== 'admin') {
+		if (!this.hasRoomPermissionByRole(room, actorRole, 'ban')) {
 			throw new Error('forbidden');
+		}
+		if (expiresAt != null && expiresAt.getTime() <= Date.now()) {
+			throw new Error('invalid expires at');
 		}
 		if (room.ownerId === userId) {
 			throw new Error('cannot ban owner');
@@ -1285,15 +1480,97 @@ export class ChatService {
 		redisPipeline.del(`newRoomChatMessageExists:${userId}:${roomId}`);
 		redisPipeline.srem(`newChatMessagesExists:${userId}`, `room:${roomId}`);
 		await redisPipeline.exec();
+
+		await this.createRoomSystemMessage(actorId, roomId, {
+			type: 'member_banned',
+			targetUserId: userId,
+			reason: reason?.trim() || null,
+			expiresAt: expiresAt ?? null,
+		});
+	}
+
+	@bindThis
+	public async getRoomBansWithPagination(actorId: MiUser['id'], roomId: MiChatRoom['id'], limit: number, sinceId?: MiChatRoomBan['id'] | null, untilId?: MiChatRoomBan['id'] | null) {
+		const room = await this.chatRoomsRepository.findOneByOrFail({ id: roomId });
+		if (!(await this.canBanRoomMembers(room, actorId))) {
+			throw new Error('forbidden');
+		}
+
+		const query = this.queryService.makePaginationQuery(this.chatRoomBansRepository.createQueryBuilder('ban'), sinceId, untilId)
+			.andWhere('ban.roomId = :roomId', { roomId });
+
+		return await query.take(limit).getMany();
 	}
 
 	@bindThis
 	public async unbanRoomMember(actorId: MiUser['id'], roomId: MiChatRoom['id'], userId: MiUser['id']) {
 		const room = await this.chatRoomsRepository.findOneByOrFail({ id: roomId });
-		if (!(await this.isRoomAdmin(room, actorId))) {
+		if (!(await this.canBanRoomMembers(room, actorId))) {
 			throw new Error('forbidden');
 		}
 		await this.chatRoomBansRepository.delete({ roomId, userId });
+
+		await this.createRoomSystemMessage(actorId, roomId, {
+			type: 'member_unbanned',
+			targetUserId: userId,
+		});
+	}
+
+	@bindThis
+	public async muteRoomMember(actorId: MiUser['id'], roomId: MiChatRoom['id'], userId: MiUser['id'], expiresAt?: Date | null, reason?: string | null) {
+		const room = await this.chatRoomsRepository.findOneByOrFail({ id: roomId });
+		const actorRole = await this.getRoomActorRole(room, actorId);
+		if (!this.hasRoomPermissionByRole(room, actorRole, 'mute')) {
+			throw new Error('forbidden');
+		}
+		if (expiresAt != null && expiresAt.getTime() <= Date.now()) {
+			throw new Error('invalid expires at');
+		}
+		if (room.ownerId === userId) {
+			throw new Error('cannot mute owner');
+		}
+
+		const targetMembership = await this.chatRoomMembershipsRepository.findOneByOrFail({ roomId, userId });
+		if (actorRole === 'admin' && targetMembership.role === 'admin') {
+			throw new Error('forbidden');
+		}
+
+		await this.chatRoomMembershipsRepository.update(targetMembership.id, {
+			speakMutedById: actorId,
+			speakMutedUntil: expiresAt ?? null,
+			speakMuteReason: reason?.trim() || null,
+		});
+
+		await this.createRoomSystemMessage(actorId, roomId, {
+			type: 'member_muted',
+			targetUserId: userId,
+			expiresAt: expiresAt ?? null,
+			reason: reason?.trim() || null,
+		});
+	}
+
+	@bindThis
+	public async unmuteRoomMember(actorId: MiUser['id'], roomId: MiChatRoom['id'], userId: MiUser['id']) {
+		const room = await this.chatRoomsRepository.findOneByOrFail({ id: roomId });
+		const actorRole = await this.getRoomActorRole(room, actorId);
+		if (!this.hasRoomPermissionByRole(room, actorRole, 'mute')) {
+			throw new Error('forbidden');
+		}
+
+		const targetMembership = await this.chatRoomMembershipsRepository.findOneByOrFail({ roomId, userId });
+		if (actorRole === 'admin' && targetMembership.role === 'admin') {
+			throw new Error('forbidden');
+		}
+		await this.chatRoomMembershipsRepository.update(targetMembership.id, {
+			speakMutedById: null,
+			speakMutedUntil: null,
+			speakMuteReason: null,
+		});
+
+		await this.createRoomSystemMessage(actorId, roomId, {
+			type: 'member_unmuted',
+			targetUserId: userId,
+		});
 	}
 
 	@bindThis
@@ -1302,6 +1579,11 @@ export class ChatService {
 		if (room.ownerId === userId) return;
 		const targetMembership = await this.chatRoomMembershipsRepository.findOneByOrFail({ roomId, userId });
 		await this.chatRoomMembershipsRepository.update(targetMembership.id, { role: 'admin' });
+
+		await this.createRoomSystemMessage(ownerId, roomId, {
+			type: 'member_promoted',
+			targetUserId: userId,
+		});
 	}
 
 	@bindThis
@@ -1309,6 +1591,11 @@ export class ChatService {
 		await this.chatRoomsRepository.findOneByOrFail({ id: roomId, ownerId });
 		const targetMembership = await this.chatRoomMembershipsRepository.findOneByOrFail({ roomId, userId });
 		await this.chatRoomMembershipsRepository.update(targetMembership.id, { role: 'member' });
+
+		await this.createRoomSystemMessage(ownerId, roomId, {
+			type: 'member_demoted',
+			targetUserId: userId,
+		});
 	}
 
 	@bindThis
@@ -1334,6 +1621,11 @@ export class ChatService {
 			}
 
 			await manager.getRepository(this.chatRoomsRepository.target).update(room.id, { ownerId: newOwnerId });
+		});
+
+		await this.createRoomSystemMessage(ownerId, roomId, {
+			type: 'owner_transferred',
+			targetUserId: newOwnerId,
 		});
 
 		return await this.chatRoomsRepository.findOneByOrFail({ id: roomId });
@@ -1418,6 +1710,9 @@ export class ChatService {
 		}
 
 		const message = await this.chatMessagesRepository.findOneByOrFail({ id: messageId });
+		if (message.type !== 'message') {
+			throw new Error('cannot react to system message');
+		}
 
 		if (message.fromUserId === userId) {
 			throw new Error('cannot react to own message');
@@ -1480,6 +1775,9 @@ export class ChatService {
 		// NOTE: 自分のリアクションを(あれば)削除するだけなので諸々の権限チェックは必要なし
 
 		const message = await this.chatMessagesRepository.findOneByOrFail({ id: messageId });
+		if (message.type !== 'message') {
+			throw new Error('cannot react to system message');
+		}
 
 		const room = message.toRoomId ? await this.chatRoomsRepository.findOneByOrFail({ id: message.toRoomId }) : null;
 

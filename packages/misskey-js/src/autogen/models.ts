@@ -71,3 +71,4 @@ export type ChatRoomInvitation = components['schemas']['ChatRoomInvitation'];
 export type ChatRoomInviteLink = components['schemas']['ChatRoomInviteLink'];
 export type ChatRoomJoinRequest = components['schemas']['ChatRoomJoinRequest'];
 export type ChatRoomMembership = components['schemas']['ChatRoomMembership'];
+export type ChatRoomBan = components['schemas']['ChatRoomBan'];

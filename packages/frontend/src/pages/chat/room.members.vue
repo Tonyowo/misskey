@@ -7,20 +7,44 @@ SPDX-License-Identifier: AGPL-3.0-only
 <div class="_gaps">
 	<MkButton v-if="canInvite" primary rounded style="margin: 0 auto;" @click="inviteUser"><i class="ti ti-plus"></i> 邀请成员</MkButton>
 
-	<MkA :class="$style.membershipBody" :to="`${userPage(room.owner)}`">
-		<MkUserCardMini :user="room.owner"/>
-	</MkA>
+	<div :class="$style.memberCard">
+		<MkA :class="$style.memberBody" :to="`${userPage(room.owner)}`">
+			<MkUserCardMini :user="room.owner"/>
+		</MkA>
+		<div :class="$style.memberDetails">
+			<div :class="$style.badgeRow">
+				<div :class="$style.badge">群主</div>
+			</div>
+		</div>
+	</div>
 
 	<hr v-if="memberships.length > 0">
 
-	<div v-for="membership in memberships" :key="membership.id" :class="$style.membership">
-		<MkA :class="$style.membershipBody" :to="`${userPage(membership.user!)}`">
-			<MkUserCardMini :user="membership.user!"/>
-		</MkA>
+	<div v-for="membership in memberships" :key="membership.id" :class="$style.memberCard">
+		<div :class="$style.memberMain">
+			<MkA :class="$style.memberBody" :to="`${userPage(membership.user!)}`">
+				<MkUserCardMini :user="membership.user!"/>
+			</MkA>
 
-		<div :class="$style.badge">{{ membership.role === 'admin' ? '管理员' : '成员' }}</div>
+			<div :class="$style.memberDetails">
+				<div :class="$style.badgeRow">
+					<div :class="$style.badge">{{ membership.role === 'admin' ? '管理员' : '成员' }}</div>
+					<div v-if="membership.isSpeakMuted" :class="[$style.badge, $style.badgeWarn]">已禁言</div>
+				</div>
 
-		<div v-if="canManageMembers" :class="$style.memberActions">
+				<div v-if="membership.isSpeakMuted" :class="$style.metaText">
+					<span v-if="membership.speakMutedUntil">解除时间：<MkTime :time="membership.speakMutedUntil" mode="detail"/></span>
+					<span v-else>永久禁言</span>
+					<span v-if="membership.speakMuteReason">原因：{{ membership.speakMuteReason }}</span>
+					<span v-if="membership.speakMutedBy">操作人：{{ formatUserName(membership.speakMutedBy) }}</span>
+				</div>
+			</div>
+		</div>
+
+		<div
+			v-if="canManageAdmins || ((canKickMembers || canBanMembers || canMuteMembers) && canManageTargetMembership(membership))"
+			:class="$style.memberActions"
+		>
 			<MkButton
 				v-if="canManageAdmins && membership.role !== 'admin'"
 				rounded
@@ -45,44 +69,91 @@ SPDX-License-Identifier: AGPL-3.0-only
 			>
 				<i class="ti ti-crown"></i> 转让群主
 			</MkButton>
-			<MkButton rounded small danger @click="kickMember(membership)"><i class="ti ti-user-minus"></i> 删除</MkButton>
-			<MkButton rounded small danger @click="banMember(membership)"><i class="ti ti-ban"></i> 封禁</MkButton>
+			<MkButton
+				v-if="canMuteMembers && canManageTargetMembership(membership) && !membership.isSpeakMuted"
+				rounded
+				small
+				@click="muteMember(membership)"
+			>
+				<i class="ti ti-message-off"></i> 禁言
+			</MkButton>
+			<MkButton
+				v-if="canMuteMembers && canManageTargetMembership(membership) && membership.isSpeakMuted"
+				rounded
+				small
+				@click="unmuteMember(membership)"
+			>
+				<i class="ti ti-message-circle-2"></i> 解除禁言
+			</MkButton>
+			<MkButton v-if="canKickMembers && canManageTargetMembership(membership)" rounded small danger @click="kickMember(membership)"><i class="ti ti-user-minus"></i> 删除</MkButton>
+			<MkButton v-if="canBanMembers && canManageTargetMembership(membership)" rounded small danger @click="banMember(membership)"><i class="ti ti-ban"></i> 封禁</MkButton>
 		</div>
 	</div>
 
-	<template v-if="canManageMembers">
-		<template v-if="joinRequests.length > 0">
-			<hr>
+	<template v-if="canManageJoinRequests">
+		<hr>
 
-			<div>入群申请</div>
+		<div :class="$style.sectionHeader">入群申请</div>
 
-			<div v-for="joinRequest in joinRequests" :key="joinRequest.id" :class="$style.request">
-				<div :class="$style.requestBody">
-					<MkA :class="$style.requestUser" :to="`${userPage(joinRequest.user)}`">
-						<MkUserCardMini :user="joinRequest.user"/>
-					</MkA>
-					<div v-if="joinRequest.message" :class="$style.requestMessage">{{ joinRequest.message }}</div>
-				</div>
+		<div v-if="joinRequests.length === 0" :class="$style.emptyText">暂无待处理申请</div>
 
-				<div :class="$style.requestActions">
-					<MkButton rounded small @click="acceptJoinRequest(joinRequest)"><i class="ti ti-check"></i> 通过</MkButton>
-					<MkButton rounded small danger @click="rejectJoinRequest(joinRequest)"><i class="ti ti-x"></i> 拒绝</MkButton>
-				</div>
-			</div>
-		</template>
-
-		<template v-if="invitations.length > 0">
-			<hr>
-
-			<div>已发送的邀请</div>
-
-			<div v-for="invitation in invitations" :key="invitation.id" :class="$style.invitation">
-				<MkA :class="$style.invitationBody" :to="`${userPage(invitation.user)}`">
-					<MkUserCardMini :user="invitation.user"/>
+		<div v-for="joinRequest in joinRequests" :key="joinRequest.id" :class="$style.request">
+			<div :class="$style.requestBody">
+				<MkA :class="$style.requestUser" :to="`${userPage(joinRequest.user)}`">
+					<MkUserCardMini :user="joinRequest.user"/>
 				</MkA>
+				<div v-if="joinRequest.message" :class="$style.requestMessage">{{ joinRequest.message }}</div>
+			</div>
+
+			<div :class="$style.requestActions">
+				<MkButton rounded small @click="acceptJoinRequest(joinRequest)"><i class="ti ti-check"></i> 通过</MkButton>
+				<MkButton rounded small danger @click="rejectJoinRequest(joinRequest)"><i class="ti ti-x"></i> 拒绝</MkButton>
+			</div>
+		</div>
+	</template>
+
+	<template v-if="canInvite">
+		<hr>
+
+		<div :class="$style.sectionHeader">已发送的邀请</div>
+
+		<div v-if="invitations.length === 0" :class="$style.emptyText">暂无已发送邀请</div>
+
+		<div v-for="invitation in invitations" :key="invitation.id" :class="$style.request">
+			<MkA :class="$style.requestBody" :to="`${userPage(invitation.user)}`">
+				<MkUserCardMini :user="invitation.user"/>
+			</MkA>
+			<div :class="$style.requestActions">
 				<MkButton rounded small danger @click="revokeInvitation(invitation)"><i class="ti ti-x"></i> 取消</MkButton>
 			</div>
-		</template>
+		</div>
+	</template>
+
+	<template v-if="canBanMembers">
+		<hr>
+
+		<div :class="$style.sectionHeader">封禁列表</div>
+
+		<div v-if="bans.length === 0" :class="$style.emptyText">暂无封禁成员</div>
+
+		<div v-for="ban in bans" :key="ban.id" :class="$style.request">
+			<div :class="$style.requestBody">
+				<MkA v-if="ban.user" :class="$style.requestUser" :to="`${userPage(ban.user)}`">
+					<MkUserCardMini :user="ban.user"/>
+				</MkA>
+				<div v-else :class="$style.deletedUser">用户已不可用</div>
+				<div :class="$style.metaText">
+					<span v-if="ban.createdBy">操作人：{{ formatUserName(ban.createdBy) }}</span>
+					<span v-if="ban.expiresAt">到期时间：<MkTime :time="ban.expiresAt" mode="detail"/></span>
+					<span v-else>永久封禁</span>
+				</div>
+				<div v-if="ban.reason" :class="$style.requestMessage">原因：{{ ban.reason }}</div>
+			</div>
+
+			<div :class="$style.requestActions">
+				<MkButton rounded small @click="unbanMember(ban)"><i class="ti ti-lock-open"></i> 解除封禁</MkButton>
+			</div>
+		</div>
 	</template>
 </div>
 </template>
@@ -95,6 +166,7 @@ import * as os from '@/os.js';
 import { misskeyApi } from '@/utility/misskey-api.js';
 import MkUserCardMini from '@/components/MkUserCardMini.vue';
 import { userPage } from '@/filters/user.js';
+import MkTime from '@/components/global/MkTime.vue';
 
 const props = defineProps<{
 	room: Misskey.entities.ChatRoom;
@@ -106,12 +178,31 @@ const emit = defineEmits<{
 }>();
 
 const canInvite = computed(() => props.room.canInvite ?? false);
-const canManageMembers = computed(() => props.room.canManageMembers ?? false);
 const canManageAdmins = computed(() => props.room.canManageAdmins ?? false);
+const canManageJoinRequests = computed(() => props.room.canManageJoinRequests ?? false);
+const canKickMembers = computed(() => props.room.canKickMembers ?? false);
+const canBanMembers = computed(() => props.room.canBanMembers ?? false);
+const canMuteMembers = computed(() => props.room.canMuteMembers ?? false);
 
 const memberships = ref<Misskey.entities.ChatRoomMembership[]>([]);
 const invitations = ref<Misskey.entities.ChatRoomInvitation[]>([]);
 const joinRequests = ref<Misskey.entities.ChatRoomJoinRequest[]>([]);
+const bans = ref<Misskey.entities.ChatRoomBan[]>([]);
+
+function formatUserName(user: Misskey.entities.UserLite) {
+	return user.name?.trim() || `@${user.username}`;
+}
+
+function canManageTargetMembership(membership: Misskey.entities.ChatRoomMembership) {
+	return membership.role !== 'admin' || canManageAdmins.value;
+}
+
+async function refreshRoomState() {
+	const updated = await misskeyApi('chat/rooms/show', {
+		roomId: props.room.id,
+	});
+	emit('updated', updated);
+}
 
 async function fetchMemberships() {
 	memberships.value = await misskeyApi('chat/rooms/members', {
@@ -120,37 +211,59 @@ async function fetchMemberships() {
 	});
 }
 
-async function fetchOwnerData() {
-	if (!canManageMembers.value) {
+async function fetchInvitations() {
+	if (!canInvite.value) {
 		invitations.value = [];
+		return;
+	}
+
+	invitations.value = await misskeyApi('chat/rooms/invitations/outbox', {
+		roomId: props.room.id,
+		limit: 50,
+	});
+}
+
+async function fetchJoinRequests() {
+	if (!canManageJoinRequests.value) {
 		joinRequests.value = [];
 		return;
 	}
 
-	const [sentInvitations, pendingJoinRequests] = await Promise.all([
-		misskeyApi('chat/rooms/invitations/outbox', {
-			roomId: props.room.id,
-			limit: 50,
-		}),
-		misskeyApi('chat/rooms/requests/list', {
-			roomId: props.room.id,
-			limit: 50,
-		}),
-	]);
-
-	invitations.value = sentInvitations;
-	joinRequests.value = pendingJoinRequests;
+	joinRequests.value = await misskeyApi('chat/rooms/requests/list', {
+		roomId: props.room.id,
+		limit: 50,
+	});
 }
 
-watch(() => [props.room.id, canManageMembers.value] as const, async () => {
-	await fetchMemberships();
-	await fetchOwnerData();
+async function fetchBans() {
+	if (!canBanMembers.value) {
+		bans.value = [];
+		return;
+	}
+
+	bans.value = await misskeyApi('chat/rooms/bans/list', {
+		roomId: props.room.id,
+		limit: 50,
+	});
+}
+
+async function fetchAll() {
+	await Promise.all([
+		fetchMemberships(),
+		fetchInvitations(),
+		fetchJoinRequests(),
+		fetchBans(),
+	]);
+}
+
+watch(() => [props.room.id, canInvite.value, canManageJoinRequests.value, canBanMembers.value] as const, async () => {
+	await fetchAll();
 }, {
 	immediate: true,
 });
 
 async function acceptJoinRequest(joinRequest: Misskey.entities.ChatRoomJoinRequest) {
-	const membership = await os.apiWithDialog('chat/rooms/requests/accept', {
+	await os.apiWithDialog('chat/rooms/requests/accept', {
 		roomId: props.room.id,
 		userId: joinRequest.userId,
 	}, undefined, {
@@ -160,12 +273,20 @@ async function acceptJoinRequest(joinRequest: Misskey.entities.ChatRoomJoinReque
 		},
 	});
 
-	joinRequests.value = joinRequests.value.filter(request => request.id !== joinRequest.id);
-	memberships.value.unshift(membership);
+	await Promise.all([
+		fetchMemberships(),
+		fetchJoinRequests(),
+		refreshRoomState(),
+	]);
 }
 
 function inviteUser() {
-	emit('inviteUser', fetchOwnerData);
+	emit('inviteUser', async () => {
+		await Promise.all([
+			fetchInvitations(),
+			refreshRoomState(),
+		]);
+	});
 }
 
 async function rejectJoinRequest(joinRequest: Misskey.entities.ChatRoomJoinRequest) {
@@ -174,30 +295,130 @@ async function rejectJoinRequest(joinRequest: Misskey.entities.ChatRoomJoinReque
 		userId: joinRequest.userId,
 	});
 
-	joinRequests.value = joinRequests.value.filter(request => request.id !== joinRequest.id);
+	await Promise.all([
+		fetchJoinRequests(),
+		refreshRoomState(),
+	]);
 }
 
 async function revokeInvitation(invitation: Misskey.entities.ChatRoomInvitation) {
 	await os.apiWithDialog('chat/rooms/invitations/revoke', {
 		invitationId: invitation.id,
 	});
-	invitations.value = invitations.value.filter(i => i.id !== invitation.id);
+
+	await fetchInvitations();
+}
+
+async function promptModerationParams(title: string) {
+	const reasonInput = await os.inputText({
+		title,
+		text: '原因（选填）',
+		maxLength: 1024,
+	});
+	if (reasonInput.canceled) return null;
+
+	const durationInput = await os.inputText({
+		title,
+		text: '持续小时数（留空表示永久）',
+		placeholder: '例如 24 或 1.5',
+	});
+	if (durationInput.canceled) return null;
+
+	const rawHours = durationInput.result?.trim();
+	if (rawHours != null && rawHours !== '') {
+		const hours = Number.parseFloat(rawHours);
+		if (!Number.isFinite(hours) || hours <= 0) {
+			await os.alert({
+				type: 'warning',
+				text: '请输入大于 0 的小时数。',
+			});
+			return null;
+		}
+
+		return {
+			reason: reasonInput.result?.trim() || null,
+			expiresAt: Date.now() + (hours * 60 * 60 * 1000),
+		};
+	}
+
+	return {
+		reason: reasonInput.result?.trim() || null,
+		expiresAt: null,
+	};
 }
 
 async function kickMember(membership: Misskey.entities.ChatRoomMembership) {
+	const { canceled } = await os.confirm({
+		type: 'warning',
+		text: `确定要移出 ${formatUserName(membership.user!)} 吗？`,
+	});
+	if (canceled) return;
+
 	await os.apiWithDialog('chat/rooms/members/kick', {
 		roomId: props.room.id,
 		userId: membership.userId,
 	});
-	memberships.value = memberships.value.filter(item => item.id !== membership.id);
+
+	await Promise.all([
+		fetchMemberships(),
+		refreshRoomState(),
+	]);
 }
 
 async function banMember(membership: Misskey.entities.ChatRoomMembership) {
+	const moderationParams = await promptModerationParams(`封禁 ${formatUserName(membership.user!)}`);
+	if (moderationParams == null) return;
+
 	await os.apiWithDialog('chat/rooms/members/ban', {
 		roomId: props.room.id,
 		userId: membership.userId,
+		reason: moderationParams.reason ?? undefined,
+		expiresAt: moderationParams.expiresAt ?? undefined,
 	});
-	memberships.value = memberships.value.filter(item => item.id !== membership.id);
+
+	await Promise.all([
+		fetchMemberships(),
+		fetchBans(),
+		refreshRoomState(),
+	]);
+}
+
+async function muteMember(membership: Misskey.entities.ChatRoomMembership) {
+	const moderationParams = await promptModerationParams(`禁言 ${formatUserName(membership.user!)}`);
+	if (moderationParams == null) return;
+
+	await os.apiWithDialog('chat/rooms/members/mute', {
+		roomId: props.room.id,
+		userId: membership.userId,
+		reason: moderationParams.reason ?? undefined,
+		expiresAt: moderationParams.expiresAt ?? undefined,
+	});
+
+	await Promise.all([
+		fetchMemberships(),
+		refreshRoomState(),
+	]);
+}
+
+async function unmuteMember(membership: Misskey.entities.ChatRoomMembership) {
+	await os.apiWithDialog('chat/rooms/members/unmute', {
+		roomId: props.room.id,
+		userId: membership.userId,
+	});
+
+	await Promise.all([
+		fetchMemberships(),
+		refreshRoomState(),
+	]);
+}
+
+async function unbanMember(ban: Misskey.entities.ChatRoomBan) {
+	await os.apiWithDialog('chat/rooms/members/unban', {
+		roomId: props.room.id,
+		userId: ban.userId,
+	});
+
+	await fetchBans();
 }
 
 async function addAdmin(membership: Misskey.entities.ChatRoomMembership) {
@@ -205,7 +426,11 @@ async function addAdmin(membership: Misskey.entities.ChatRoomMembership) {
 		roomId: props.room.id,
 		userId: membership.userId,
 	});
-	memberships.value = memberships.value.map(item => item.id === membership.id ? { ...item, role: 'admin' } : item);
+
+	await Promise.all([
+		fetchMemberships(),
+		refreshRoomState(),
+	]);
 }
 
 async function removeAdmin(membership: Misskey.entities.ChatRoomMembership) {
@@ -213,13 +438,17 @@ async function removeAdmin(membership: Misskey.entities.ChatRoomMembership) {
 		roomId: props.room.id,
 		userId: membership.userId,
 	});
-	memberships.value = memberships.value.map(item => item.id === membership.id ? { ...item, role: 'member' } : item);
+
+	await Promise.all([
+		fetchMemberships(),
+		refreshRoomState(),
+	]);
 }
 
 async function transferOwner(membership: Misskey.entities.ChatRoomMembership) {
 	const { canceled } = await os.confirm({
 		type: 'warning',
-		text: `确定要将群主转让给 ${membership.user?.name ?? membership.user?.username ?? '该成员'} 吗？`,
+		text: `确定要将群主转让给 ${formatUserName(membership.user!)} 吗？`,
 	});
 	if (canceled) return;
 
@@ -229,40 +458,84 @@ async function transferOwner(membership: Misskey.entities.ChatRoomMembership) {
 	});
 
 	emit('updated', updated);
-	await fetchMemberships();
-	await fetchOwnerData();
+	await fetchAll();
 }
 </script>
 
 <style lang="scss" module>
-.membership {
+.memberCard {
 	display: flex;
-	align-items: center;
+	align-items: flex-start;
+	gap: 12px;
+	padding: 12px 0;
+}
+
+.memberMain {
+	flex: 1;
+	min-width: 0;
+}
+
+.memberBody {
+	display: block;
+	min-width: 0;
+
+	&:hover {
+		text-decoration: none;
+	}
+}
+
+.memberDetails {
+	display: grid;
+	gap: 6px;
+	margin-top: 8px;
+}
+
+.badgeRow {
+	display: flex;
+	flex-wrap: wrap;
 	gap: 8px;
 }
 
-.membershipBody {
-	flex: 1;
-	min-width: 0;
-	margin-right: 8px;
+.badge {
+	padding: 4px 10px;
+	border-radius: 999px;
+	background: var(--MI_THEME-buttonBg);
+	font-size: 0.85em;
 }
 
-.invitation {
+.badgeWarn {
+	color: #d95b29;
+	background: color-mix(in srgb, #d95b29 15%, var(--MI_THEME-panel));
+}
+
+.metaText {
 	display: flex;
-	align-items: center;
-	gap: 8px;
+	flex-wrap: wrap;
+	gap: 10px;
+	font-size: 0.9em;
+	opacity: 0.78;
 }
 
-.invitationBody {
-	flex: 1;
-	min-width: 0;
-	margin-right: 8px;
+.memberActions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	justify-content: flex-end;
+}
+
+.sectionHeader {
+	font-weight: 700;
+}
+
+.emptyText {
+	opacity: 0.72;
 }
 
 .request {
 	display: flex;
-	align-items: center;
-	gap: 8px;
+	align-items: flex-start;
+	gap: 12px;
+	padding: 12px 0;
 }
 
 .requestBody {
@@ -275,29 +548,22 @@ async function transferOwner(membership: Misskey.entities.ChatRoomMembership) {
 }
 
 .requestMessage {
-	margin-top: 6px;
+	margin-top: 8px;
 	font-size: 0.9em;
-	opacity: 0.75;
+	opacity: 0.82;
 	white-space: pre-wrap;
 	overflow-wrap: anywhere;
 }
 
 .requestActions {
 	display: flex;
+	flex-wrap: wrap;
 	gap: 8px;
-	flex-wrap: wrap;
 	justify-content: flex-end;
 }
 
-.memberActions {
-	display: flex;
-	gap: 6px;
-	flex-wrap: wrap;
-	justify-content: flex-end;
-}
-
-.badge {
-	opacity: 0.8;
-	font-size: 0.85em;
+.deletedUser {
+	font-size: 0.95em;
+	opacity: 0.72;
 }
 </style>

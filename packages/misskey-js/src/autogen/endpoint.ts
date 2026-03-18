@@ -241,6 +241,8 @@ import type {
 	ChatMessagesUserTimelineResponse,
 	ChatRoomsAdminsAddRequest,
 	ChatRoomsAdminsRemoveRequest,
+	ChatRoomsBansListRequest,
+	ChatRoomsBansListResponse,
 	ChatRoomsCreateRequest,
 	ChatRoomsCreateResponse,
 	ChatRoomsDeleteRequest,
@@ -267,7 +269,9 @@ import type {
 	ChatRoomsMembersResponse,
 	ChatRoomsMembersBanRequest,
 	ChatRoomsMembersKickRequest,
+	ChatRoomsMembersMuteRequest,
 	ChatRoomsMembersUnbanRequest,
+	ChatRoomsMembersUnmuteRequest,
 	ChatRoomsMuteRequest,
 	ChatRoomsOwnedRequest,
 	ChatRoomsOwnedResponse,
@@ -858,6 +862,7 @@ export type Endpoints = {
 	'chat/read-all': { req: EmptyRequest; res: EmptyResponse };
 	'chat/rooms/admins/add': { req: ChatRoomsAdminsAddRequest; res: EmptyResponse };
 	'chat/rooms/admins/remove': { req: ChatRoomsAdminsRemoveRequest; res: EmptyResponse };
+	'chat/rooms/bans/list': { req: ChatRoomsBansListRequest; res: ChatRoomsBansListResponse };
 	'chat/rooms/create': { req: ChatRoomsCreateRequest; res: ChatRoomsCreateResponse };
 	'chat/rooms/delete': { req: ChatRoomsDeleteRequest; res: EmptyResponse };
 	'chat/rooms/invitations/create': { req: ChatRoomsInvitationsCreateRequest; res: ChatRoomsInvitationsCreateResponse };
@@ -875,7 +880,9 @@ export type Endpoints = {
 	'chat/rooms/members': { req: ChatRoomsMembersRequest; res: ChatRoomsMembersResponse };
 	'chat/rooms/members/ban': { req: ChatRoomsMembersBanRequest; res: EmptyResponse };
 	'chat/rooms/members/kick': { req: ChatRoomsMembersKickRequest; res: EmptyResponse };
+	'chat/rooms/members/mute': { req: ChatRoomsMembersMuteRequest; res: EmptyResponse };
 	'chat/rooms/members/unban': { req: ChatRoomsMembersUnbanRequest; res: EmptyResponse };
+	'chat/rooms/members/unmute': { req: ChatRoomsMembersUnmuteRequest; res: EmptyResponse };
 	'chat/rooms/mute': { req: ChatRoomsMuteRequest; res: EmptyResponse };
 	'chat/rooms/owned': { req: ChatRoomsOwnedRequest; res: ChatRoomsOwnedResponse };
 	'chat/rooms/pin-message': { req: ChatRoomsPinMessageRequest; res: ChatRoomsPinMessageResponse };

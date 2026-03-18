@@ -6,11 +6,12 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { In, IsNull, MoreThan } from 'typeorm';
 import { DI } from '@/di-symbols.js';
-import type { MiUser, ChatMessagesRepository, MiChatMessage, ChatRoomsRepository, MiChatRoom, MiChatRoomInvitation, ChatRoomInvitationsRepository, MiChatRoomInviteLink, ChatRoomInviteLinksRepository, MiChatRoomJoinRequest, ChatRoomJoinRequestsRepository, MiChatRoomMembership, ChatRoomMembershipsRepository } from '@/models/_.js';
+import type { MiUser, ChatMessagesRepository, MiChatMessage, ChatRoomsRepository, MiChatRoom, MiChatRoomInvitation, ChatRoomInvitationsRepository, MiChatRoomInviteLink, ChatRoomInviteLinksRepository, MiChatRoomJoinRequest, ChatRoomJoinRequestsRepository, MiChatRoomMembership, ChatRoomMembershipsRepository, MiChatRoomBan, ChatRoomBansRepository } from '@/models/_.js';
 import type { Packed } from '@/misc/json-schema.js';
 import type { } from '@/models/Blocking.js';
 import { bindThis } from '@/decorators.js';
 import { IdService } from '@/core/IdService.js';
+import { chatRoomAdminPermissions } from '@/models/ChatRoom.js';
 import { UserEntityService } from './UserEntityService.js';
 import { DriveFileEntityService } from './DriveFileEntityService.js';
 
@@ -35,10 +36,37 @@ export class ChatEntityService {
 		@Inject(DI.chatRoomMembershipsRepository)
 		private chatRoomMembershipsRepository: ChatRoomMembershipsRepository,
 
+		@Inject(DI.chatRoomBansRepository)
+		private chatRoomBansRepository: ChatRoomBansRepository,
+
 		private userEntityService: UserEntityService,
 		private driveFileEntityService: DriveFileEntityService,
 		private idService: IdService,
 	) {
+	}
+
+	private isActiveSpeakMuted(membership: MiChatRoomMembership | null | undefined) {
+		if (membership == null) return false;
+		if (membership.speakMutedById == null) return false;
+		if (membership.speakMutedUntil == null) return true;
+		return membership.speakMutedUntil.getTime() > Date.now();
+	}
+
+	private async packSystemEvent(
+		systemEvent: MiChatMessage['systemEvent'],
+		me?: { id: MiUser['id'] },
+		packedUsers?: Map<MiUser['id'], Packed<'UserLite'>>,
+	) {
+		if (systemEvent == null) return null;
+
+		const targetUserId = systemEvent.targetUserId ?? null;
+
+		return {
+			...systemEvent,
+			expiresAt: systemEvent.expiresAt instanceof Date ? systemEvent.expiresAt.toISOString() : (systemEvent.expiresAt ?? null),
+			targetUserId,
+			targetUser: targetUserId != null ? (packedUsers?.get(targetUserId) ?? await this.userEntityService.pack(targetUserId, me).catch(() => null)) : undefined,
+		};
 	}
 
 	@bindThis
@@ -73,6 +101,7 @@ export class ChatEntityService {
 		return {
 			id: message.id,
 			createdAt: this.idService.parse(message.id).date.toISOString(),
+			type: message.type,
 			text: message.text,
 			fromUserId: message.fromUserId,
 			fromUser: packedUsers?.get(message.fromUserId) ?? await this.userEntityService.pack(message.fromUser ?? message.fromUserId, me),
@@ -83,6 +112,7 @@ export class ChatEntityService {
 			fileId: message.fileId,
 			file: message.fileId ? (packedFiles?.get(message.fileId) ?? await this.driveFileEntityService.pack(message.file ?? message.fileId)) : null,
 			reactions: reactions.filter((r): r is { user: Packed<'UserLite'>; reaction: string; } => r.user != null),
+			systemEvent: await this.packSystemEvent(message.systemEvent, me, packedUsers),
 		};
 	}
 
@@ -107,10 +137,17 @@ export class ChatEntityService {
 		];
 
 		const reactedUserIds = messages.flatMap(x => x.reactions.map(r => r.split('/')[0]));
+		const systemEventUserIds = messages.map(x => x.systemEvent?.targetUserId).filter((x): x is string => x != null);
 
 		for (const reactedUserId of reactedUserIds) {
 			if (!users.some(x => typeof x === 'string' ? x === reactedUserId : x.id === reactedUserId)) {
 				users.push(reactedUserId);
+			}
+		}
+
+		for (const systemEventUserId of systemEventUserIds) {
+			if (!users.some(x => typeof x === 'string' ? x === systemEventUserId : x.id === systemEventUserId)) {
+				users.push(systemEventUserId);
 			}
 		}
 
@@ -152,12 +189,14 @@ export class ChatEntityService {
 		return {
 			id: message.id,
 			createdAt: this.idService.parse(message.id).date.toISOString(),
+			type: message.type,
 			text: message.text,
 			fromUserId: message.fromUserId,
 			toUserId: message.toUserId!,
 			fileId: message.fileId,
 			file: message.fileId ? (packedFiles?.get(message.fileId) ?? await this.driveFileEntityService.pack(message.file ?? message.fileId)) : null,
 			reactions,
+			systemEvent: await this.packSystemEvent(message.systemEvent),
 		};
 	}
 
@@ -204,6 +243,7 @@ export class ChatEntityService {
 		return {
 			id: message.id,
 			createdAt: this.idService.parse(message.id).date.toISOString(),
+			type: message.type,
 			text: message.text,
 			fromUserId: message.fromUserId,
 			fromUser: packedUsers?.get(message.fromUserId) ?? await this.userEntityService.pack(message.fromUser ?? message.fromUserId),
@@ -211,6 +251,7 @@ export class ChatEntityService {
 			fileId: message.fileId,
 			file: message.fileId ? (packedFiles?.get(message.fileId) ?? await this.driveFileEntityService.pack(message.file ?? message.fileId)) : null,
 			reactions: reactions.filter((r): r is { user: Packed<'UserLite'>; reaction: string; } => r.user != null),
+			systemEvent: await this.packSystemEvent(message.systemEvent, undefined, packedUsers),
 		};
 	}
 
@@ -222,10 +263,17 @@ export class ChatEntityService {
 
 		const users = messages.map(x => x.fromUser ?? x.fromUserId);
 		const reactedUserIds = messages.flatMap(x => x.reactions.map(r => r.split('/')[0]));
+		const systemEventUserIds = messages.map(x => x.systemEvent?.targetUserId).filter((x): x is string => x != null);
 
 		for (const reactedUserId of reactedUserIds) {
 			if (!users.some(x => typeof x === 'string' ? x === reactedUserId : x.id === reactedUserId)) {
 				users.push(reactedUserId);
+			}
+		}
+
+		for (const systemEventUserId of systemEventUserIds) {
+			if (!users.some(x => typeof x === 'string' ? x === systemEventUserId : x.id === systemEventUserId)) {
+				users.push(systemEventUserId);
 			}
 		}
 
@@ -267,11 +315,19 @@ export class ChatEntityService {
 		const joinRequest = me && me.id !== room.ownerId ? (options?._hint_?.myJoinRequests?.get(room.id) ?? await this.chatRoomJoinRequestsRepository.findOneBy({ roomId: room.id, userId: me.id })) : null;
 		const myRole = room.ownerId === me?.id ? 'owner' : membership?.role ?? null;
 		const isJoined = room.ownerId === me?.id || membership != null;
+		const adminPermissions = myRole === 'owner' ? [...chatRoomAdminPermissions] : room.adminPermissions;
 		const canManageAdmins = myRole === 'owner';
-		const canManageMembers = myRole === 'owner' || myRole === 'admin';
-		const canInvite = myRole === 'owner' || myRole === 'admin' || (myRole === 'member' && room.memberCanInvite);
+		const canManageJoinRequests = myRole === 'owner' || (myRole === 'admin' && adminPermissions.includes('approve'));
+		const canKickMembers = myRole === 'owner' || (myRole === 'admin' && adminPermissions.includes('kick'));
+		const canBanMembers = myRole === 'owner' || (myRole === 'admin' && adminPermissions.includes('ban'));
+		const canMuteMembers = myRole === 'owner' || (myRole === 'admin' && adminPermissions.includes('mute'));
+		const canManageAnnouncement = myRole === 'owner' || (myRole === 'admin' && adminPermissions.includes('announcement'));
+		const canPinMessages = myRole === 'owner' || (myRole === 'admin' && adminPermissions.includes('pin'));
+		const canManageMembers = canManageAdmins || canManageJoinRequests || canKickMembers || canBanMembers || canMuteMembers;
+		const canInvite = myRole === 'owner' || (myRole === 'admin' && adminPermissions.includes('invite')) || (myRole === 'member' && room.memberCanInvite);
 		const memberCount = options?._hint_?.memberCounts?.get(room.id) ?? (1 + await this.chatRoomMembershipsRepository.countBy({ roomId: room.id }));
-		const pendingRequestCount = canManageMembers ? (options?._hint_?.pendingRequestCounts?.get(room.id) ?? await this.chatRoomJoinRequestsRepository.countBy({ roomId: room.id })) : 0;
+		const pendingRequestCount = canManageJoinRequests ? (options?._hint_?.pendingRequestCounts?.get(room.id) ?? await this.chatRoomJoinRequestsRepository.countBy({ roomId: room.id })) : 0;
+		const isSpeakMuted = this.isActiveSpeakMuted(membership);
 
 		return {
 			id: room.id,
@@ -286,15 +342,25 @@ export class ChatEntityService {
 			avatarFileId: room.avatarFileId,
 			pinnedMessageId: isJoined ? room.pinnedMessageId : null,
 			memberCanInvite: room.memberCanInvite,
+			adminPermissions: isJoined ? room.adminPermissions : [],
 			allowJoinRequest: room.allowJoinRequest,
 			maxMembers: room.maxMembers,
 			memberCount,
 			isMuted: membership != null ? membership.isMuted : false,
+			isSpeakMuted,
+			speakMutedUntil: isSpeakMuted && membership?.speakMutedUntil != null ? membership.speakMutedUntil.toISOString() : null,
+			speakMuteReason: isSpeakMuted ? (membership?.speakMuteReason ?? null) : null,
 			isJoined,
 			myRole,
 			canInvite,
 			canManageMembers,
 			canManageAdmins,
+			canManageJoinRequests,
+			canKickMembers,
+			canBanMembers,
+			canMuteMembers,
+			canManageAnnouncement,
+			canPinMessages,
 			pendingRequestCount,
 			invitationExists: invitation != null,
 			joinRequestExists: joinRequest != null,
@@ -516,6 +582,11 @@ export class ChatEntityService {
 			roomId: membership.roomId,
 			room: options?.populateRoom ? (options._hint_?.packedRooms.get(membership.roomId) ?? await this.packRoom(membership.room ?? membership.roomId, me)) : undefined,
 			role: membership.role,
+			isSpeakMuted: this.isActiveSpeakMuted(membership),
+			speakMutedUntil: this.isActiveSpeakMuted(membership) && membership.speakMutedUntil != null ? membership.speakMutedUntil.toISOString() : null,
+			speakMuteReason: this.isActiveSpeakMuted(membership) ? membership.speakMuteReason : null,
+			speakMutedById: this.isActiveSpeakMuted(membership) ? membership.speakMutedById : null,
+			speakMutedBy: this.isActiveSpeakMuted(membership) && membership.speakMutedById != null ? await this.userEntityService.pack(membership.speakMutedById, me).catch(() => null) : null,
 		};
 	}
 
@@ -541,5 +612,35 @@ export class ChatEntityService {
 		]);
 
 		return Promise.all(memberships.map(membership => this.packRoomMembership(membership, me, { ...options, _hint_: { packedUsers, packedRooms } })));
+	}
+
+	@bindThis
+	public async packRoomBan(
+		src: MiChatRoomBan['id'] | MiChatRoomBan,
+		me: { id: MiUser['id'] },
+	): Promise<Packed<'ChatRoomBan'>> {
+		const ban = typeof src === 'object' ? src : await this.chatRoomBansRepository.findOneByOrFail({ id: src });
+
+		return {
+			id: ban.id,
+			createdAt: this.idService.parse(ban.id).date.toISOString(),
+			roomId: ban.roomId,
+			userId: ban.userId,
+			user: await this.userEntityService.pack(ban.user ?? ban.userId, me).catch(() => null),
+			createdById: ban.createdById,
+			createdBy: await this.userEntityService.pack(ban.createdById, me).catch(() => null),
+			reason: ban.reason,
+			expiresAt: ban.expiresAt ? ban.expiresAt.toISOString() : null,
+		};
+	}
+
+	@bindThis
+	public async packRoomBans(
+		bans: MiChatRoomBan[],
+		me: { id: MiUser['id'] },
+	) {
+		if (bans.length === 0) return [];
+
+		return Promise.all(bans.map(ban => this.packRoomBan(ban, me)));
 	}
 }

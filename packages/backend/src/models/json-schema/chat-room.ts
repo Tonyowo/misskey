@@ -58,6 +58,15 @@ export const packedChatRoomSchema = {
 			type: 'boolean',
 			optional: false, nullable: false,
 		},
+		adminPermissions: {
+			type: 'array',
+			optional: false, nullable: false,
+			items: {
+				type: 'string',
+				optional: false, nullable: false,
+				enum: ['invite', 'approve', 'kick', 'ban', 'mute', 'announcement', 'pin'],
+			},
+		},
 		allowJoinRequest: {
 			type: 'boolean',
 			optional: false, nullable: false,
@@ -94,6 +103,43 @@ export const packedChatRoomSchema = {
 		canManageAdmins: {
 			type: 'boolean',
 			optional: true, nullable: false,
+		},
+		canManageJoinRequests: {
+			type: 'boolean',
+			optional: true, nullable: false,
+		},
+		canKickMembers: {
+			type: 'boolean',
+			optional: true, nullable: false,
+		},
+		canBanMembers: {
+			type: 'boolean',
+			optional: true, nullable: false,
+		},
+		canMuteMembers: {
+			type: 'boolean',
+			optional: true, nullable: false,
+		},
+		canManageAnnouncement: {
+			type: 'boolean',
+			optional: true, nullable: false,
+		},
+		canPinMessages: {
+			type: 'boolean',
+			optional: true, nullable: false,
+		},
+		isSpeakMuted: {
+			type: 'boolean',
+			optional: true, nullable: false,
+		},
+		speakMutedUntil: {
+			type: 'string',
+			format: 'date-time',
+			optional: true, nullable: true,
+		},
+		speakMuteReason: {
+			type: 'string',
+			optional: true, nullable: true,
 		},
 		pendingRequestCount: {
 			type: 'integer',

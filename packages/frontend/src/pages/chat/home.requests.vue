@@ -11,7 +11,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 			<MkInfo v-if="request.message">{{ request.message }}</MkInfo>
 		</div>
 	</div>
-	<MkResult v-if="!fetching && requests.length == 0" type="empty" :text="i18n.ts._chat.noRooms"/>
+	<MkResult v-if="!fetching && requests.length == 0" type="empty" text="没有申请"/>
 	<MkLoading v-if="fetching"/>
 </div>
 </template>

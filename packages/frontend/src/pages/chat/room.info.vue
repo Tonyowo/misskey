@@ -33,15 +33,28 @@ SPDX-License-Identifier: AGPL-3.0-only
 		<template #label>允许提交入群申请</template>
 	</MkSwitch>
 
+	<div v-if="isOwner" :class="$style.permissionGroup">
+		<div :class="$style.permissionTitle">管理员权限</div>
+		<div :class="$style.permissionHint">群主始终拥有全部权限，以下设置仅控制管理员可执行的操作。</div>
+		<MkSwitch
+			v-for="permission in adminPermissionItems"
+			:key="permission.value"
+			:modelValue="adminPermissions_.includes(permission.value)"
+			@update:modelValue="toggleAdminPermission(permission.value, $event)"
+		>
+			<template #label>{{ permission.label }}</template>
+		</MkSwitch>
+	</div>
+
 	<MkButton v-if="isOwner" primary @click="save">保存设置</MkButton>
 
-	<hr v-if="canManageMembers">
+	<hr v-if="canManageAnnouncement">
 
-	<MkTextarea v-if="canManageMembers" v-model="announcement_" :disabled="!canManageMembers">
+	<MkTextarea v-if="canManageAnnouncement" v-model="announcement_" :disabled="!canManageAnnouncement">
 		<template #label>群公告</template>
 	</MkTextarea>
 
-	<MkButton v-if="canManageMembers" primary @click="saveAnnouncement">保存群公告</MkButton>
+	<MkButton v-if="canManageAnnouncement" primary @click="saveAnnouncement">保存群公告</MkButton>
 
 	<hr v-if="canInvite">
 
@@ -119,7 +132,7 @@ const isOwner = computed(() => {
 	return props.room.ownerId === $i.id;
 });
 const isJoined = computed(() => props.room.isJoined ?? false);
-const canManageMembers = computed(() => props.room.canManageMembers ?? false);
+const canManageAnnouncement = computed(() => props.room.canManageAnnouncement ?? false);
 const canInvite = computed(() => props.room.canInvite ?? false);
 
 const name_ = ref('');
@@ -129,6 +142,7 @@ const joinPolicy_ = ref<Misskey.entities.ChatRoom['joinPolicy']>('invite_only');
 const discoverability_ = ref<Misskey.entities.ChatRoom['discoverability']>('private');
 const maxMembers_ = ref(50);
 const memberCanInvite_ = ref(false);
+const adminPermissions_ = ref<Misskey.entities.ChatRoom['adminPermissions']>([]);
 const allowJoinRequest_ = ref(true);
 const isMuted = ref(false);
 const inviteLinks = ref<Misskey.entities.ChatRoomInviteLink[]>([]);
@@ -156,6 +170,32 @@ const discoverabilityItems: MkSelectItem<string>[] = [{
 	label: '公开可发现',
 }];
 
+const adminPermissionItems: {
+	value: Misskey.entities.ChatRoom['adminPermissions'][number];
+	label: string;
+}[] = [{
+	value: 'invite',
+	label: '邀请成员',
+}, {
+	value: 'approve',
+	label: '审批申请',
+}, {
+	value: 'kick',
+	label: '移出成员',
+}, {
+	value: 'ban',
+	label: '封禁成员',
+}, {
+	value: 'mute',
+	label: '禁言成员',
+}, {
+	value: 'announcement',
+	label: '管理群公告',
+}, {
+	value: 'pin',
+	label: '置顶消息',
+}];
+
 watch(() => props.room, (room) => {
 	syncingRoomState = true;
 	name_.value = room.name;
@@ -165,6 +205,7 @@ watch(() => props.room, (room) => {
 	discoverability_.value = room.discoverability;
 	maxMembers_.value = room.maxMembers;
 	memberCanInvite_.value = room.memberCanInvite;
+	adminPermissions_.value = [...(room.adminPermissions ?? [])];
 	allowJoinRequest_.value = room.allowJoinRequest;
 	isMuted.value = room.isMuted ?? false;
 	syncingRoomState = false;
@@ -194,10 +235,22 @@ async function save() {
 		joinPolicy: joinPolicy_.value,
 		discoverability: discoverability_.value,
 		memberCanInvite: memberCanInvite_.value,
+		adminPermissions: adminPermissions_.value,
 		allowJoinRequest: allowJoinRequest_.value,
 		maxMembers: maxMembers_.value,
 	});
 	emit('updated', updated);
+}
+
+function toggleAdminPermission(permission: Misskey.entities.ChatRoom['adminPermissions'][number], enabled: boolean) {
+	if (enabled) {
+		if (!adminPermissions_.value.includes(permission)) {
+			adminPermissions_.value = [...adminPermissions_.value, permission];
+		}
+		return;
+	}
+
+	adminPermissions_.value = adminPermissions_.value.filter(item => item !== permission);
 }
 
 async function saveAnnouncement() {
@@ -336,5 +389,22 @@ async function revokeInviteLink(inviteLink: Misskey.entities.ChatRoomInviteLink)
 	gap: 8px;
 	flex-wrap: wrap;
 	justify-content: flex-end;
+}
+
+.permissionGroup {
+	display: grid;
+	gap: 10px;
+	padding: 14px 16px;
+	border: solid 1px var(--MI_THEME-divider);
+	border-radius: 16px;
+}
+
+.permissionTitle {
+	font-weight: 700;
+}
+
+.permissionHint {
+	font-size: 0.9em;
+	opacity: 0.75;
 }
 </style>

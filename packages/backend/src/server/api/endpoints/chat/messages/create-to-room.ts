@@ -50,6 +50,11 @@ export const meta = {
 			code: 'CONTENT_REQUIRED',
 			id: '340517b7-6d04-42c0-bac1-37ee804e3594',
 		},
+		mutedInRoom: {
+			message: 'You are muted in this room.',
+			code: 'MUTED_IN_ROOM',
+			id: '67512792-fd66-4f82-a4ac-44ec9c75005e',
+		},
 	},
 } as const;
 
@@ -97,10 +102,18 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 				throw new ApiError(meta.errors.contentRequired);
 			}
 
-			return await this.chatService.createMessageToRoom(me, room, {
-				text: ps.text,
-				file: file,
-			});
+			try {
+				return await this.chatService.createMessageToRoom(me, room, {
+					text: ps.text,
+					file: file,
+				});
+			} catch (err) {
+				if (err instanceof Error && err.message === 'you are muted in the room') {
+					throw new ApiError(meta.errors.mutedInRoom);
+				}
+
+				throw err;
+			}
 		});
 	}
 }

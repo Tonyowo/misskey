@@ -443,6 +443,8 @@ export * as 'chat/rooms/members' from './endpoints/chat/rooms/members.js';
 export * as 'chat/rooms/members/kick' from './endpoints/chat/rooms/members/kick.js';
 export * as 'chat/rooms/members/ban' from './endpoints/chat/rooms/members/ban.js';
 export * as 'chat/rooms/members/unban' from './endpoints/chat/rooms/members/unban.js';
+export * as 'chat/rooms/members/mute' from './endpoints/chat/rooms/members/mute.js';
+export * as 'chat/rooms/members/unmute' from './endpoints/chat/rooms/members/unmute.js';
 export * as 'chat/rooms/admins/add' from './endpoints/chat/rooms/admins/add.js';
 export * as 'chat/rooms/admins/remove' from './endpoints/chat/rooms/admins/remove.js';
 export * as 'chat/rooms/transfer-owner' from './endpoints/chat/rooms/transfer-owner.js';
@@ -462,6 +464,7 @@ export * as 'chat/rooms/requests/accept' from './endpoints/chat/rooms/requests/a
 export * as 'chat/rooms/requests/reject' from './endpoints/chat/rooms/requests/reject.js';
 export * as 'chat/rooms/requests/mine' from './endpoints/chat/rooms/requests/mine.js';
 export * as 'chat/rooms/requests/pending-count' from './endpoints/chat/rooms/requests/pending-count.js';
+export * as 'chat/rooms/bans/list' from './endpoints/chat/rooms/bans/list.js';
 export * as 'chat/history' from './endpoints/chat/history.js';
 export * as 'chat/read-all' from './endpoints/chat/read-all.js';
 export * as 'v2/admin/emoji/list' from './endpoints/v2/admin/emoji/list.js';

@@ -22,6 +22,11 @@ export const meta = {
 			code: 'NO_SUCH_MESSAGE',
 			id: 'c39ea42f-e3ca-428a-ad57-390e0a711595',
 		},
+		cannotReactSystemMessage: {
+			message: 'System messages cannot be reacted to.',
+			code: 'CANNOT_REACT_SYSTEM_MESSAGE',
+			id: '7db9af4a-ef44-4902-9075-e72b08db00b3',
+		},
 	},
 } as const;
 
@@ -42,7 +47,15 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 		super(meta, paramDef, async (ps, me) => {
 			await this.chatService.checkChatAvailability(me.id, 'write');
 
-			await this.chatService.unreact(ps.messageId, me.id, ps.reaction);
+			try {
+				await this.chatService.unreact(ps.messageId, me.id, ps.reaction);
+			} catch (err) {
+				if (err instanceof Error && err.message === 'cannot react to system message') {
+					throw new ApiError(meta.errors.cannotReactSystemMessage);
+				}
+
+				throw err;
+			}
 		});
 	}
 }

@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
-export const packedChatRoomMembershipSchema = {
+export const packedChatRoomBanSchema = {
 	type: 'object',
 	properties: {
 		id: {
@@ -15,50 +15,36 @@ export const packedChatRoomMembershipSchema = {
 			format: 'date-time',
 			optional: false, nullable: false,
 		},
+		roomId: {
+			type: 'string',
+			optional: false, nullable: false,
+		},
 		userId: {
 			type: 'string',
 			optional: false, nullable: false,
 		},
 		user: {
 			type: 'object',
-			optional: true, nullable: false,
+			optional: true, nullable: true,
 			ref: 'UserLite',
 		},
-		roomId: {
+		createdById: {
 			type: 'string',
 			optional: false, nullable: false,
 		},
-		room: {
-			type: 'object',
-			optional: true, nullable: false,
-			ref: 'ChatRoom',
-		},
-		role: {
-			type: 'string',
-			optional: false, nullable: false,
-			enum: ['member', 'admin'],
-		},
-		isSpeakMuted: {
-			type: 'boolean',
-			optional: false, nullable: false,
-		},
-		speakMutedUntil: {
-			type: 'string',
-			format: 'date-time',
-			optional: false, nullable: true,
-		},
-		speakMuteReason: {
-			type: 'string',
-			optional: false, nullable: true,
-		},
-		speakMutedById: {
-			type: 'string',
-			optional: false, nullable: true,
-		},
-		speakMutedBy: {
+		createdBy: {
 			type: 'object',
 			optional: true, nullable: true,
 			ref: 'UserLite',
+		},
+		reason: {
+			type: 'string',
+			optional: false, nullable: true,
+		},
+		expiresAt: {
+			type: 'string',
+			format: 'date-time',
+			optional: false, nullable: true,
 		},
 	},
 } as const;

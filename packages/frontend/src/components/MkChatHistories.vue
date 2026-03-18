@@ -24,7 +24,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 				<MkAcct :class="$style.messageHeaderUsername" :user="item.other!"/>
 				<MkTime :time="item.message.createdAt" :class="$style.messageHeaderTime"/>
 			</header>
-			<div :class="$style.messageBodyText"><span v-if="item.isMe" :class="$style.youSaid">{{ i18n.ts.you }}:</span>{{ item.message.text }}</div>
+			<div :class="$style.messageBodyText"><span v-if="item.isMe && !isSystemChatMessage(item.message)" :class="$style.youSaid">{{ i18n.ts.you }}:</span>{{ formatChatMessagePreviewText(item.message) }}</div>
 		</div>
 	</MkA>
 </div>
@@ -37,6 +37,7 @@ import { onActivated, onDeactivated, onMounted, ref } from 'vue';
 import * as Misskey from 'misskey-js';
 import { useInterval } from '@@/js/use-interval.js';
 import { misskeyApi } from '@/utility/misskey-api.js';
+import { formatChatMessagePreviewText, isSystemChatMessage } from '@/utility/chat-system-event-text.js';
 import { i18n } from '@/i18n.js';
 import { ensureSignin } from '@/i.js';
 

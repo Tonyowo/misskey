@@ -75,6 +75,7 @@ import { packedChatRoomInvitationSchema } from '@/models/json-schema/chat-room-i
 import { packedChatRoomInviteLinkSchema } from '@/models/json-schema/chat-room-invite-link.js';
 import { packedChatRoomJoinRequestSchema } from '@/models/json-schema/chat-room-join-request.js';
 import { packedChatRoomMembershipSchema } from '@/models/json-schema/chat-room-membership.js';
+import { packedChatRoomBanSchema } from '@/models/json-schema/chat-room-ban.js';
 import { packedAchievementNameSchema, packedAchievementSchema } from '@/models/json-schema/achievement.js';
 import { packedNoteDraftSchema } from '@/models/json-schema/note-draft.js';
 
@@ -151,6 +152,7 @@ export const refs = {
 	ChatRoomInviteLink: packedChatRoomInviteLinkSchema,
 	ChatRoomJoinRequest: packedChatRoomJoinRequestSchema,
 	ChatRoomMembership: packedChatRoomMembershipSchema,
+	ChatRoomBan: packedChatRoomBanSchema,
 };
 
 export type Packed<x extends keyof typeof refs> = SchemaType<typeof refs[x]>;

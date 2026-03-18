@@ -22,6 +22,11 @@ export const meta = {
 			code: 'NO_SUCH_MESSAGE',
 			id: '36b67f0e-66a6-414b-83df-992a55294f17',
 		},
+		cannotDeleteSystemMessage: {
+			message: 'System messages cannot be deleted.',
+			code: 'CANNOT_DELETE_SYSTEM_MESSAGE',
+			id: 'ee9eb8ff-a4ff-4e0b-94a3-16b5d19aa1e0',
+		},
 	},
 } as const;
 
@@ -45,7 +50,16 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 			if (message == null) {
 				throw new ApiError(meta.errors.noSuchMessage);
 			}
-			await this.chatService.deleteMessage(message);
+
+			try {
+				await this.chatService.deleteMessage(message);
+			} catch (err) {
+				if (err instanceof Error && err.message === 'cannot delete system message') {
+					throw new ApiError(meta.errors.cannotDeleteSystemMessage);
+				}
+
+				throw err;
+			}
 		});
 	}
 }

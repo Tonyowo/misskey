@@ -15,6 +15,11 @@ export const packedChatMessageSchema = {
 			format: 'date-time',
 			optional: false, nullable: false,
 		},
+		type: {
+			type: 'string',
+			optional: false, nullable: false,
+			enum: ['message', 'system'],
+		},
 		fromUserId: {
 			type: 'string',
 			optional: false, nullable: false,
@@ -78,6 +83,48 @@ export const packedChatMessageSchema = {
 				},
 			},
 		},
+		systemEvent: {
+			type: 'object',
+			optional: true, nullable: true,
+			properties: {
+				type: {
+					type: 'string',
+					optional: false, nullable: false,
+					enum: ['member_joined', 'member_left', 'invitation_created', 'join_request_accepted', 'member_kicked', 'member_banned', 'member_unbanned', 'member_muted', 'member_unmuted', 'member_promoted', 'member_demoted', 'owner_transferred', 'announcement_updated', 'message_pinned', 'message_unpinned', 'admin_permissions_updated'],
+				},
+				targetUserId: {
+					type: 'string',
+					optional: true, nullable: true,
+				},
+				targetUser: {
+					type: 'object',
+					optional: true, nullable: true,
+					ref: 'UserLite',
+				},
+				expiresAt: {
+					type: 'string',
+					format: 'date-time',
+					optional: true, nullable: true,
+				},
+				reason: {
+					type: 'string',
+					optional: true, nullable: true,
+				},
+				permissions: {
+					type: 'array',
+					optional: true, nullable: true,
+					items: {
+						type: 'string',
+						optional: false, nullable: false,
+						enum: ['invite', 'approve', 'kick', 'ban', 'mute', 'announcement', 'pin'],
+					},
+				},
+				messageId: {
+					type: 'string',
+					optional: true, nullable: true,
+				},
+			},
+		},
 	},
 } as const;
 
@@ -92,6 +139,11 @@ export const packedChatMessageLiteSchema = {
 			type: 'string',
 			format: 'date-time',
 			optional: false, nullable: false,
+		},
+		type: {
+			type: 'string',
+			optional: false, nullable: false,
+			enum: ['message', 'system'],
 		},
 		fromUserId: {
 			type: 'string',
@@ -142,6 +194,48 @@ export const packedChatMessageLiteSchema = {
 				},
 			},
 		},
+		systemEvent: {
+			type: 'object',
+			optional: true, nullable: true,
+			properties: {
+				type: {
+					type: 'string',
+					optional: false, nullable: false,
+					enum: ['member_joined', 'member_left', 'invitation_created', 'join_request_accepted', 'member_kicked', 'member_banned', 'member_unbanned', 'member_muted', 'member_unmuted', 'member_promoted', 'member_demoted', 'owner_transferred', 'announcement_updated', 'message_pinned', 'message_unpinned', 'admin_permissions_updated'],
+				},
+				targetUserId: {
+					type: 'string',
+					optional: true, nullable: true,
+				},
+				targetUser: {
+					type: 'object',
+					optional: true, nullable: true,
+					ref: 'UserLite',
+				},
+				expiresAt: {
+					type: 'string',
+					format: 'date-time',
+					optional: true, nullable: true,
+				},
+				reason: {
+					type: 'string',
+					optional: true, nullable: true,
+				},
+				permissions: {
+					type: 'array',
+					optional: true, nullable: true,
+					items: {
+						type: 'string',
+						optional: false, nullable: false,
+						enum: ['invite', 'approve', 'kick', 'ban', 'mute', 'announcement', 'pin'],
+					},
+				},
+				messageId: {
+					type: 'string',
+					optional: true, nullable: true,
+				},
+			},
+		},
 	},
 } as const;
 
@@ -156,6 +250,11 @@ export const packedChatMessageLiteFor1on1Schema = {
 			type: 'string',
 			format: 'date-time',
 			optional: false, nullable: false,
+		},
+		type: {
+			type: 'string',
+			optional: false, nullable: false,
+			enum: ['message', 'system'],
 		},
 		fromUserId: {
 			type: 'string',
@@ -192,6 +291,48 @@ export const packedChatMessageLiteFor1on1Schema = {
 				},
 			},
 		},
+		systemEvent: {
+			type: 'object',
+			optional: true, nullable: true,
+			properties: {
+				type: {
+					type: 'string',
+					optional: false, nullable: false,
+					enum: ['member_joined', 'member_left', 'invitation_created', 'join_request_accepted', 'member_kicked', 'member_banned', 'member_unbanned', 'member_muted', 'member_unmuted', 'member_promoted', 'member_demoted', 'owner_transferred', 'announcement_updated', 'message_pinned', 'message_unpinned', 'admin_permissions_updated'],
+				},
+				targetUserId: {
+					type: 'string',
+					optional: true, nullable: true,
+				},
+				targetUser: {
+					type: 'object',
+					optional: true, nullable: true,
+					ref: 'UserLite',
+				},
+				expiresAt: {
+					type: 'string',
+					format: 'date-time',
+					optional: true, nullable: true,
+				},
+				reason: {
+					type: 'string',
+					optional: true, nullable: true,
+				},
+				permissions: {
+					type: 'array',
+					optional: true, nullable: true,
+					items: {
+						type: 'string',
+						optional: false, nullable: false,
+						enum: ['invite', 'approve', 'kick', 'ban', 'mute', 'announcement', 'pin'],
+					},
+				},
+				messageId: {
+					type: 'string',
+					optional: true, nullable: true,
+				},
+			},
+		},
 	},
 } as const;
 
@@ -206,6 +347,11 @@ export const packedChatMessageLiteForRoomSchema = {
 			type: 'string',
 			format: 'date-time',
 			optional: false, nullable: false,
+		},
+		type: {
+			type: 'string',
+			optional: false, nullable: false,
+			enum: ['message', 'system'],
 		},
 		fromUserId: {
 			type: 'string',
@@ -249,6 +395,48 @@ export const packedChatMessageLiteForRoomSchema = {
 						optional: false, nullable: false,
 						ref: 'UserLite',
 					},
+				},
+			},
+		},
+		systemEvent: {
+			type: 'object',
+			optional: true, nullable: true,
+			properties: {
+				type: {
+					type: 'string',
+					optional: false, nullable: false,
+					enum: ['member_joined', 'member_left', 'invitation_created', 'join_request_accepted', 'member_kicked', 'member_banned', 'member_unbanned', 'member_muted', 'member_unmuted', 'member_promoted', 'member_demoted', 'owner_transferred', 'announcement_updated', 'message_pinned', 'message_unpinned', 'admin_permissions_updated'],
+				},
+				targetUserId: {
+					type: 'string',
+					optional: true, nullable: true,
+				},
+				targetUser: {
+					type: 'object',
+					optional: true, nullable: true,
+					ref: 'UserLite',
+				},
+				expiresAt: {
+					type: 'string',
+					format: 'date-time',
+					optional: true, nullable: true,
+				},
+				reason: {
+					type: 'string',
+					optional: true, nullable: true,
+				},
+				permissions: {
+					type: 'array',
+					optional: true, nullable: true,
+					items: {
+						type: 'string',
+						optional: false, nullable: false,
+						enum: ['invite', 'approve', 'kick', 'ban', 'mute', 'announcement', 'pin'],
+					},
+				},
+				messageId: {
+					type: 'string',
+					optional: true, nullable: true,
 				},
 			},
 		},

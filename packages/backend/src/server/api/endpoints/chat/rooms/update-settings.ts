@@ -8,6 +8,7 @@ import { Endpoint } from '@/server/api/endpoint-base.js';
 import { ChatService } from '@/core/ChatService.js';
 import { ApiError } from '@/server/api/error.js';
 import { ChatEntityService } from '@/core/entities/ChatEntityService.js';
+import { chatRoomAdminPermissions } from '@/models/ChatRoom.js';
 
 export const meta = {
 	tags: ['chat'],
@@ -46,6 +47,14 @@ export const paramDef = {
 		discoverability: { type: 'string', enum: ['private', 'unlisted', 'public'] },
 		avatarFileId: { type: 'string', format: 'misskey:id', nullable: true },
 		memberCanInvite: { type: 'boolean' },
+		adminPermissions: {
+			type: 'array',
+			uniqueItems: true,
+			items: {
+				type: 'string',
+				enum: chatRoomAdminPermissions,
+			},
+		},
 		allowJoinRequest: { type: 'boolean' },
 		maxMembers: { type: 'integer', minimum: 2, maximum: 500 },
 	},
@@ -74,9 +83,10 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 					discoverability: ps.discoverability,
 					avatarFileId: ps.avatarFileId,
 					memberCanInvite: ps.memberCanInvite,
+					adminPermissions: ps.adminPermissions,
 					allowJoinRequest: ps.allowJoinRequest,
 					maxMembers: ps.maxMembers,
-				});
+				}, me.id);
 				return this.chatEntityService.packRoom(updated, me);
 			} catch (err) {
 				if (err instanceof Error && err.message === 'invalid discoverability') {

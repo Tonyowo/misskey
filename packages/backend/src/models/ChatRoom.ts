@@ -13,6 +13,9 @@ export type ChatRoomJoinPolicy = typeof chatRoomJoinPolicies[number];
 export const chatRoomDiscoverabilities = ['private', 'unlisted', 'public'] as const;
 export type ChatRoomDiscoverability = typeof chatRoomDiscoverabilities[number];
 
+export const chatRoomAdminPermissions = ['invite', 'approve', 'kick', 'ban', 'mute', 'announcement', 'pin'] as const;
+export type ChatRoomAdminPermission = typeof chatRoomAdminPermissions[number];
+
 @Entity('chat_room')
 export class MiChatRoom {
 	@PrimaryColumn(id())
@@ -76,6 +79,13 @@ export class MiChatRoom {
 		default: false,
 	})
 	public memberCanInvite: boolean;
+
+	@Column('varchar', {
+		length: 32,
+		array: true,
+		default: chatRoomAdminPermissions,
+	})
+	public adminPermissions: ChatRoomAdminPermission[];
 
 	@Column('boolean', {
 		default: true,

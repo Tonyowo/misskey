@@ -61,8 +61,22 @@ const discoverabilityLabel = computed(() => {
 	text-decoration: none;
 	border-radius: 18px;
 	background:
-		radial-gradient(circle at top right, color(from var(--MI_THEME-accent) srgb r g b / 0.10), transparent 36%),
-		linear-gradient(180deg, color(from var(--MI_THEME-panel) srgb r g b / 1), color(from var(--MI_THEME-panel) srgb calc(r - 8) calc(g - 8) calc(b - 8) / 1));
+		radial-gradient(circle at top right, color(from var(--MI_THEME-accent) srgb r g b / 0.12), transparent 38%),
+		linear-gradient(
+			180deg,
+			color-mix(in srgb, var(--MI_THEME-panel) 96%, var(--MI_THEME-bg) 4%),
+			color-mix(in srgb, var(--MI_THEME-panel) 88%, var(--MI_THEME-bg) 12%)
+		);
+	border: 1px solid color-mix(in srgb, var(--MI_THEME-divider) 72%, transparent);
+	box-shadow: 0 10px 24px color(from var(--MI_THEME-shadow) srgb r g b / 0.10);
+	transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+
+	&:hover {
+		text-decoration: none;
+		transform: translateY(-1px);
+		border-color: color-mix(in srgb, var(--MI_THEME-accent) 24%, var(--MI_THEME-divider));
+		box-shadow: 0 14px 30px color(from var(--MI_THEME-shadow) srgb r g b / 0.14);
+	}
 }
 
 .header {
@@ -74,6 +88,7 @@ const discoverabilityLabel = computed(() => {
 .headerAvatar {
 	width: 42px;
 	height: 42px;
+	box-shadow: 0 0 0 3px color(from var(--MI_THEME-panel) srgb r g b / 0.9);
 }
 
 .titleBlock {
@@ -85,6 +100,7 @@ const discoverabilityLabel = computed(() => {
 	font-weight: 700;
 	font-size: 1rem;
 	line-height: 1.3;
+	color: color-mix(in srgb, var(--MI_THEME-fg) 92%, var(--MI_THEME-accent) 8%);
 }
 
 .metaLine {
@@ -93,14 +109,14 @@ const discoverabilityLabel = computed(() => {
 	gap: 10px;
 	margin-top: 4px;
 	font-size: 0.85rem;
-	opacity: 0.75;
+	color: color-mix(in srgb, var(--MI_THEME-fg) 72%, transparent);
 }
 
 .description {
 	margin-top: 12px;
 	font-size: 0.92rem;
 	line-height: 1.5;
-	opacity: 0.9;
+	color: color-mix(in srgb, var(--MI_THEME-fg) 84%, transparent);
 	display: -webkit-box;
 	-webkit-line-clamp: 2;
 	-webkit-box-orient: vertical;
@@ -119,8 +135,8 @@ const discoverabilityLabel = computed(() => {
 	border-radius: 999px;
 	font-size: 0.78rem;
 	line-height: 1;
-	background: color(from var(--MI_THEME-bg) srgb r g b / 0.8);
-	border: solid 1px color(from var(--MI_THEME-divider) srgb r g b / 0.7);
+	background: color-mix(in srgb, var(--MI_THEME-bg) 76%, var(--MI_THEME-panel) 24%);
+	border: solid 1px color-mix(in srgb, var(--MI_THEME-divider) 80%, transparent);
 }
 
 .stateJoined {
