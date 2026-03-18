@@ -9,7 +9,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 	<div :class="$style.memberCard">
 		<MkA :class="$style.memberBody" :to="`${userPage(room.owner)}`">
-			<MkUserCardMini :user="room.owner"/>
+			<MkUserCardMini :user="room.owner" :withChart="false"/>
 		</MkA>
 		<div :class="$style.memberDetails">
 			<div :class="$style.badgeRow">
@@ -23,7 +23,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 	<div v-for="membership in memberships" :key="membership.id" :class="$style.memberCard">
 		<div :class="$style.memberMain">
 			<MkA :class="$style.memberBody" :to="`${userPage(membership.user!)}`">
-				<MkUserCardMini :user="membership.user!"/>
+				<MkUserCardMini :user="membership.user!" :withChart="false"/>
 			</MkA>
 
 			<div :class="$style.memberDetails">
@@ -100,7 +100,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 		<div v-for="joinRequest in joinRequests" :key="joinRequest.id" :class="$style.request">
 			<div :class="$style.requestBody">
 				<MkA :class="$style.requestUser" :to="`${userPage(joinRequest.user)}`">
-					<MkUserCardMini :user="joinRequest.user"/>
+					<MkUserCardMini :user="joinRequest.user" :withChart="false"/>
 				</MkA>
 				<div v-if="joinRequest.message" :class="$style.requestMessage">{{ joinRequest.message }}</div>
 			</div>
@@ -121,7 +121,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 		<div v-for="invitation in invitations" :key="invitation.id" :class="$style.request">
 			<MkA :class="$style.requestBody" :to="`${userPage(invitation.user)}`">
-				<MkUserCardMini :user="invitation.user"/>
+				<MkUserCardMini :user="invitation.user" :withChart="false"/>
 			</MkA>
 			<div :class="$style.requestActions">
 				<MkButton rounded small danger @click="revokeInvitation(invitation)"><i class="ti ti-x"></i> 取消</MkButton>
@@ -139,7 +139,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 		<div v-for="ban in bans" :key="ban.id" :class="$style.request">
 			<div :class="$style.requestBody">
 				<MkA v-if="ban.user" :class="$style.requestUser" :to="`${userPage(ban.user)}`">
-					<MkUserCardMini :user="ban.user"/>
+					<MkUserCardMini :user="ban.user" :withChart="false"/>
 				</MkA>
 				<div v-else :class="$style.deletedUser">用户已不可用</div>
 				<div :class="$style.metaText">
@@ -465,13 +465,14 @@ async function transferOwner(membership: Misskey.entities.ChatRoomMembership) {
 <style lang="scss" module>
 .memberCard {
 	display: flex;
+	flex-wrap: wrap;
 	align-items: flex-start;
 	gap: 12px;
 	padding: 12px 0;
 }
 
 .memberMain {
-	flex: 1;
+	flex: 1 1 100%;
 	min-width: 0;
 }
 
@@ -520,7 +521,8 @@ async function transferOwner(membership: Misskey.entities.ChatRoomMembership) {
 	display: flex;
 	flex-wrap: wrap;
 	gap: 8px;
-	justify-content: flex-end;
+	justify-content: flex-start;
+	padding-left: 62px;
 }
 
 .sectionHeader {
