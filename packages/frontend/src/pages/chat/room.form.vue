@@ -9,21 +9,21 @@ SPDX-License-Identifier: AGPL-3.0-only
 	@dragover.stop="onDragover"
 	@drop.stop="onDrop"
 >
-	<textarea
-		ref="textareaEl"
+	<MkPostFormTextEditor
+		ref="textEditorEl"
 		v-model="text"
-		:class="$style.textarea"
+		:class="$style.editor"
 		class="_acrylic"
 		:placeholder="textareaPlaceholder"
 		:readonly="textareaReadOnly || isSpeakMuted"
 		@keydown="onKeydown"
 		@paste="onPaste"
-	></textarea>
+	/>
 	<footer :class="$style.footer">
 		<div v-if="file" :class="$style.file" @click="file = null">{{ file.name }}</div>
 		<div :class="$style.buttons">
 			<button class="_button" :class="$style.button" @click="chooseFile"><i class="ti ti-photo-plus"></i></button>
-			<button class="_button" :class="$style.button" @click="insertEmoji"><i class="ti ti-mood-happy"></i></button>
+			<button class="_button" :class="$style.button" @pointerdown.prevent="preserveTextSelection" @click="insertEmoji"><i class="ti ti-mood-happy"></i></button>
 			<button class="_button" :class="[$style.button, $style.send]" :disabled="!canSend || sending" :title="sendButtonTitle" @click="send">
 				<template v-if="!sending"><i class="ti ti-send"></i></template><template v-if="sending"><MkLoading :em="true"/></template>
 			</button>
@@ -34,9 +34,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script lang="ts" setup>
-import { onMounted, watch, ref, shallowRef, computed, nextTick, onBeforeUnmount } from 'vue';
+import { onMounted, watch, ref, shallowRef, computed, nextTick, onBeforeUnmount, useTemplateRef } from 'vue';
 import * as Misskey from 'misskey-js';
-//import insertTextAtCursor from 'insert-text-at-cursor';
 import { formatTimeString } from '@/utility/format-time-string.js';
 import { selectFile } from '@/utility/drive.js';
 import * as os from '@/os.js';
@@ -46,13 +45,14 @@ import { prefer } from '@/preferences.js';
 import { Autocomplete } from '@/utility/autocomplete.js';
 import { emojiPicker } from '@/utility/emoji-picker.js';
 import { checkDragDataType, getDragData } from '@/drag-and-drop.js';
+import MkPostFormTextEditor from '@/components/MkPostFormTextEditor.vue';
 
 const props = defineProps<{
 	user?: Misskey.entities.UserDetailed | null;
 	room?: Misskey.entities.ChatRoom | null;
 }>();
 
-const textareaEl = shallowRef<HTMLTextAreaElement>();
+const textEditorEl = useTemplateRef<InstanceType<typeof MkPostFormTextEditor>>('textEditorEl');
 const fileEl = shallowRef<HTMLInputElement>();
 
 const text = ref<string>('');
@@ -82,6 +82,7 @@ async function onPaste(ev: ClipboardEvent) {
 
 	if (items.length === 1) {
 		if (items[0].kind === 'file') {
+			ev.preventDefault();
 			const pastedFile = items[0].getAsFile();
 			if (!pastedFile) return;
 			const lio = pastedFile.name.lastIndexOf('.');
@@ -94,6 +95,7 @@ async function onPaste(ev: ClipboardEvent) {
 		}
 	} else {
 		if (items[0].kind === 'file') {
+			ev.preventDefault();
 			os.alert({
 				type: 'error',
 				text: '只能附加一个文件。',
@@ -161,10 +163,12 @@ function onKeydown(ev: KeyboardEvent) {
 	if (ev.key === 'Enter') {
 		if (prefer.s['chat.sendOnEnter']) {
 			if (!(ev.ctrlKey || ev.metaKey || ev.shiftKey)) {
+				ev.preventDefault();
 				send();
 			}
 		} else {
 			if ((ev.ctrlKey || ev.metaKey)) {
+				ev.preventDefault();
 				send();
 			}
 		}
@@ -256,34 +260,25 @@ async function insertEmoji(ev: MouseEvent) {
 	textareaReadOnly.value = true;
 	const target = ev.currentTarget ?? ev.target;
 	if (target == null) return;
-
-	// emojiPickerはダイアログが閉じずにtextareaとやりとりするので、
-	// focustrapをかけているとinsertTextAtCursorが効かない
-	// そのため、投稿フォームのテキストに直接注入する
-	// See: https://github.com/misskey-dev/misskey/pull/14282
-	//      https://github.com/misskey-dev/misskey/issues/14274
-
-	let pos = textareaEl.value?.selectionStart ?? 0;
-	let posEnd = textareaEl.value?.selectionEnd ?? text.value.length;
 	emojiPicker.show(
 		target as HTMLElement,
 		emoji => {
-			const textBefore = text.value.substring(0, pos);
-			const textAfter = text.value.substring(posEnd);
-			text.value = textBefore + emoji + textAfter;
-			pos += emoji.length;
-			posEnd += emoji.length;
+			textEditorEl.value?.replaceSelection(emoji);
 		},
 		() => {
 			textareaReadOnly.value = false;
-			nextTick(() => focus());
+			nextTick(() => textEditorEl.value?.focus());
 		},
 	);
 }
 
+function preserveTextSelection() {
+	textEditorEl.value?.rememberSelection();
+}
+
 onMounted(() => {
-	if (textareaEl.value != null) {
-		autocompleteInstance = new Autocomplete(textareaEl.value, text);
+	if (textEditorEl.value != null) {
+		autocompleteInstance = new Autocomplete(textEditorEl.value.getAutocompleteTarget(), text);
 	}
 
 	// 書きかけの投稿を復元
@@ -310,16 +305,13 @@ onBeforeUnmount(() => {
 	overflow: clip;
 }
 
-.textarea {
+.editor {
 	cursor: auto;
 	display: block;
 	width: 100%;
-	min-width: 100%;
-	max-width: 100%;
 	min-height: 80px;
 	margin: 0;
 	padding: 16px 16px 0 16px;
-	resize: none;
 	font-size: 1em;
 	font-family: inherit;
 	outline: none;
@@ -328,7 +320,7 @@ onBeforeUnmount(() => {
 	box-shadow: none;
 	box-sizing: border-box;
 	color: var(--MI_THEME-fg);
-	field-sizing: content;
+	overflow-y: auto;
 }
 
 .footer {

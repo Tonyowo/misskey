@@ -8,13 +8,13 @@ SPDX-License-Identifier: AGPL-3.0-only
 	<MkButton v-if="canInvite" primary rounded style="margin: 0 auto;" @click="inviteUser"><i class="ti ti-plus"></i> 邀请成员</MkButton>
 
 	<div :class="$style.memberCard">
-		<MkA :class="$style.memberBody" :to="`${userPage(room.owner)}`">
-			<MkUserCardMini :user="room.owner" :withChart="false"/>
-		</MkA>
-		<div :class="$style.memberDetails">
+		<div :class="$style.memberMain">
 			<div :class="$style.badgeRow">
 				<div :class="$style.badge">群主</div>
 			</div>
+			<MkA :class="$style.memberBody" :to="`${userPage(room.owner)}`">
+				<MkUserCardMini :user="room.owner" :withChart="false"/>
+			</MkA>
 		</div>
 	</div>
 
@@ -22,22 +22,20 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 	<div v-for="membership in memberships" :key="membership.id" :class="$style.memberCard">
 		<div :class="$style.memberMain">
+			<div :class="$style.badgeRow">
+				<div :class="$style.badge">{{ membership.role === 'admin' ? '管理员' : '成员' }}</div>
+				<div v-if="membership.isSpeakMuted" :class="[$style.badge, $style.badgeWarn]">已禁言</div>
+			</div>
+
 			<MkA :class="$style.memberBody" :to="`${userPage(membership.user!)}`">
 				<MkUserCardMini :user="membership.user!" :withChart="false"/>
 			</MkA>
 
-			<div :class="$style.memberDetails">
-				<div :class="$style.badgeRow">
-					<div :class="$style.badge">{{ membership.role === 'admin' ? '管理员' : '成员' }}</div>
-					<div v-if="membership.isSpeakMuted" :class="[$style.badge, $style.badgeWarn]">已禁言</div>
-				</div>
-
-				<div v-if="membership.isSpeakMuted" :class="$style.metaText">
-					<span v-if="membership.speakMutedUntil">解除时间：<MkTime :time="membership.speakMutedUntil" mode="detail"/></span>
-					<span v-else>永久禁言</span>
-					<span v-if="membership.speakMuteReason">原因：{{ membership.speakMuteReason }}</span>
-					<span v-if="membership.speakMutedBy">操作人：{{ formatUserName(membership.speakMutedBy) }}</span>
-				</div>
+			<div v-if="membership.isSpeakMuted" :class="$style.metaText">
+				<span v-if="membership.speakMutedUntil">解除时间：<MkTime :time="membership.speakMutedUntil" mode="detail"/></span>
+				<span v-else>永久禁言</span>
+				<span v-if="membership.speakMuteReason">原因：{{ membership.speakMuteReason }}</span>
+				<span v-if="membership.speakMutedBy">操作人：{{ formatUserName(membership.speakMutedBy) }}</span>
 			</div>
 		</div>
 
@@ -464,15 +462,14 @@ async function transferOwner(membership: Misskey.entities.ChatRoomMembership) {
 
 <style lang="scss" module>
 .memberCard {
-	display: flex;
-	flex-wrap: wrap;
-	align-items: flex-start;
-	gap: 12px;
-	padding: 12px 0;
+	display: grid;
+	gap: 8px;
+	padding: 8px 0 10px;
 }
 
 .memberMain {
-	flex: 1 1 100%;
+	display: grid;
+	gap: 6px;
 	min-width: 0;
 }
 
@@ -484,13 +481,6 @@ async function transferOwner(membership: Misskey.entities.ChatRoomMembership) {
 		text-decoration: none;
 	}
 }
-
-.memberDetails {
-	display: grid;
-	gap: 6px;
-	margin-top: 8px;
-}
-
 .badgeRow {
 	display: flex;
 	flex-wrap: wrap;
@@ -522,7 +512,6 @@ async function transferOwner(membership: Misskey.entities.ChatRoomMembership) {
 	flex-wrap: wrap;
 	gap: 8px;
 	justify-content: flex-start;
-	padding-left: 62px;
 }
 
 .sectionHeader {
