@@ -15,7 +15,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 		>
 			<template v-for="media in previewableMediaList">
 				<XVideo v-if="media.type.startsWith('video')" :key="`video:${media.id}`" :class="$style.media" :video="media"/>
-				<XImage v-else-if="media.type.startsWith('image')" :key="`image:${media.id}`" :class="$style.media" class="image" :data-id="media.id" :image="media" :raw="raw"/>
+				<XImage v-else-if="media.type.startsWith('image')" :key="`image:${media.id}`" :class="$style.media" class="image" :data-id="media.id" :image="media" :raw="raw" :cover="layout === 'nineGrid'"/>
 			</template>
 		</div>
 	</div>
