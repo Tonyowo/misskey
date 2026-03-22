@@ -78,5 +78,9 @@ describe('MkMediaList', () => {
 		const renderedIds = Array.from(container.querySelectorAll('.image'))
 			.map((element) => element.getAttribute('data-id'));
 		assert.deepEqual(renderedIds, mediaList.map((file) => file.id));
+
+		const galleryChildren = Array.from(gallery?.children ?? []);
+		assert.equal(galleryChildren.length, mediaList.length);
+		assert.ok(galleryChildren.every((element) => element.querySelector('.image') != null));
 	});
 });

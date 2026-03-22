@@ -13,10 +13,10 @@ SPDX-License-Identifier: AGPL-3.0-only
 			:data-layout="layout"
 			:class="galleryClasses"
 		>
-			<template v-for="media in previewableMediaList">
-				<XVideo v-if="media.type.startsWith('video')" :key="`video:${media.id}`" :class="$style.media" :video="media"/>
-				<XImage v-else-if="media.type.startsWith('image')" :key="`image:${media.id}`" :class="$style.media" class="image" :data-id="media.id" :image="media" :raw="raw" :cover="layout === 'nineGrid'"/>
-			</template>
+			<div v-for="media in previewableMediaList" :key="media.id" :class="$style.media">
+				<XVideo v-if="media.type.startsWith('video')" :class="$style.mediaInner" :video="media"/>
+				<XImage v-else-if="media.type.startsWith('image')" :class="$style.mediaInner" class="image" :data-id="media.id" :image="media" :raw="raw" :cover="layout === 'nineGrid'"/>
+			</div>
 		</div>
 	</div>
 </div>
@@ -349,6 +349,12 @@ defineExpose({
 .media {
 	overflow: hidden; // clipにするとバグる
 	border-radius: 8px;
+	position: relative;
+
+	> .mediaInner {
+		width: 100%;
+		height: 100%;
+	}
 }
 
 @container (min-width: 500px) {
