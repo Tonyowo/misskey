@@ -8,16 +8,16 @@ SPDX-License-Identifier: AGPL-3.0-only
 	<div v-for="media in mediaList.filter(media => !previewable(media))" :key="media.id" :class="$style.banner">
 		<XBanner :media="media" :href="originalEntityUrl"/>
 	</div>
-	<div v-if="mediaList.filter(media => previewable(media)).length > 0" :class="$style.container">
+	<div v-if="previewableMediaList.length > 0" :class="$style.container">
 		<div
 			:class="[
 				$style.medias,
-				count === 1 ? [$style.n1] : count === 2 ? $style.n2 : count === 3 ? $style.n3 : count === 4 ? $style.n4 : $style.nMany,
+				count === 1 ? [$style.n1] : layout === 'nineGrid' ? $style.nNineGrid : count === 2 ? $style.n2 : count === 3 ? $style.n3 : count === 4 ? $style.n4 : $style.nMany,
 			]"
 		>
-			<div v-for="media in mediaList.filter(media => previewable(media))" :class="$style.media">
+			<div v-for="media in previewableMediaList" :class="$style.media">
 				<XVideo v-if="media.type.startsWith('video')" :key="`video:${media.id}`" :class="$style.mediaInner" :video="media" :href="originalEntityUrl"/>
-				<XImage v-else-if="media.type.startsWith('image')" :key="`image:${media.id}`" :class="$style.mediaInner" class="image" :image="media" :raw="raw" :href="originalEntityUrl"/>
+				<XImage v-else-if="media.type.startsWith('image')" :key="`image:${media.id}`" :class="$style.mediaInner" class="image" :image="media" :raw="raw" :href="originalEntityUrl" :cover="layout === 'nineGrid'"/>
 			</div>
 		</div>
 	</div>
@@ -35,12 +35,15 @@ import { FILE_TYPE_BROWSERSAFE } from '@@/js/const.js';
 const props = defineProps<{
 	mediaList: Misskey.entities.DriveFile[];
 	raw?: boolean;
+	layout?: 'default' | 'nineGrid';
 
 	/** 埋め込みページ用 親要素の正規URL */
 	originalEntityUrl: string;
 }>();
 
-const count = computed(() => props.mediaList.filter(media => previewable(media)).length);
+const previewableMediaList = computed(() => props.mediaList.filter(media => previewable(media)));
+const count = computed(() => previewableMediaList.value.length);
+const layout = computed(() => props.layout ?? 'default');
 
 const previewable = (file: Misskey.entities.DriveFile): boolean => {
 	if (file.type === 'image/svg+xml') return true; // svgのwebpublic/thumbnailはpngなのでtrue
@@ -125,6 +128,15 @@ const previewable = (file: Misskey.entities.DriveFile): boolean => {
 
 		> .media {
 			aspect-ratio: 16/9;
+		}
+	}
+
+	&.nNineGrid {
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+		grid-template-rows: auto;
+
+		> .media {
+			aspect-ratio: 1 / 1;
 		}
 	}
 }

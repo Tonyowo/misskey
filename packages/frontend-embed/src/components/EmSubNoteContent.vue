@@ -14,7 +14,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 	</div>
 	<details v-if="note.files && note.files.length > 0">
 		<summary>({{ i18n.tsx.withNFiles({ n: note.files.length }) }})</summary>
-		<EmMediaList :mediaList="note.files" :originalEntityUrl="`${url}/notes/${note.id}`"/>
+		<EmMediaList :mediaList="note.files" layout="nineGrid" :originalEntityUrl="`${url}/notes/${note.id}`"/>
 	</details>
 	<details v-if="note.poll">
 		<summary>{{ i18n.ts.poll }}</summary>
