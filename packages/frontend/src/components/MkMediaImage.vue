@@ -4,7 +4,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 -->
 
 <template>
-<div :class="[hide ? $style.hidden : $style.visible, cover && $style.cover, (image.isSensitive && prefer.s.highlightSensitiveMedia) && $style.sensitive]" @click="reveal" @contextmenu.stop="onContextmenu">
+<div :class="[hide ? $style.hidden : $style.visible, (image.isSensitive && prefer.s.highlightSensitiveMedia) && $style.sensitive]" @click="reveal" @contextmenu.stop="onContextmenu">
 	<component
 		:is="disableImageLink ? 'div' : 'a'"
 		v-bind="disableImageLink ? {
@@ -218,16 +218,6 @@ function onContextmenu(ev: PointerEvent) {
 		pointer-events: none;
 		border-radius: inherit;
 		box-shadow: inset 0 0 0 4px var(--MI_THEME-warn);
-	}
-}
-
-.cover {
-	.imageContainer {
-		background-size: cover;
-	}
-
-	.image {
-		object-fit: cover;
 	}
 }
 

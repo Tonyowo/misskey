@@ -6,24 +6,30 @@ SPDX-License-Identifier: AGPL-3.0-only
 <template>
 <div :class="$style.root">
 	<XBanner v-for="media in mediaList.filter(media => !previewable(media))" :key="media.id" :media="media"/>
-	<div v-if="previewableMediaList.length > 0" :class="$style.container">
+	<div v-if="mediaList.filter(media => previewable(media)).length > 0" :class="$style.container">
 		<div
 			ref="gallery"
-			:data-count="count"
-			:data-layout="layout"
-			:class="galleryClasses"
+			:class="[
+				$style.medias,
+				...(prefer.s.showMediaListByGridInWideArea ? [$style.gridInWideArea] : []),
+				count === 1 ? [$style.n1, {
+					[$style.n116_9]: prefer.s.mediaListWithOneImageAppearance === '16_9',
+					[$style.n11_1]: prefer.s.mediaListWithOneImageAppearance === '1_1',
+					[$style.n12_3]: prefer.s.mediaListWithOneImageAppearance === '2_3',
+				}] : count === 2 ? $style.n2 : count === 3 ? $style.n3 : count === 4 ? $style.n4 : $style.nMany,
+			]"
 		>
-			<div v-for="media in previewableMediaList" :key="media.id" :class="$style.media">
-				<XVideo v-if="media.type.startsWith('video')" :class="$style.mediaInner" :video="media"/>
-				<XImage v-else-if="media.type.startsWith('image')" :class="$style.mediaInner" class="image" :data-id="media.id" :image="media" :raw="raw" :cover="layout === 'nineGrid'"/>
-			</div>
+			<template v-for="media in mediaList.filter(media => previewable(media))">
+				<XVideo v-if="media.type.startsWith('video')" :key="`video:${media.id}`" :class="$style.media" :video="media"/>
+				<XImage v-else-if="media.type.startsWith('image')" :key="`image:${media.id}`" :class="$style.media" class="image" :data-id="media.id" :image="media" :raw="raw"/>
+			</template>
 		</div>
 	</div>
 </div>
 </template>
 
 <script lang="ts" setup>
-import { computed, onMounted, onUnmounted, useCssModule, useTemplateRef } from 'vue';
+import { computed, onMounted, onUnmounted, useTemplateRef } from 'vue';
 import * as Misskey from 'misskey-js';
 import PhotoSwipeLightbox from 'photoswipe/lightbox';
 import PhotoSwipe from 'photoswipe';
@@ -39,42 +45,12 @@ import { prefer } from '@/preferences.js';
 const props = defineProps<{
 	mediaList: Misskey.entities.DriveFile[];
 	raw?: boolean;
-	layout?: 'default' | 'nineGrid';
 }>();
 
-const styleModule = useCssModule();
 const gallery = useTemplateRef('gallery');
 const pswpZIndex = os.claimZIndex('middle');
 window.document.documentElement.style.setProperty('--mk-pswp-root-z-index', pswpZIndex.toString());
-const layout = computed(() => props.layout ?? 'default');
-const previewableMediaList = computed(() => props.mediaList.filter(media => previewable(media)));
-const count = computed(() => previewableMediaList.value.length);
-const galleryClasses = computed(() => {
-	if (count.value === 1) {
-		return [
-			styleModule.medias,
-			styleModule.n1,
-			{
-				[styleModule.n116_9]: prefer.s.mediaListWithOneImageAppearance === '16_9',
-				[styleModule.n11_1]: prefer.s.mediaListWithOneImageAppearance === '1_1',
-				[styleModule.n12_3]: prefer.s.mediaListWithOneImageAppearance === '2_3',
-			},
-		];
-	}
-
-	if (layout.value === 'nineGrid') {
-		return [
-			styleModule.medias,
-			styleModule.nNineGrid,
-		];
-	}
-
-	return [
-		styleModule.medias,
-		...(prefer.s.showMediaListByGridInWideArea ? [styleModule.gridInWideArea] : []),
-		count.value === 2 ? styleModule.n2 : count.value === 3 ? styleModule.n3 : count.value === 4 ? styleModule.n4 : styleModule.nMany,
-	];
-});
+const count = computed(() => props.mediaList.filter(media => previewable(media)).length);
 let lightbox: PhotoSwipeLightbox | null = null;
 
 let activeEl: HTMLElement | null = null;
@@ -88,9 +64,9 @@ const popstateHandler = (): void => {
 async function calcAspectRatio() {
 	if (!gallery.value) return;
 
-	const img = previewableMediaList.value[0];
+	const img = props.mediaList[0];
 
-	if (count.value !== 1 || !(img.properties.width && img.properties.height)) {
+	if (props.mediaList.length !== 1 || !(img.properties.width && img.properties.height)) {
 		gallery.value.style.aspectRatio = '';
 		return;
 	}
@@ -244,7 +220,7 @@ const previewable = (file: Misskey.entities.DriveFile): boolean => {
 };
 
 const openGallery = () => {
-	if (previewableMediaList.value.length > 0) {
+	if (props.mediaList.filter(media => previewable(media)).length > 0) {
 		lightbox?.loadAndOpen(0);
 	}
 };
@@ -335,26 +311,11 @@ defineExpose({
 			aspect-ratio: 16/9;
 		}
 	}
-
-	&.nNineGrid {
-		grid-template-columns: repeat(3, minmax(0, 1fr));
-		grid-template-rows: auto;
-
-		> .media {
-			aspect-ratio: 1 / 1;
-		}
-	}
 }
 
 .media {
 	overflow: hidden; // clipにするとバグる
 	border-radius: 8px;
-	position: relative;
-
-	> .mediaInner {
-		width: 100%;
-		height: 100%;
-	}
 }
 
 @container (min-width: 500px) {
