@@ -34,7 +34,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script lang="ts" setup>
-import { onMounted, watch, ref, shallowRef, computed, nextTick, onBeforeUnmount, useTemplateRef } from 'vue';
+import { defineAsyncComponent, onMounted, watch, ref, shallowRef, computed, nextTick, onBeforeUnmount, useTemplateRef } from 'vue';
 import * as Misskey from 'misskey-js';
 import { formatTimeString } from '@/utility/format-time-string.js';
 import { selectFile } from '@/utility/drive.js';
@@ -43,7 +43,6 @@ import { miLocalStorage } from '@/local-storage.js';
 import { misskeyApi } from '@/utility/misskey-api.js';
 import { prefer } from '@/preferences.js';
 import { Autocomplete } from '@/utility/autocomplete.js';
-import { emojiPicker } from '@/utility/emoji-picker.js';
 import { checkDragDataType, getDragData } from '@/drag-and-drop.js';
 import MkPostFormTextEditor from '@/components/MkPostFormTextEditor.vue';
 
@@ -256,20 +255,49 @@ function deleteDraft() {
 	miLocalStorage.setItem('chatMessageDrafts', JSON.stringify(drafts));
 }
 
+function getTextSelectionRange() {
+	return textEditorEl.value?.getSelectionRange() ?? {
+		start: text.value.length,
+		end: text.value.length,
+	};
+}
+
 async function insertEmoji(ev: MouseEvent) {
 	textareaReadOnly.value = true;
 	const target = ev.currentTarget ?? ev.target;
-	if (target == null) return;
-	emojiPicker.show(
-		target as HTMLElement,
-		emoji => {
-			textEditorEl.value?.replaceSelection(emoji);
+	if (!(target instanceof HTMLElement)) {
+		textareaReadOnly.value = false;
+		return;
+	}
+
+	const selection = getTextSelectionRange();
+	let pos = selection.start;
+	let posEnd = selection.end;
+	const { dispose } = os.popup(defineAsyncComponent(() => import('@/components/MkEmojiPickerDialog.vue')), {
+		anchorElement: target,
+		choseAndClose: true,
+	}, {
+		done: (emoji: string) => {
+			const textBefore = text.value.substring(0, pos);
+			const textAfter = text.value.substring(posEnd);
+			text.value = textBefore + emoji + textAfter;
+			pos += emoji.length;
+			posEnd = pos;
 		},
-		() => {
+		close: () => {
 			textareaReadOnly.value = false;
-			nextTick(() => textEditorEl.value?.focus());
 		},
-	);
+		closed: () => {
+			dispose();
+			textareaReadOnly.value = false;
+			nextTick(() => {
+				if (textEditorEl.value) {
+					textEditorEl.value.focus();
+					textEditorEl.value.setSelectionRange(pos, posEnd);
+				}
+			});
+		},
+	});
 }
 
 function preserveTextSelection() {
