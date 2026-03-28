@@ -50,6 +50,10 @@ export const packedChatRoomSchema = {
 			type: 'string',
 			optional: false, nullable: true,
 		},
+		avatarUrl: {
+			type: 'string',
+			optional: false, nullable: true,
+		},
 		pinnedMessageId: {
 			type: 'string',
 			optional: false, nullable: true,

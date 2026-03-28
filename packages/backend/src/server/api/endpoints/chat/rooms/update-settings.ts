@@ -29,6 +29,11 @@ export const meta = {
 			code: 'NO_SUCH_ROOM',
 			id: 'ff4f7ea4-0ca7-4d97-815d-f6959033cd4f',
 		},
+		forbidden: {
+			message: 'You are not allowed to update this room settings.',
+			code: 'FORBIDDEN',
+			id: '7048c815-a44e-4d78-b6c4-00dc20d7f875',
+		},
 		invalidCombination: {
 			message: 'Invalid room settings combination.',
 			code: 'INVALID_COMBINATION',
@@ -70,25 +75,50 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 		super(meta, paramDef, async (ps, me) => {
 			await this.chatService.checkChatAvailability(me.id, 'write');
 
-			const room = await this.chatService.findMyRoomById(me.id, ps.roomId);
+			const room = await this.chatService.findRoomById(ps.roomId);
 			if (room == null) {
 				throw new ApiError(meta.errors.noSuchRoom);
 			}
 
+			const isOwner = room.ownerId === me.id;
+			const isAdmin = isOwner || await this.chatService.isRoomAdmin(room, me.id);
+
+			if (!isAdmin) {
+				throw new ApiError(meta.errors.forbidden);
+			}
+
+			const isAvatarOnlyUpdate = !isOwner
+				&& ps.avatarFileId !== undefined
+				&& ps.name === undefined
+				&& ps.description === undefined
+				&& ps.joinPolicy === undefined
+				&& ps.discoverability === undefined
+				&& ps.memberCanInvite === undefined
+				&& ps.adminPermissions === undefined
+				&& ps.allowJoinRequest === undefined
+				&& ps.maxMembers === undefined;
+
+			if (!isOwner && !isAvatarOnlyUpdate) {
+				throw new ApiError(meta.errors.forbidden);
+			}
+
 			try {
 				const updated = await this.chatService.updateRoom(room, {
-					name: ps.name,
-					description: ps.description,
-					joinPolicy: ps.joinPolicy,
-					discoverability: ps.discoverability,
+					name: isOwner ? ps.name : undefined,
+					description: isOwner ? ps.description : undefined,
+					joinPolicy: isOwner ? ps.joinPolicy : undefined,
+					discoverability: isOwner ? ps.discoverability : undefined,
 					avatarFileId: ps.avatarFileId,
-					memberCanInvite: ps.memberCanInvite,
-					adminPermissions: ps.adminPermissions,
-					allowJoinRequest: ps.allowJoinRequest,
-					maxMembers: ps.maxMembers,
+					memberCanInvite: isOwner ? ps.memberCanInvite : undefined,
+					adminPermissions: isOwner ? ps.adminPermissions : undefined,
+					allowJoinRequest: isOwner ? ps.allowJoinRequest : undefined,
+					maxMembers: isOwner ? ps.maxMembers : undefined,
 				}, me.id);
 				return this.chatEntityService.packRoom(updated, me);
 			} catch (err) {
+				if (err instanceof Error && err.message === 'forbidden') {
+					throw new ApiError(meta.errors.forbidden);
+				}
 				if (err instanceof Error && err.message === 'invalid discoverability') {
 					throw new ApiError(meta.errors.invalidCombination);
 				}

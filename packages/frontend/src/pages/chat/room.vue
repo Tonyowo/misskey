@@ -27,6 +27,12 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 			<div v-else-if="room && !room.isJoined">
 				<div class="_gaps" style="text-align: center;">
+					<div :class="$style.roomHeroAvatar">
+						<img v-if="room.avatarUrl" :src="room.avatarUrl" :class="$style.roomHeroAvatarImage" alt="">
+						<div v-else :class="$style.roomHeroAvatarFallback">
+							<i class="ti ti-users-group"></i>
+						</div>
+					</div>
 					<div>{{ i18n.ts._chat.youAreNotAMemberOfThisRoom }}</div>
 					<div v-if="room.description" :class="$style.roomDescription">{{ room.description }}</div>
 					<MkInfo v-if="room.joinRequestExists">
@@ -870,6 +876,38 @@ definePage(computed(() => {
 .roomDescription {
 	white-space: pre-wrap;
 	overflow-wrap: anywhere;
+}
+
+.roomHeroAvatar {
+	width: 88px;
+	height: 88px;
+	margin: 0 auto;
+	border-radius: 28px;
+	overflow: hidden;
+	box-shadow:
+		0 0 0 1px color-mix(in srgb, var(--MI_THEME-divider) 72%, transparent),
+		0 12px 28px color(from var(--MI_THEME-shadow) srgb r g b / 0.12);
+}
+
+.roomHeroAvatarImage,
+.roomHeroAvatarFallback {
+	width: 100%;
+	height: 100%;
+}
+
+.roomHeroAvatarImage {
+	display: block;
+	object-fit: cover;
+}
+
+.roomHeroAvatarFallback {
+	display: grid;
+	place-items: center;
+	font-size: 2rem;
+	color: color-mix(in srgb, var(--MI_THEME-fg) 72%, transparent);
+	background:
+		radial-gradient(circle at top, color(from var(--MI_THEME-accent) srgb r g b / 0.2), transparent 60%),
+		color-mix(in srgb, var(--MI_THEME-panel) 82%, var(--MI_THEME-bg) 18%);
 }
 
 .roomActions {

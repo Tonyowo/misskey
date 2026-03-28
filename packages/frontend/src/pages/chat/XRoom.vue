@@ -6,6 +6,12 @@ SPDX-License-Identifier: AGPL-3.0-only
 <template>
 <MkA :to="`/chat/room/${room.id}`" class="_panel _gaps_s" :class="$style.root">
 	<div :class="$style.header">
+		<div :class="$style.roomAvatar">
+			<img v-if="room.avatarUrl" :src="room.avatarUrl" :class="$style.roomAvatarImage" alt="">
+			<div v-else :class="$style.roomAvatarFallback">
+				<i class="ti ti-users-group"></i>
+			</div>
+		</div>
 		<div :class="$style.titleBlock">
 			<div :class="$style.title">{{ room.name }}</div>
 			<div :class="$style.metaLine">
@@ -13,7 +19,6 @@ SPDX-License-Identifier: AGPL-3.0-only
 				<span>{{ room.memberCount }} 人</span>
 			</div>
 		</div>
-		<MkAvatar :user="room.owner" :link="false" :class="$style.headerAvatar"/>
 	</div>
 	<div v-if="room.description" :class="$style.description">{{ room.description }}</div>
 	<div :class="$style.badges">
@@ -85,10 +90,34 @@ const discoverabilityLabel = computed(() => {
 	gap: 12px;
 }
 
-.headerAvatar {
-	width: 42px;
-	height: 42px;
+.roomAvatar {
+	width: 48px;
+	height: 48px;
+	flex-shrink: 0;
+	border-radius: 16px;
+	overflow: hidden;
 	box-shadow: 0 0 0 3px color(from var(--MI_THEME-panel) srgb r g b / 0.9);
+}
+
+.roomAvatarImage,
+.roomAvatarFallback {
+	width: 100%;
+	height: 100%;
+}
+
+.roomAvatarImage {
+	display: block;
+	object-fit: cover;
+}
+
+.roomAvatarFallback {
+	display: grid;
+	place-items: center;
+	font-size: 1.35rem;
+	color: color-mix(in srgb, var(--MI_THEME-fg) 72%, transparent);
+	background:
+		radial-gradient(circle at top, color(from var(--MI_THEME-accent) srgb r g b / 0.22), transparent 60%),
+		color-mix(in srgb, var(--MI_THEME-panel) 82%, var(--MI_THEME-bg) 18%);
 }
 
 .titleBlock {

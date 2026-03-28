@@ -5947,6 +5947,7 @@ export type components = {
             /** @enum {string} */
             discoverability: 'private' | 'unlisted' | 'public';
             avatarFileId: string | null;
+            avatarUrl: string | null;
             pinnedMessageId: string | null;
             memberCanInvite: boolean;
             adminPermissions: ('invite' | 'approve' | 'kick' | 'ban' | 'mute' | 'announcement' | 'pin')[];
@@ -39023,4 +39024,3 @@ export interface operations {
         };
     };
 }
-

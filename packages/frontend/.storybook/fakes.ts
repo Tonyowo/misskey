@@ -51,6 +51,7 @@ export function chatMessage(room = false, id = 'somechatmessageid', text = 'Hell
 	return {
 		id,
 		createdAt: '2016-12-28T22:49:51.000Z',
+		type: 'message',
 		fromUserId: fromUser.id,
 		fromUser,
 		text,
@@ -75,12 +76,17 @@ export function chatRoom(id = 'somechatroomid', name = 'Some Chat Room'): entiti
 		owner,
 		name,
 		description: 'A chat room for testing',
+		announcement: '',
 		joinPolicy: 'invite_only',
 		discoverability: 'private',
 		avatarFileId: null,
+		avatarUrl: null,
+		pinnedMessageId: null,
 		memberCanInvite: false,
+		adminPermissions: ['invite', 'approve', 'kick', 'ban', 'mute', 'announcement', 'pin'],
 		allowJoinRequest: true,
 		maxMembers: 50,
+		memberCount: 1,
 		isMuted: false,
 	};
 }

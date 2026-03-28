@@ -5,6 +5,29 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 <template>
 <div class="_gaps">
+	<div :class="$style.avatarPanel">
+		<button
+			type="button"
+			class="_button"
+			:class="[$style.avatarPreview, { [$style.avatarPreviewClickable]: canEditAvatar }]"
+			@click="canEditAvatar ? openAvatarMenu($event) : undefined"
+		>
+			<img v-if="avatarUrl_" :src="avatarUrl_" :class="$style.avatarImage" alt="">
+			<div v-else :class="$style.avatarFallback">
+				<i class="ti ti-users-group"></i>
+			</div>
+		</button>
+		<div :class="$style.avatarMeta">
+			<div :class="$style.avatarTitle">群头像</div>
+			<div :class="$style.avatarHint">建议使用方形图片，保存后生效。</div>
+			<div v-if="canEditAvatar" class="_buttons">
+				<MkButton rounded @click="openAvatarMenu">设置头像</MkButton>
+				<MkButton v-if="avatarFileId_ != null" rounded danger @click="removeAvatar">移除头像</MkButton>
+				<MkButton v-if="!isOwner" primary rounded @click="saveAvatar">保存头像</MkButton>
+			</div>
+		</div>
+	</div>
+
 	<MkInput v-model="name_" :disabled="!isOwner">
 		<template #label>{{ i18n.ts.name }}</template>
 	</MkInput>
@@ -114,6 +137,7 @@ import type { MkSelectItem } from '@/components/MkSelect.vue';
 import { useRouter } from '@/router.js';
 import { misskeyApi } from '@/utility/misskey-api.js';
 import { copyToClipboard } from '@/utility/copy-to-clipboard.js';
+import { chooseDriveFile, createCroppedImageDriveFileFromImageDriveFile } from '@/utility/drive.js';
 import { url } from '@@/js/config.js';
 import MkTime from '@/components/global/MkTime.vue';
 import {
@@ -136,6 +160,7 @@ const emit = defineEmits<{
 const isOwner = computed(() => {
 	return props.room.ownerId === $i.id;
 });
+const canEditAvatar = computed(() => isOwner.value || props.room.myRole === 'admin');
 const isJoined = computed(() => props.room.isJoined ?? false);
 const canManageAnnouncement = computed(() => props.room.canManageAnnouncement ?? false);
 const canInvite = computed(() => props.room.canInvite ?? false);
@@ -143,6 +168,8 @@ const canInvite = computed(() => props.room.canInvite ?? false);
 const name_ = ref('');
 const description_ = ref('');
 const announcement_ = ref('');
+const avatarFileId_ = ref<string | null>(null);
+const avatarUrl_ = ref<string | null>(null);
 const joinPolicy_ = ref<Misskey.entities.ChatRoom['joinPolicy']>('invite_only');
 const discoverability_ = ref<Misskey.entities.ChatRoom['discoverability']>('private');
 const maxMembers_ = ref(50);
@@ -206,6 +233,8 @@ watch(() => props.room, (room) => {
 	name_.value = room.name;
 	description_.value = room.description;
 	announcement_.value = room.announcement;
+	avatarFileId_.value = room.avatarFileId;
+	avatarUrl_.value = room.avatarUrl;
 	joinPolicy_.value = room.joinPolicy;
 	discoverability_.value = room.discoverability;
 	maxMembers_.value = room.maxMembers;
@@ -237,6 +266,7 @@ async function save() {
 		roomId: props.room.id,
 		name: name_.value,
 		description: description_.value,
+		avatarFileId: avatarFileId_.value,
 		joinPolicy: joinPolicy_.value,
 		discoverability: discoverability_.value,
 		memberCanInvite: memberCanInvite_.value,
@@ -252,6 +282,102 @@ async function save() {
 		roomId: updated.id,
 		scopes: ['ownedRooms', 'joiningRooms'],
 	});
+}
+
+async function saveAvatar() {
+	const updated = await os.apiWithDialog('chat/rooms/update-settings', {
+		roomId: props.room.id,
+		avatarFileId: avatarFileId_.value,
+	});
+	emit('updated', updated);
+	emitChatRoomUpdated(updated.id, updated);
+	emitChatRoomCollectionsInvalidated(updated.id, ['ownedRooms', 'joiningRooms']);
+	emitChatHomeInvalidated({
+		reason: 'room-avatar-updated',
+		roomId: updated.id,
+		scopes: ['ownedRooms', 'joiningRooms'],
+	});
+}
+
+function applyAvatar(driveFile: Misskey.entities.DriveFile) {
+	avatarFileId_.value = driveFile.id;
+	avatarUrl_.value = driveFile.thumbnailUrl ?? driveFile.url;
+}
+
+async function chooseAvatarFromPc() {
+	const files = await os.chooseFileFromPc({ multiple: false });
+	const file = files[0];
+	if (!file) return;
+
+	let originalOrCropped = file;
+
+	const { canceled } = await os.confirm({
+		type: 'question',
+		text: i18n.ts.cropImageAsk,
+		okText: i18n.ts.cropYes,
+		cancelText: i18n.ts.cropNo,
+	});
+
+	if (!canceled) {
+		originalOrCropped = await os.cropImageFile(file, {
+			aspectRatio: 1,
+		});
+	}
+
+	const [driveFile] = await os.launchUploader([originalOrCropped], { multiple: false });
+	applyAvatar(driveFile);
+}
+
+async function chooseAvatarFromDrive() {
+	const files = await chooseDriveFile({ multiple: false });
+	const file = files[0];
+	if (!file) return;
+
+	const { canceled } = await os.confirm({
+		type: 'question',
+		text: i18n.ts.cropImageAsk,
+		okText: i18n.ts.cropYes,
+		cancelText: i18n.ts.cropNo,
+	});
+
+	const driveFile = canceled
+		? file
+		: await createCroppedImageDriveFileFromImageDriveFile(file, {
+			aspectRatio: 1,
+		});
+
+	applyAvatar(driveFile);
+}
+
+function removeAvatar() {
+	avatarFileId_.value = null;
+	avatarUrl_.value = null;
+}
+
+function openAvatarMenu(ev: PointerEvent) {
+	if (!canEditAvatar.value) return;
+
+	os.popupMenu([{
+		text: '群头像',
+		type: 'label',
+	}, {
+		text: i18n.ts.upload,
+		icon: 'ti ti-upload',
+		action: () => {
+			void chooseAvatarFromPc();
+		},
+	}, {
+		text: i18n.ts.fromDrive,
+		icon: 'ti ti-cloud',
+		action: () => {
+			void chooseAvatarFromDrive();
+		},
+	}, ...(avatarFileId_.value != null ? [{
+		text: '移除头像',
+		icon: 'ti ti-trash',
+		danger: true,
+		action: removeAvatar,
+	}] : [])], ev.currentTarget ?? ev.target);
 }
 
 function toggleAdminPermission(permission: Misskey.entities.ChatRoom['adminPermissions'][number], enabled: boolean) {
@@ -363,6 +489,72 @@ async function revokeInviteLink(inviteLink: Misskey.entities.ChatRoomInviteLink)
 </script>
 
 <style lang="scss" module>
+.avatarPanel {
+	display: flex;
+	align-items: center;
+	gap: 16px;
+	padding: 16px;
+	border: solid 1px var(--MI_THEME-divider);
+	border-radius: 18px;
+}
+
+.avatarPreview {
+	width: 88px;
+	height: 88px;
+	flex-shrink: 0;
+	border-radius: 24px;
+	overflow: hidden;
+	background: color-mix(in srgb, var(--MI_THEME-panel) 72%, var(--MI_THEME-bg) 28%);
+	border: solid 1px color-mix(in srgb, var(--MI_THEME-divider) 72%, transparent);
+}
+
+.avatarPreviewClickable {
+	cursor: pointer;
+	transition: transform 0.18s ease, border-color 0.18s ease;
+
+	&:hover {
+		transform: translateY(-1px);
+		border-color: color-mix(in srgb, var(--MI_THEME-accent) 36%, var(--MI_THEME-divider));
+	}
+}
+
+.avatarImage,
+.avatarFallback {
+	width: 100%;
+	height: 100%;
+}
+
+.avatarImage {
+	display: block;
+	object-fit: cover;
+}
+
+.avatarFallback {
+	display: grid;
+	place-items: center;
+	font-size: 2rem;
+	color: color-mix(in srgb, var(--MI_THEME-fg) 72%, transparent);
+	background:
+		radial-gradient(circle at top, color(from var(--MI_THEME-accent) srgb r g b / 0.18), transparent 60%),
+		color-mix(in srgb, var(--MI_THEME-panel) 82%, var(--MI_THEME-bg) 18%);
+}
+
+.avatarMeta {
+	min-width: 0;
+	display: grid;
+	gap: 6px;
+}
+
+.avatarTitle {
+	font-size: 1rem;
+	font-weight: 700;
+}
+
+.avatarHint {
+	font-size: 0.9em;
+	opacity: 0.75;
+}
+
 .membership {
 	display: flex;
 }

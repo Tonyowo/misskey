@@ -6,7 +6,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { In, IsNull, MoreThan } from 'typeorm';
 import { DI } from '@/di-symbols.js';
-import type { MiUser, ChatMessagesRepository, MiChatMessage, ChatRoomsRepository, MiChatRoom, MiChatRoomInvitation, ChatRoomInvitationsRepository, MiChatRoomInviteLink, ChatRoomInviteLinksRepository, MiChatRoomJoinRequest, ChatRoomJoinRequestsRepository, MiChatRoomMembership, ChatRoomMembershipsRepository, MiChatRoomBan, ChatRoomBansRepository } from '@/models/_.js';
+import type { MiUser, ChatMessagesRepository, MiChatMessage, ChatRoomsRepository, MiChatRoom, MiChatRoomInvitation, ChatRoomInvitationsRepository, MiChatRoomInviteLink, ChatRoomInviteLinksRepository, MiChatRoomJoinRequest, ChatRoomJoinRequestsRepository, MiChatRoomMembership, ChatRoomMembershipsRepository, MiChatRoomBan, ChatRoomBansRepository, DriveFilesRepository, MiDriveFile } from '@/models/_.js';
 import type { Packed } from '@/misc/json-schema.js';
 import type { } from '@/models/Blocking.js';
 import { bindThis } from '@/decorators.js';
@@ -23,6 +23,9 @@ export class ChatEntityService {
 
 		@Inject(DI.chatRoomsRepository)
 		private chatRoomsRepository: ChatRoomsRepository,
+
+		@Inject(DI.driveFilesRepository)
+		private driveFilesRepository: DriveFilesRepository,
 
 		@Inject(DI.chatRoomInvitationsRepository)
 		private chatRoomInvitationsRepository: ChatRoomInvitationsRepository,
@@ -294,6 +297,7 @@ export class ChatEntityService {
 		options?: {
 			_hint_?: {
 				packedOwners: Map<MiChatRoom['id'], Packed<'UserLite'>>;
+				avatarFiles?: Map<MiDriveFile['id'], MiDriveFile>;
 				myMemberships?: Map<MiChatRoom['id'], MiChatRoomMembership | null | undefined>;
 				myInvitations?: Map<MiChatRoom['id'], MiChatRoomInvitation | null | undefined>;
 				myJoinRequests?: Map<MiChatRoom['id'], MiChatRoomJoinRequest | null | undefined>;
@@ -304,6 +308,9 @@ export class ChatEntityService {
 	): Promise<Packed<'ChatRoom'>> {
 		const room = typeof src === 'object' ? src : await this.chatRoomsRepository.findOneByOrFail({ id: src });
 		const now = new Date();
+		const avatarFile = room.avatarFileId != null
+			? (options?._hint_?.avatarFiles?.get(room.avatarFileId) ?? await this.driveFilesRepository.findOneBy({ id: room.avatarFileId }))
+			: null;
 
 		const membership = me && me.id !== room.ownerId ? (options?._hint_?.myMemberships?.get(room.id) ?? await this.chatRoomMembershipsRepository.findOneBy({ roomId: room.id, userId: me.id })) : null;
 		const invitation = me && me.id !== room.ownerId ? (options?._hint_?.myInvitations?.get(room.id) ?? await this.chatRoomInvitationsRepository.findOne({
@@ -340,6 +347,7 @@ export class ChatEntityService {
 			joinPolicy: room.joinPolicy,
 			discoverability: room.discoverability,
 			avatarFileId: room.avatarFileId,
+			avatarUrl: avatarFile != null ? this.driveFileEntityService.getPublicUrl(avatarFile, 'avatar') : null,
 			pinnedMessageId: isJoined ? room.pinnedMessageId : null,
 			memberCanInvite: room.memberCanInvite,
 			adminPermissions: isJoined ? room.adminPermissions : [],
@@ -387,10 +395,14 @@ export class ChatEntityService {
 		}
 
 		const owners = _rooms.map(x => x.owner ?? x.ownerId);
+		const avatarFileIds = _rooms.flatMap(room => room.avatarFileId ? [room.avatarFileId] : []);
 
-		const [packedOwners, myMemberships, myInvitations, myJoinRequests, memberCounts, pendingRequestCounts] = await Promise.all([
+		const [packedOwners, avatarFiles, myMemberships, myInvitations, myJoinRequests, memberCounts, pendingRequestCounts] = await Promise.all([
 			this.userEntityService.packMany(owners, me)
 				.then(users => new Map(users.map(u => [u.id, u]))),
+			avatarFileIds.length > 0
+				? this.driveFilesRepository.findBy({ id: In(avatarFileIds) }).then(files => new Map(files.map(file => [file.id, file])))
+				: Promise.resolve(new Map()),
 			this.chatRoomMembershipsRepository.find({
 				where: {
 					roomId: In(_rooms.map(x => x.id)),
@@ -437,7 +449,7 @@ export class ChatEntityService {
 				.then(rows => new Map(_rooms.map(r => [r.id, Number(rows.find(row => row.roomId === r.id)?.count ?? 0)]))),
 		]);
 
-		return Promise.all(_rooms.map(room => this.packRoom(room, me, { _hint_: { packedOwners, myMemberships, myInvitations, myJoinRequests, memberCounts, pendingRequestCounts } })));
+		return Promise.all(_rooms.map(room => this.packRoom(room, me, { _hint_: { packedOwners, avatarFiles, myMemberships, myInvitations, myJoinRequests, memberCounts, pendingRequestCounts } })));
 	}
 
 	@bindThis
