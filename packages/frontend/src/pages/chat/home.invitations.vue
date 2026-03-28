@@ -33,13 +33,22 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script lang="ts" setup>
-import { onMounted, ref } from 'vue';
+import { onActivated, onMounted, ref } from 'vue';
 import * as Misskey from 'misskey-js';
 import MkButton from '@/components/MkButton.vue';
 import { i18n } from '@/i18n.js';
 import { misskeyApi } from '@/utility/misskey-api.js';
 import { useRouter } from '@/router.js';
 import MkFolder from '@/components/MkFolder.vue';
+import { useGlobalEvent } from '@/events.js';
+import {
+	applyChatRoomPatch,
+	emitChatHomeInvalidated,
+	emitChatRoomCollectionsInvalidated,
+	emitChatRoomUpdated,
+	removeById,
+	shouldRefreshChatCollections,
+} from './state.js';
 
 const router = useRouter();
 
@@ -61,6 +70,20 @@ async function join(invitation: Misskey.entities.ChatRoomInvitation) {
 		roomId: invitation.room.id,
 	});
 
+	invitations.value = removeById(invitations.value, invitation.id);
+	emitChatRoomUpdated(invitation.room.id, {
+		isJoined: true,
+		invitationExists: false,
+		joinRequestExists: false,
+		memberCount: invitation.room.memberCount + 1,
+	});
+	emitChatRoomCollectionsInvalidated(invitation.room.id, ['myInvitations', 'joiningRooms']);
+	emitChatHomeInvalidated({
+		reason: 'room-joined-from-invitation',
+		roomId: invitation.room.id,
+		scopes: ['myInvitations', 'joiningRooms', 'counts'],
+	});
+
 	router.push('/chat/room/:roomId', {
 		params: {
 			roomId: invitation.room.id,
@@ -73,11 +96,33 @@ async function ignore(invitation: Misskey.entities.ChatRoomInvitation) {
 		roomId: invitation.room.id,
 	});
 
-	invitations.value = invitations.value.filter(i => i.id !== invitation.id);
+	invitations.value = removeById(invitations.value, invitation.id);
+	emitChatRoomUpdated(invitation.room.id, {
+		invitationExists: false,
+	});
+	emitChatRoomCollectionsInvalidated(invitation.room.id, ['myInvitations']);
+	emitChatHomeInvalidated({
+		reason: 'room-invitation-ignored',
+		roomId: invitation.room.id,
+		scopes: ['myInvitations', 'counts'],
+	});
 }
 
 onMounted(() => {
 	fetchInvitations();
+});
+
+onActivated(() => {
+	void fetchInvitations();
+});
+
+useGlobalEvent('chatRoomUpdated', (payload) => {
+	invitations.value = invitations.value.map(invitation => applyChatRoomPatch(invitation, payload));
+});
+
+useGlobalEvent('chatRoomCollectionsInvalidated', (payload) => {
+	if (!shouldRefreshChatCollections(payload, ['myInvitations'])) return;
+	void fetchInvitations();
 });
 </script>
 

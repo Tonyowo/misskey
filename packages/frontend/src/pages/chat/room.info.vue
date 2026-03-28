@@ -116,6 +116,11 @@ import { misskeyApi } from '@/utility/misskey-api.js';
 import { copyToClipboard } from '@/utility/copy-to-clipboard.js';
 import { url } from '@@/js/config.js';
 import MkTime from '@/components/global/MkTime.vue';
+import {
+	emitChatHomeInvalidated,
+	emitChatRoomCollectionsInvalidated,
+	emitChatRoomUpdated,
+} from './state.js';
 
 const router = useRouter();
 const $i = ensureSignin();
@@ -240,6 +245,13 @@ async function save() {
 		maxMembers: maxMembers_.value,
 	});
 	emit('updated', updated);
+	emitChatRoomUpdated(updated.id, updated);
+	emitChatRoomCollectionsInvalidated(updated.id, ['ownedRooms', 'joiningRooms']);
+	emitChatHomeInvalidated({
+		reason: 'room-settings-updated',
+		roomId: updated.id,
+		scopes: ['ownedRooms', 'joiningRooms'],
+	});
 }
 
 function toggleAdminPermission(permission: Misskey.entities.ChatRoom['adminPermissions'][number], enabled: boolean) {
@@ -259,6 +271,7 @@ async function saveAnnouncement() {
 		announcement: announcement_.value,
 	});
 	emit('updated', updated);
+	emitChatRoomUpdated(updated.id, updated);
 }
 
 async function del() {
@@ -271,6 +284,12 @@ async function del() {
 	await os.apiWithDialog('chat/rooms/delete', {
 		roomId: props.room.id,
 	});
+	emitChatRoomCollectionsInvalidated(props.room.id, ['ownedRooms', 'joiningRooms']);
+	emitChatHomeInvalidated({
+		reason: 'room-deleted',
+		roomId: props.room.id,
+		scopes: ['ownedRooms', 'joiningRooms', 'counts'],
+	});
 	router.push('/chat');
 }
 
@@ -280,6 +299,9 @@ watch(isMuted, async () => {
 	await os.apiWithDialog('chat/rooms/mute', {
 		roomId: props.room.id,
 		mute: isMuted.value,
+	});
+	emitChatRoomUpdated(props.room.id, {
+		isMuted: isMuted.value,
 	});
 });
 

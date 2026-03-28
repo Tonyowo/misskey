@@ -17,7 +17,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script lang="ts" setup>
-import { computed, onMounted, ref } from 'vue';
+import { computed, onActivated, onMounted, ref } from 'vue';
 import * as Misskey from 'misskey-js';
 import XHome from './home.home.vue';
 import XInvitations from './home.invitations.vue';
@@ -28,6 +28,7 @@ import { i18n } from '@/i18n.js';
 import { definePage } from '@/page.js';
 import MkPolkadots from '@/components/MkPolkadots.vue';
 import { misskeyApi } from '@/utility/misskey-api.js';
+import { useGlobalEvent } from '@/events.js';
 
 const tab = ref('home');
 const invitationCount = ref(0);
@@ -78,6 +79,14 @@ async function fetchCounts() {
 
 onMounted(() => {
 	fetchCounts();
+});
+
+onActivated(() => {
+	void fetchCounts();
+});
+
+useGlobalEvent('chatHomeInvalidated', () => {
+	void fetchCounts();
 });
 
 definePage(() => ({

@@ -169,6 +169,12 @@ import { useRouter } from '@/router.js';
 import { useMutationObserver } from '@/composables/use-mutation-observer.js';
 import MkInfo from '@/components/MkInfo.vue';
 import { makeDateSeparatedTimelineComputedRef } from '@/utility/timeline-date-separate.js';
+import { useGlobalEvent } from '@/events.js';
+import {
+	emitChatHomeInvalidated,
+	emitChatRoomCollectionsInvalidated,
+	emitChatRoomUpdated,
+} from './state.js';
 
 const $i = ensureSignin();
 const router = useRouter();
@@ -431,6 +437,7 @@ async function refreshRoomState() {
 			roomId: props.roomId,
 		});
 		room.value = updatedRoom;
+		emitChatRoomUpdated(updatedRoom.id, updatedRoom);
 		if (!updatedRoom.isJoined) {
 			connection.value?.dispose();
 			connection.value = null;
@@ -515,6 +522,8 @@ onMounted(() => {
 onActivated(() => {
 	if (!initialized.value) {
 		initialize();
+	} else if (props.roomId) {
+		void refreshRoomState();
 	}
 });
 
@@ -523,11 +532,11 @@ onBeforeUnmount(() => {
 	window.document.removeEventListener('visibilitychange', onVisibilitychange);
 });
 
-async function inviteUser(onInvited?: () => Promise<void> | void) {
+async function inviteUser(onInvited?: (invitation: Misskey.entities.ChatRoomInvitation) => Promise<void> | void) {
 	if (room.value == null) return;
 
 	const invitee = await os.selectUser({ includeSelf: false, localOnly: true });
-	await os.apiWithDialog('chat/rooms/invitations/create', {
+	const invitation = await os.apiWithDialog('chat/rooms/invitations/create', {
 		roomId: room.value.id,
 		userId: invitee.id,
 	}, undefined, {
@@ -549,7 +558,14 @@ async function inviteUser(onInvited?: () => Promise<void> | void) {
 		},
 	});
 
-	await onInvited?.();
+	emitChatRoomCollectionsInvalidated(room.value.id, ['invitations']);
+	emitChatHomeInvalidated({
+		reason: 'room-invitation-created',
+		roomId: room.value.id,
+		scopes: ['invitations'],
+	});
+
+	await onInvited?.(invitation);
 }
 
 async function requestToJoinRoom() {
@@ -588,6 +604,16 @@ async function requestToJoinRoom() {
 		...room.value,
 		joinRequestExists: true,
 	};
+	emitChatRoomUpdated(room.value.id, {
+		joinRequestExists: true,
+	});
+	emitChatRoomCollectionsInvalidated(room.value.id, ['myRequests']);
+	emitChatHomeInvalidated({
+		reason: 'room-join-request-created',
+		roomId: room.value.id,
+		scopes: ['myRequests', 'counts'],
+	});
+	void refreshRoomState();
 }
 
 async function joinRoomDirectly() {
@@ -595,6 +621,26 @@ async function joinRoomDirectly() {
 
 	await os.apiWithDialog('chat/rooms/join', {
 		roomId: room.value.id,
+	});
+
+	room.value = {
+		...room.value,
+		isJoined: true,
+		invitationExists: false,
+		joinRequestExists: false,
+		memberCount: room.value.memberCount + 1,
+	};
+	emitChatRoomUpdated(room.value.id, {
+		isJoined: true,
+		invitationExists: false,
+		joinRequestExists: false,
+		memberCount: room.value.memberCount,
+	});
+	emitChatRoomCollectionsInvalidated(room.value.id, ['joiningRooms', 'myInvitations']);
+	emitChatHomeInvalidated({
+		reason: 'room-joined',
+		roomId: room.value.id,
+		scopes: ['joiningRooms', 'myInvitations', 'counts'],
 	});
 	initialize();
 }
@@ -610,6 +656,16 @@ async function cancelJoinRequest() {
 		...room.value,
 		joinRequestExists: false,
 	};
+	emitChatRoomUpdated(room.value.id, {
+		joinRequestExists: false,
+	});
+	emitChatRoomCollectionsInvalidated(room.value.id, ['myRequests']);
+	emitChatHomeInvalidated({
+		reason: 'room-join-request-canceled',
+		roomId: room.value.id,
+		scopes: ['myRequests', 'counts'],
+	});
+	void refreshRoomState();
 }
 
 async function leaveRoom() {
@@ -623,6 +679,13 @@ async function leaveRoom() {
 
 	await misskeyApi('chat/rooms/leave', {
 		roomId: room.value.id,
+	});
+
+	emitChatRoomCollectionsInvalidated(room.value.id, ['joiningRooms']);
+	emitChatHomeInvalidated({
+		reason: 'room-left',
+		roomId: room.value.id,
+		scopes: ['joiningRooms', 'counts'],
 	});
 	router.push('/chat');
 }
@@ -640,7 +703,17 @@ async function togglePinnedMessage(messageId: string | null) {
 
 function onRoomUpdated(updated: Misskey.entities.ChatRoom) {
 	room.value = updated;
+	emitChatRoomUpdated(updated.id, updated);
 }
+
+useGlobalEvent('chatRoomUpdated', ({ roomId, patch }) => {
+	if (room.value == null || room.value.id !== roomId) return;
+
+	room.value = {
+		...room.value,
+		...patch,
+	};
+});
 
 function showMenu(ev: PointerEvent) {
 	const menuItems: MenuItem[] = [];

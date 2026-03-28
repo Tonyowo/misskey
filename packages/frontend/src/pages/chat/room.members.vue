@@ -165,13 +165,22 @@ import { misskeyApi } from '@/utility/misskey-api.js';
 import MkUserCardMini from '@/components/MkUserCardMini.vue';
 import { userPage } from '@/filters/user.js';
 import MkTime from '@/components/global/MkTime.vue';
+import type { ChatCollectionScope } from '@/events.js';
+import {
+	emitChatHomeInvalidated,
+	emitChatRoomCollectionsInvalidated,
+	emitChatRoomUpdated,
+	removeById,
+	updateById,
+	upsertById,
+} from './state.js';
 
 const props = defineProps<{
 	room: Misskey.entities.ChatRoom;
 }>();
 
 const emit = defineEmits<{
-	(ev: 'inviteUser', onInvited?: () => Promise<void> | void): void,
+	(ev: 'inviteUser', onInvited?: (invitation: Misskey.entities.ChatRoomInvitation) => Promise<void> | void): void,
 	(ev: 'updated', room: Misskey.entities.ChatRoom): void,
 }>();
 
@@ -193,6 +202,14 @@ function formatUserName(user: Misskey.entities.UserLite) {
 
 function canManageTargetMembership(membership: Misskey.entities.ChatRoomMembership) {
 	return membership.role !== 'admin' || canManageAdmins.value;
+}
+
+function patchRoom(patch: Partial<Misskey.entities.ChatRoom>) {
+	emit('updated', {
+		...props.room,
+		...patch,
+	});
+	emitChatRoomUpdated(props.room.id, patch);
 }
 
 async function refreshRoomState() {
@@ -254,6 +271,24 @@ async function fetchAll() {
 	]);
 }
 
+function invalidateChat(scopes: ChatCollectionScope[], reason: string) {
+	emitChatRoomCollectionsInvalidated(props.room.id, scopes);
+	emitChatHomeInvalidated({
+		reason,
+		roomId: props.room.id,
+		scopes,
+	});
+}
+
+function syncAfterMutation(scopes: ChatCollectionScope[], reason: string, tasks: Array<() => Promise<void>>) {
+	invalidateChat(scopes, reason);
+	void Promise.all([
+		refreshRoomState(),
+		...tasks.map(task => task()),
+	]).catch(() => {
+	});
+}
+
 watch(() => [props.room.id, canInvite.value, canManageJoinRequests.value, canBanMembers.value] as const, async () => {
 	await fetchAll();
 }, {
@@ -261,7 +296,7 @@ watch(() => [props.room.id, canInvite.value, canManageJoinRequests.value, canBan
 });
 
 async function acceptJoinRequest(joinRequest: Misskey.entities.ChatRoomJoinRequest) {
-	await os.apiWithDialog('chat/rooms/requests/accept', {
+	const membership = await os.apiWithDialog('chat/rooms/requests/accept', {
 		roomId: props.room.id,
 		userId: joinRequest.userId,
 	}, undefined, {
@@ -271,19 +306,24 @@ async function acceptJoinRequest(joinRequest: Misskey.entities.ChatRoomJoinReque
 		},
 	});
 
-	await Promise.all([
-		fetchMemberships(),
-		fetchJoinRequests(),
-		refreshRoomState(),
+	joinRequests.value = removeById(joinRequests.value, joinRequest.id);
+	memberships.value = upsertById(memberships.value, membership);
+	patchRoom({
+		memberCount: props.room.memberCount + 1,
+		pendingRequestCount: Math.max((props.room.pendingRequestCount ?? joinRequests.value.length + 1) - 1, 0),
+	});
+
+	syncAfterMutation(['members', 'requests', 'counts', 'joiningRooms', 'ownedRooms'], 'join-request-accepted', [
+		fetchMemberships,
+		fetchJoinRequests,
 	]);
 }
 
 function inviteUser() {
-	emit('inviteUser', async () => {
-		await Promise.all([
-			fetchInvitations(),
-			refreshRoomState(),
-		]);
+	emit('inviteUser', async (invitation) => {
+		invitations.value = upsertById(invitations.value, invitation);
+		void fetchInvitations().catch(() => {
+		});
 	});
 }
 
@@ -293,9 +333,13 @@ async function rejectJoinRequest(joinRequest: Misskey.entities.ChatRoomJoinReque
 		userId: joinRequest.userId,
 	});
 
-	await Promise.all([
-		fetchJoinRequests(),
-		refreshRoomState(),
+	joinRequests.value = removeById(joinRequests.value, joinRequest.id);
+	patchRoom({
+		pendingRequestCount: Math.max((props.room.pendingRequestCount ?? joinRequests.value.length + 1) - 1, 0),
+	});
+
+	syncAfterMutation(['requests', 'counts', 'ownedRooms'], 'join-request-rejected', [
+		fetchJoinRequests,
 	]);
 }
 
@@ -304,7 +348,10 @@ async function revokeInvitation(invitation: Misskey.entities.ChatRoomInvitation)
 		invitationId: invitation.id,
 	});
 
-	await fetchInvitations();
+	invitations.value = removeById(invitations.value, invitation.id);
+	syncAfterMutation(['invitations'], 'room-invitation-revoked', [
+		fetchInvitations,
+	]);
 }
 
 async function promptModerationParams(title: string) {
@@ -357,9 +404,13 @@ async function kickMember(membership: Misskey.entities.ChatRoomMembership) {
 		userId: membership.userId,
 	});
 
-	await Promise.all([
-		fetchMemberships(),
-		refreshRoomState(),
+	memberships.value = removeById(memberships.value, membership.id);
+	patchRoom({
+		memberCount: Math.max(props.room.memberCount - 1, 0),
+	});
+
+	syncAfterMutation(['members', 'counts', 'joiningRooms'], 'room-member-kicked', [
+		fetchMemberships,
 	]);
 }
 
@@ -374,10 +425,14 @@ async function banMember(membership: Misskey.entities.ChatRoomMembership) {
 		expiresAt: moderationParams.expiresAt ?? undefined,
 	});
 
-	await Promise.all([
-		fetchMemberships(),
-		fetchBans(),
-		refreshRoomState(),
+	memberships.value = removeById(memberships.value, membership.id);
+	patchRoom({
+		memberCount: Math.max(props.room.memberCount - 1, 0),
+	});
+
+	syncAfterMutation(['members', 'bans', 'counts', 'joiningRooms'], 'room-member-banned', [
+		fetchMemberships,
+		fetchBans,
 	]);
 }
 
@@ -392,9 +447,15 @@ async function muteMember(membership: Misskey.entities.ChatRoomMembership) {
 		expiresAt: moderationParams.expiresAt ?? undefined,
 	});
 
-	await Promise.all([
-		fetchMemberships(),
-		refreshRoomState(),
+	memberships.value = updateById(memberships.value, membership.id, item => ({
+		...item,
+		isSpeakMuted: true,
+		speakMutedUntil: moderationParams.expiresAt != null ? new Date(moderationParams.expiresAt).toISOString() : null,
+		speakMuteReason: moderationParams.reason ?? null,
+	}));
+
+	syncAfterMutation(['members'], 'room-member-muted', [
+		fetchMemberships,
 	]);
 }
 
@@ -404,9 +465,15 @@ async function unmuteMember(membership: Misskey.entities.ChatRoomMembership) {
 		userId: membership.userId,
 	});
 
-	await Promise.all([
-		fetchMemberships(),
-		refreshRoomState(),
+	memberships.value = updateById(memberships.value, membership.id, item => ({
+		...item,
+		isSpeakMuted: false,
+		speakMutedUntil: null,
+		speakMuteReason: null,
+	}));
+
+	syncAfterMutation(['members'], 'room-member-unmuted', [
+		fetchMemberships,
 	]);
 }
 
@@ -416,7 +483,10 @@ async function unbanMember(ban: Misskey.entities.ChatRoomBan) {
 		userId: ban.userId,
 	});
 
-	await fetchBans();
+	bans.value = removeById(bans.value, ban.id);
+	syncAfterMutation(['bans'], 'room-member-unbanned', [
+		fetchBans,
+	]);
 }
 
 async function addAdmin(membership: Misskey.entities.ChatRoomMembership) {
@@ -425,9 +495,13 @@ async function addAdmin(membership: Misskey.entities.ChatRoomMembership) {
 		userId: membership.userId,
 	});
 
-	await Promise.all([
-		fetchMemberships(),
-		refreshRoomState(),
+	memberships.value = updateById(memberships.value, membership.id, item => ({
+		...item,
+		role: 'admin',
+	}));
+
+	syncAfterMutation(['members'], 'room-admin-added', [
+		fetchMemberships,
 	]);
 }
 
@@ -437,9 +511,13 @@ async function removeAdmin(membership: Misskey.entities.ChatRoomMembership) {
 		userId: membership.userId,
 	});
 
-	await Promise.all([
-		fetchMemberships(),
-		refreshRoomState(),
+	memberships.value = updateById(memberships.value, membership.id, item => ({
+		...item,
+		role: 'member',
+	}));
+
+	syncAfterMutation(['members'], 'room-admin-removed', [
+		fetchMemberships,
 	]);
 }
 
@@ -456,7 +534,10 @@ async function transferOwner(membership: Misskey.entities.ChatRoomMembership) {
 	});
 
 	emit('updated', updated);
-	await fetchAll();
+	emitChatRoomUpdated(props.room.id, updated);
+	syncAfterMutation(['members', 'ownedRooms', 'joiningRooms'], 'room-owner-transferred', [
+		fetchAll,
+	]);
 }
 </script>
 
