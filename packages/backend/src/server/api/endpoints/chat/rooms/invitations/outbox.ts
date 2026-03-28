@@ -3,10 +3,8 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
-import { Inject, Injectable } from '@nestjs/common';
-import ms from 'ms';
+import { Injectable } from '@nestjs/common';
 import { Endpoint } from '@/server/api/endpoint-base.js';
-import { DI } from '@/di-symbols.js';
 import { ApiError } from '@/server/api/error.js';
 import { ChatService } from '@/core/ChatService.js';
 import { ChatEntityService } from '@/core/entities/ChatEntityService.js';
@@ -73,12 +71,16 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 			if (room == null) {
 				throw new ApiError(meta.errors.noSuchRoom);
 			}
-			if (!await this.chatService.canInviteToRoom(room, me.id)) {
-				throw new ApiError(meta.errors.forbidden);
-			}
 
-			const invitations = await this.chatService.getSentRoomInvitationsWithPagination(ps.roomId, ps.limit, sinceId, untilId);
-			return this.chatEntityService.packRoomInvitations(invitations, me);
+			try {
+				const invitations = await this.chatService.getRoomInvitationsWithPagination(me.id, ps.roomId, ps.limit, sinceId, untilId);
+				return this.chatEntityService.packRoomInvitations(invitations, me);
+			} catch (err) {
+				if (err instanceof Error && err.message === 'forbidden') {
+					throw new ApiError(meta.errors.forbidden);
+				}
+				throw err;
+			}
 		});
 	}
 }

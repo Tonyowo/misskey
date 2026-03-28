@@ -981,6 +981,29 @@ export class ChatService {
 	}
 
 	@bindThis
+	public async getRoomInvitationsWithPagination(actorId: MiUser['id'], roomId: MiChatRoom['id'], limit: number, sinceId?: MiChatRoomInvitation['id'] | null, untilId?: MiChatRoomInvitation['id'] | null) {
+		const room = await this.chatRoomsRepository.findOneByOrFail({ id: roomId });
+		const actorRole = await this.getRoomActorRole(room, actorId);
+		if (!(await this.canInviteToRoom(room, actorId))) {
+			throw new Error('forbidden');
+		}
+
+		const query = this.queryService.makePaginationQuery(this.chatRoomInvitationsRepository.createQueryBuilder('invitation'), sinceId, untilId)
+			.andWhere('invitation.roomId = :roomId', { roomId })
+			.andWhere('invitation.revokedAt IS NULL')
+			.andWhere(new Brackets((qb) => {
+				qb.where('invitation.expiresAt IS NULL')
+					.orWhere('invitation.expiresAt > :now', { now: new Date() });
+			}));
+
+		if (actorRole !== 'owner' && actorRole !== 'admin') {
+			query.andWhere('invitation.createdById = :actorId', { actorId });
+		}
+
+		return await query.take(limit).getMany();
+	}
+
+	@bindThis
 	public async createRoomJoinRequest(requesterId: MiUser['id'], roomId: MiChatRoom['id'], message?: string | null) {
 		const room = await this.chatRoomsRepository.findOneByOrFail({ id: roomId });
 
@@ -1403,7 +1426,14 @@ export class ChatService {
 	public async revokeRoomInvitation(actorId: MiUser['id'], invitationId: MiChatRoomInvitation['id']) {
 		const invitation = await this.chatRoomInvitationsRepository.findOneByOrFail({ id: invitationId });
 		const room = await this.chatRoomsRepository.findOneByOrFail({ id: invitation.roomId });
-		if (!(await this.canInviteToRoom(room, actorId))) {
+		const actorRole = await this.getRoomActorRole(room, actorId);
+		if (actorRole == null) {
+			throw new Error('forbidden');
+		}
+		if (!this.hasRoomPermissionByRole(room, actorRole, 'invite')) {
+			throw new Error('forbidden');
+		}
+		if (actorRole !== 'owner' && actorRole !== 'admin' && invitation.createdById !== actorId) {
 			throw new Error('forbidden');
 		}
 
