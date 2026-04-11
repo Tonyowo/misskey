@@ -65,22 +65,14 @@ const discoverabilityLabel = computed(() => {
 	display: block;
 	text-decoration: none;
 	border-radius: 18px;
-	background:
-		radial-gradient(circle at top right, color(from var(--MI_THEME-accent) srgb r g b / 0.12), transparent 38%),
-		linear-gradient(
-			180deg,
-			color-mix(in srgb, var(--MI_THEME-panel) 96%, var(--MI_THEME-bg) 4%),
-			color-mix(in srgb, var(--MI_THEME-panel) 88%, var(--MI_THEME-bg) 12%)
-		);
+	background: color-mix(in srgb, var(--MI_THEME-panel) 96%, var(--MI_THEME-bg) 4%);
 	border: 1px solid color-mix(in srgb, var(--MI_THEME-divider) 72%, transparent);
-	box-shadow: 0 10px 24px color(from var(--MI_THEME-shadow) srgb r g b / 0.10);
-	transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+	transition: background 0.18s ease, border-color 0.18s ease;
 
 	&:hover {
 		text-decoration: none;
-		transform: translateY(-1px);
+		background: color-mix(in srgb, var(--MI_THEME-panel) 92%, var(--MI_THEME-bg) 8%);
 		border-color: color-mix(in srgb, var(--MI_THEME-accent) 24%, var(--MI_THEME-divider));
-		box-shadow: 0 14px 30px color(from var(--MI_THEME-shadow) srgb r g b / 0.14);
 	}
 }
 

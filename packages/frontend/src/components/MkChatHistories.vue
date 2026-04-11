@@ -329,14 +329,14 @@ watch(() => props.filter, () => {
 	gap: 16px;
 	padding: 16px 18px;
 	border: 1px solid color-mix(in srgb, var(--MI_THEME-divider) 72%, transparent);
-	transition: border-color 0.18s ease, background 0.18s ease, transform 0.18s ease;
+	transition: border-color 0.18s ease, background 0.18s ease;
 	content-visibility: auto;
 	contain-intrinsic-size: 92px;
 
 	&:hover {
 		text-decoration: none;
-		transform: translateY(-1px);
 		border-color: color(from var(--MI_THEME-accent) srgb r g b / 0.22);
+		background: color-mix(in srgb, var(--MI_THEME-panel) 92%, var(--MI_THEME-bg) 8%);
 	}
 
 	&.isUnread {

@@ -6,20 +6,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 <template>
 <div class="_gaps">
 	<section :class="$style.hero">
-		<div :class="$style.heroActions">
+		<div v-if="$i.policies.chatAvailability !== 'unavailable' && hasUnreadHistories" :class="$style.heroActions">
 			<MkButton
-				v-if="$i.policies.chatAvailability === 'available'"
-				primary
-				gradate
-				rounded
-				:class="$style.startButton"
-				@click="startUser"
-			>
-				<i class="ti ti-user-plus"></i> {{ i18n.ts._chat.individualChat }}
-			</MkButton>
-
-			<MkButton
-				v-if="$i.policies.chatAvailability !== 'unavailable' && hasUnreadHistories"
 				rounded
 				@click="readAllChatMessages"
 			>
@@ -137,10 +125,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 		<MkChatHistories
 			:filter="currentFilter"
-			:emptyActionLabel="$i.policies.chatAvailability === 'available' ? i18n.ts._chat.individualChat : undefined"
 			:emptyDescription="i18n.ts._chat.noMessagesYet"
 			@stats="onHistoryStats"
-			@emptyAction="startUser"
 		/>
 	</MkFoldableSection>
 
@@ -159,7 +145,6 @@ import MkButton from '@/components/MkButton.vue';
 import { i18n } from '@/i18n.js';
 import { misskeyApi } from '@/utility/misskey-api.js';
 import { ensureSignin } from '@/i.js';
-import { useRouter } from '@/router.js';
 import * as os from '@/os.js';
 import { updateCurrentAccountPartial } from '@/accounts.js';
 import MkInput from '@/components/MkInput.vue';
@@ -171,8 +156,6 @@ import MkResult from '@/components/global/MkResult.vue';
 import { useGlobalEvent } from '@/events.js';
 
 const $i = ensureSignin();
-
-const router = useRouter();
 
 type ChatSummary = {
 	invitations: number;
@@ -254,17 +237,6 @@ const filterItems: { value: ChatConversationFilter; label: string }[] = [{
 
 let searchTimer: number | null = null;
 let searchSerial = 0;
-
-async function startUser() {
-	// TODO: localOnly は連合に対応したら消す
-	os.selectUser({ localOnly: true }).then(user => {
-		router.push('/chat/user/:userId', {
-			params: {
-				userId: user.id,
-			},
-		});
-	});
-}
 
 function roomMatchesQuery(room: Misskey.entities.ChatRoom, query: string) {
 	const normalized = query.trim().toLowerCase();
@@ -445,12 +417,6 @@ watch(searchQuery, (value) => {
 	gap: 10px;
 }
 
-.startButton {
-	margin: 0 auto;
-	width: min(100%, 320px);
-	min-width: min(100%, 220px);
-}
-
 .clearSearchButton {
 	display: grid;
 	place-items: center;
@@ -469,9 +435,7 @@ watch(searchQuery, (value) => {
 .groupInboxCard {
 	padding: 16px;
 	border-radius: 18px;
-	background:
-		radial-gradient(circle at top right, color(from var(--MI_THEME-accent) srgb r g b / 0.10), transparent 42%),
-		color-mix(in srgb, var(--MI_THEME-panel) 92%, var(--MI_THEME-bg) 8%);
+	background: color-mix(in srgb, var(--MI_THEME-panel) 96%, var(--MI_THEME-bg) 4%);
 	border: 1px solid color-mix(in srgb, var(--MI_THEME-divider) 78%, transparent);
 }
 
@@ -592,10 +556,6 @@ watch(searchQuery, (value) => {
 	.heroActions {
 		flex-direction: column;
 		align-items: stretch;
-	}
-
-	.startButton {
-		width: 100%;
 	}
 }
 
