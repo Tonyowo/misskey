@@ -94,7 +94,7 @@ const discoverabilityLabel = computed(() => {
 	width: 48px;
 	height: 48px;
 	flex-shrink: 0;
-	border-radius: 16px;
+	border-radius: 999px;
 	overflow: hidden;
 	box-shadow: 0 0 0 3px color(from var(--MI_THEME-panel) srgb r g b / 0.9);
 }

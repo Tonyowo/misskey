@@ -1059,7 +1059,7 @@ definePage(computed(() => {
 	width: 88px;
 	height: 88px;
 	margin: 0 auto;
-	border-radius: 28px;
+	border-radius: 999px;
 	overflow: hidden;
 	box-shadow:
 		0 0 0 1px color-mix(in srgb, var(--MI_THEME-divider) 72%, transparent),

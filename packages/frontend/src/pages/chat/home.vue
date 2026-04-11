@@ -5,7 +5,6 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 <template>
 <PageWithHeader v-model:tab="tab" :actions="headerActions" :tabs="headerTabs" :swipable="true">
-	<MkPolkadots v-if="tab === 'conversation'" accented :height="200" style="margin-bottom: -200px;"/>
 	<div class="_spacer" style="--MI_SPACER-w: 700px;">
 		<XHome v-if="tab === 'conversation'" @openGroups="openGroups"/>
 		<XGroups v-else-if="tab === 'groups'" :focusTarget="groupsFocusTarget"/>
@@ -19,7 +18,6 @@ import XHome from './home.home.vue';
 import XGroups from './home.groups.vue';
 import type { PageHeaderItem } from '@/types/page-header.js';
 import { definePage } from '@/page.js';
-import MkPolkadots from '@/components/MkPolkadots.vue';
 import { misskeyApi } from '@/utility/misskey-api.js';
 import { useGlobalEvent } from '@/events.js';
 

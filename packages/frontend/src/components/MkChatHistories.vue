@@ -210,7 +210,7 @@ watch(() => props.filter, () => {
 	height: 50px;
 	flex-shrink: 0;
 	margin: 0 16px 0 0;
-	border-radius: 16px;
+	border-radius: 999px;
 	overflow: hidden;
 	box-shadow: 0 0 0 2px color(from var(--MI_THEME-panel) srgb r g b / 0.92);
 }

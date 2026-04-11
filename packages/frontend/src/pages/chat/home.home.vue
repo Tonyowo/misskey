@@ -22,20 +22,28 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 	<MkButton v-if="searchQuery.length > 0" primary rounded @click="search">搜索</MkButton>
 
-	<div :class="$style.summaryGrid">
-		<button class="_button" :class="$style.summaryCard" @click="emit('openGroups', 'invitations')">
-			<div :class="$style.summaryLabel">邀请</div>
-			<div :class="$style.summaryValue">{{ summary.invitations }}</div>
-		</button>
-		<button class="_button" :class="$style.summaryCard" @click="emit('openGroups', 'requests')">
-			<div :class="$style.summaryLabel">我的申请</div>
-			<div :class="$style.summaryValue">{{ summary.myRequests }}</div>
-		</button>
-		<button class="_button" :class="$style.summaryCard" @click="emit('openGroups', 'approvals')">
-			<div :class="$style.summaryLabel">待审批</div>
-			<div :class="$style.summaryValue">{{ summary.pendingRequests }}</div>
-		</button>
-	</div>
+	<section v-if="groupInboxCount > 0" :class="$style.groupInboxCard">
+		<div :class="$style.groupInboxHeader">
+			<div>
+				<div :class="$style.groupInboxTitle">群聊待处理</div>
+				<div :class="$style.groupInboxMeta">有 {{ groupInboxCount }} 项群聊动态需要查看</div>
+			</div>
+			<MkButton rounded small @click="emit('openGroups', primaryGroupInboxTarget)">前往群聊</MkButton>
+		</div>
+
+		<div :class="$style.groupInboxChips">
+			<button
+				v-for="item in groupInboxItems"
+				:key="item.target"
+				class="_button"
+				:class="$style.groupInboxChip"
+				@click="emit('openGroups', item.target)"
+			>
+				<span>{{ item.label }}</span>
+				<span :class="$style.groupInboxBadge">{{ item.count }}</span>
+			</button>
+		</div>
+	</section>
 
 	<div :class="$style.filters">
 		<button
@@ -113,7 +121,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script lang="ts" setup>
-import { onActivated, onMounted, ref, watch } from 'vue';
+import { computed, onActivated, onMounted, ref, watch } from 'vue';
 import * as Misskey from 'misskey-js';
 import XMessage from './XMessage.vue';
 import XRoom from './XRoom.vue';
@@ -174,6 +182,21 @@ const historyStats = ref<ChatHistoryStats>({
 	direct: 0,
 	group: 0,
 });
+const groupInboxItems = computed(() => [{
+	label: '邀请',
+	count: summary.value.invitations,
+	target: 'invitations' as const,
+}, {
+	label: '我的申请',
+	count: summary.value.myRequests,
+	target: 'requests' as const,
+}, {
+	label: '待审批',
+	count: summary.value.pendingRequests,
+	target: 'approvals' as const,
+}].filter(item => item.count > 0));
+const groupInboxCount = computed(() => groupInboxItems.value.reduce((total, item) => total + item.count, 0));
+const primaryGroupInboxTarget = computed(() => groupInboxItems.value[0]?.target ?? 'invitations');
 
 const filterItems: { value: ChatConversationFilter; label: string }[] = [{
 	value: 'all',
@@ -335,7 +358,69 @@ watch(searchQuery, (value) => {
 	gap: 8px;
 }
 
-.summaryGrid,
+.groupInboxCard {
+	padding: 16px;
+	border-radius: 18px;
+	background:
+		radial-gradient(circle at top right, color(from var(--MI_THEME-accent) srgb r g b / 0.10), transparent 42%),
+		color-mix(in srgb, var(--MI_THEME-panel) 92%, var(--MI_THEME-bg) 8%);
+	border: 1px solid color-mix(in srgb, var(--MI_THEME-divider) 78%, transparent);
+}
+
+.groupInboxHeader {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 12px;
+}
+
+.groupInboxTitle {
+	font-size: 0.98rem;
+	font-weight: 700;
+}
+
+.groupInboxMeta {
+	margin-top: 4px;
+	font-size: 0.86rem;
+	color: color-mix(in srgb, var(--MI_THEME-fg) 68%, transparent);
+}
+
+.groupInboxChips {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	margin-top: 14px;
+}
+
+.groupInboxChip {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	padding: 8px 12px;
+	border-radius: 999px;
+	font-size: 0.88rem;
+	background: color-mix(in srgb, var(--MI_THEME-bg) 78%, var(--MI_THEME-panel) 22%);
+	border: 1px solid color-mix(in srgb, var(--MI_THEME-divider) 72%, transparent);
+	transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease;
+
+	&:hover {
+		color: var(--MI_THEME-accent);
+		background: color(from var(--MI_THEME-accent) srgb r g b / 0.10);
+		border-color: color(from var(--MI_THEME-accent) srgb r g b / 0.28);
+	}
+}
+
+.groupInboxBadge {
+	min-width: 22px;
+	padding: 2px 7px;
+	border-radius: 999px;
+	font-size: 0.78rem;
+	line-height: 1.2;
+	text-align: center;
+	background: color(from var(--MI_THEME-accent) srgb r g b / 0.12);
+	border: 1px solid color(from var(--MI_THEME-accent) srgb r g b / 0.24);
+}
+
 .overviewGrid {
 	display: grid;
 	grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -376,7 +461,6 @@ watch(searchQuery, (value) => {
 	border-color: color(from var(--MI_THEME-accent) srgb r g b / 0.28);
 }
 
-.summaryCard,
 .overviewCard {
 	padding: 16px;
 	border-radius: 18px;
@@ -387,13 +471,11 @@ watch(searchQuery, (value) => {
 	border: 1px solid color-mix(in srgb, var(--MI_THEME-divider) 78%, transparent);
 }
 
-.summaryLabel,
 .overviewLabel {
 	font-size: 0.9rem;
 	color: color-mix(in srgb, var(--MI_THEME-fg) 72%, transparent);
 }
 
-.summaryValue,
 .overviewValue {
 	margin-top: 8px;
 	font-size: 1.45rem;
@@ -420,9 +502,13 @@ watch(searchQuery, (value) => {
 }
 
 @container (max-width: 600px) {
-	.summaryGrid,
 	.overviewGrid {
 		grid-template-columns: 1fr;
+	}
+
+	.groupInboxHeader {
+		flex-direction: column;
+		align-items: stretch;
 	}
 }
 </style>

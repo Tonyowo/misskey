@@ -19,7 +19,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 		</button>
 		<div :class="$style.avatarMeta">
 			<div :class="$style.avatarTitle">群头像</div>
-			<div :class="$style.avatarHint">建议使用方形图片，保存后生效。</div>
+			<div :class="$style.avatarHint">建议使用方形图片，显示时会以圆形裁切。</div>
 			<div v-if="canEditAvatar" class="_buttons">
 				<MkButton rounded @click="openAvatarMenu">设置头像</MkButton>
 				<MkButton v-if="avatarFileId_ != null" rounded danger @click="removeAvatar">移除头像</MkButton>
@@ -502,7 +502,7 @@ async function revokeInviteLink(inviteLink: Misskey.entities.ChatRoomInviteLink)
 	width: 88px;
 	height: 88px;
 	flex-shrink: 0;
-	border-radius: 24px;
+	border-radius: 999px;
 	overflow: hidden;
 	background: color-mix(in srgb, var(--MI_THEME-panel) 72%, var(--MI_THEME-bg) 28%);
 	border: solid 1px color-mix(in srgb, var(--MI_THEME-divider) 72%, transparent);
