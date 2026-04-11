@@ -233,6 +233,7 @@ import { useRouter } from '@/router.js';
 import { useMutationObserver } from '@/composables/use-mutation-observer.js';
 import { useGlobalEvent } from '@/events.js';
 import { makeDateSeparatedTimelineComputedRef } from '@/utility/timeline-date-separate.js';
+import { canWriteInDirectChat } from './direct-chat-availability.js';
 
 const $i = ensureSignin();
 const router = useRouter();
@@ -264,11 +265,26 @@ const showIndicator = ref(false);
 const timelineEl = useTemplateRef('timelineEl');
 const timeline = makeDateSeparatedTimelineComputedRef(messages);
 const isJoinedRoom = computed(() => room.value?.isJoined ?? false);
-const canUseChatForm = computed(() => user.value != null || isJoinedRoom.value);
 const handledInviteCodeKey = ref<string | null>(null);
 const highlightedMessageId = ref<string | null>(null);
 const messageElements = new Map<string, HTMLElement>();
 let highlightTimeoutHandle = 0;
+const hasApprovalFromOtherUser = computed(() => {
+	const currentUserId = user.value?.id;
+	if (currentUserId == null) return false;
+	return messages.value.some(message => message.fromUserId === currentUserId);
+});
+const canUseChatForm = computed(() => {
+	if (user.value != null) {
+		return canWriteInDirectChat({
+			myChatAvailability: $i.policies.chatAvailability,
+			user: user.value,
+			hasApprovalFromOtherUser: hasApprovalFromOtherUser.value,
+		});
+	}
+
+	return $i.policies.chatAvailability === 'available' && isJoinedRoom.value;
+});
 const speakMuteNotice = computed(() => {
 	if (room.value?.isSpeakMuted !== true) return '';
 

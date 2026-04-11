@@ -16,7 +16,6 @@ SPDX-License-Identifier: AGPL-3.0-only
 				[$style.animate]: prefer.s.animation
 			}]"
 			:style="getTabStyle(t)"
-			@mousedown="(ev) => onTabMousedown(t, ev)"
 			@click="(ev) => onTabClick(t, ev)"
 		>
 			<div :class="$style.tabInner">
@@ -86,13 +85,6 @@ function getTabStyle(t: Tab) {
 		};
 	} else {
 		return {};
-	}
-}
-
-function onTabMousedown(tab: Tab, ev: MouseEvent): void {
-	// ユーザビリティの観点からmousedown時にはonClickは呼ばない
-	if (tab.key) {
-		emit('update:tab', tab.key);
 	}
 }
 
