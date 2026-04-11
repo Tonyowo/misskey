@@ -23,6 +23,7 @@ type ChatMessageLike = {
 	type?: string | null;
 	text?: string | null;
 	fileId?: string | null;
+	toRoomId?: string | null;
 	fromUser?: UserLike | null;
 	systemEvent?: ChatSystemEventLike | null;
 };
@@ -133,4 +134,8 @@ export function formatChatMessagePreviewText(message: ChatMessageLike): string {
 	if (text) return text;
 	if (message.fileId != null) return '发送了一个文件';
 	return '暂无内容';
+}
+
+export function shouldShowChatHistorySenderSubline(message: ChatMessageLike): boolean {
+	return message.toRoomId != null && message.fromUser != null && !isSystemChatMessage(message);
 }

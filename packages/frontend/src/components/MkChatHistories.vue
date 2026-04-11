@@ -70,7 +70,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 					><i class="ti ti-dots"></i></MkButton>
 				</div>
 			</header>
-			<div v-if="item.message.toRoom && item.message.fromUser" :class="$style.messageSubline">
+			<div v-if="shouldShowChatHistorySenderSubline(item.message)" :class="$style.messageSubline">
 				{{ item.message.fromUser.name ?? item.message.fromUser.username }}
 			</div>
 			<div :class="$style.messageBodyText">
@@ -94,7 +94,7 @@ import type { ChatConversationFilter, ChatHistoryItem, ChatHistoryStats } from '
 import { filterChatHistoryItems, getChatHistoryStats } from '@/pages/chat/history-items.js';
 import { emitChatHomeInvalidated, emitChatRoomUpdated } from '@/pages/chat/state.js';
 import { misskeyApi } from '@/utility/misskey-api.js';
-import { formatChatMessagePreviewText, isSystemChatMessage } from '@/utility/chat-system-event-text.js';
+import { formatChatMessagePreviewText, isSystemChatMessage, shouldShowChatHistorySenderSubline } from '@/utility/chat-system-event-text.js';
 import { i18n } from '@/i18n.js';
 import { ensureSignin } from '@/i.js';
 import { useGlobalEvent } from '@/events.js';
@@ -325,6 +325,7 @@ watch(() => props.filter, () => {
 .message {
 	position: relative;
 	display: flex;
+	align-items: flex-start;
 	gap: 16px;
 	padding: 16px 18px;
 	border: 1px solid color-mix(in srgb, var(--MI_THEME-divider) 72%, transparent);
