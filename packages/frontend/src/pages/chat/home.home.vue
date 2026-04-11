@@ -5,22 +5,50 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 <template>
 <div class="_gaps">
-	<MkButton v-if="$i.policies.chatAvailability === 'available'" primary gradate rounded :class="$style.start" @click="start"><i class="ti ti-plus"></i> 开始聊天</MkButton>
+	<section :class="$style.hero">
+		<div :class="$style.heroActions">
+			<MkButton
+				v-if="$i.policies.chatAvailability === 'available'"
+				primary
+				gradate
+				rounded
+				:class="$style.start"
+				@click="showStartMenu"
+			><i class="ti ti-plus"></i> {{ i18n.ts.startChat }}</MkButton>
 
-	<MkInfo v-else>{{ $i.policies.chatAvailability === 'readonly' ? i18n.ts._chat.chatIsReadOnlyForThisAccountOrServer : i18n.ts._chat.chatNotAvailableForThisAccountOrServer }}</MkInfo>
+			<MkButton
+				v-if="$i.policies.chatAvailability !== 'unavailable' && hasUnreadHistories"
+				rounded
+				@click="readAllChatMessages"
+			><i class="ti ti-checks"></i> {{ i18n.ts.readAllChatMessages }}</MkButton>
+		</div>
 
-	<MkAd :preferForms="['horizontal', 'horizontal-big']"/>
+		<MkInfo v-if="$i.policies.chatAvailability !== 'available'">
+			{{ $i.policies.chatAvailability === 'readonly' ? i18n.ts._chat.chatIsReadOnlyForThisAccountOrServer : i18n.ts._chat.chatNotAvailableForThisAccountOrServer }}
+		</MkInfo>
 
-	<MkInput
-		v-model="searchQuery"
-		placeholder="搜索消息"
-		type="search"
-		@enter="search"
-	>
-		<template #prefix><i class="ti ti-search"></i></template>
-	</MkInput>
-
-	<MkButton v-if="searchQuery.length > 0" primary rounded @click="search">搜索</MkButton>
+		<MkInput
+			v-model="searchQuery"
+			:ariaLabel="i18n.ts._chat.searchMessages"
+			:large="true"
+			:placeholder="i18n.ts._chat.searchMessages"
+			type="search"
+			@enter="triggerImmediateSearch"
+		>
+			<template #prefix><i class="ti ti-search"></i></template>
+			<template #suffix>
+				<button
+					v-if="searchMode"
+					type="button"
+					class="_button"
+					:class="$style.clearSearchButton"
+					@click.stop="clearSearch"
+				>
+					<i class="ti ti-x"></i>
+				</button>
+			</template>
+		</MkInput>
+	</section>
 
 	<section v-if="groupInboxCount > 0" :class="$style.groupInboxCard">
 		<div :class="$style.groupInboxHeader">
@@ -35,6 +63,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 			<button
 				v-for="item in groupInboxItems"
 				:key="item.target"
+				type="button"
 				class="_button"
 				:class="$style.groupInboxChip"
 				@click="emit('openGroups', item.target)"
@@ -45,12 +74,14 @@ SPDX-License-Identifier: AGPL-3.0-only
 		</div>
 	</section>
 
-	<div :class="$style.filters">
+	<div v-if="!searchMode" :class="$style.filters" role="toolbar" :aria-label="i18n.ts.filter">
 		<button
 			v-for="item in filterItems"
 			:key="item.value"
+			type="button"
 			class="_button"
 			:class="[$style.filterChip, currentFilter === item.value ? $style.filterChipActive : null]"
+			:aria-pressed="currentFilter === item.value"
 			@click="currentFilter = item.value"
 		>
 			<span>{{ item.label }}</span>
@@ -58,8 +89,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 		</button>
 	</div>
 
-	<MkFoldableSection v-if="searched">
-		<template #header>搜索结果</template>
+	<MkFoldableSection v-if="searchMode" persistKey="chat-home-search-results">
+		<template #header>{{ i18n.ts.searchResult }}</template>
 
 		<div class="_gaps_s">
 			<div v-if="searching">
@@ -68,7 +99,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 			<template v-else>
 				<section class="_gaps_s">
 					<div :class="$style.searchSectionHeader">
-						<span>消息结果</span>
+						<span>{{ i18n.ts._chat.messages }}</span>
 						<span :class="$style.searchSectionMeta">{{ searchResults.length }}</span>
 					</div>
 					<div v-if="searchResults.length > 0" class="_gaps_s">
@@ -81,7 +112,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 				<section class="_gaps_s">
 					<div :class="$style.searchSectionHeader">
-						<span>群聊结果</span>
+						<span>{{ i18n.ts._chat.roomChat }}</span>
 						<span :class="$style.searchSectionMeta">{{ groupSearchResults.length }}</span>
 					</div>
 					<div v-if="groupSearchResults.length > 0" class="_gaps_s">
@@ -89,43 +120,37 @@ SPDX-License-Identifier: AGPL-3.0-only
 					</div>
 					<MkResult v-else type="empty" text="没有找到相关群聊"/>
 				</section>
+
+				<MkResult v-if="searchResults.length === 0 && groupSearchResults.length === 0" type="empty" text="没有找到相关内容">
+					<MkButton rounded @click="clearSearch">{{ i18n.ts.clear }}</MkButton>
+				</MkResult>
 			</template>
 		</div>
 	</MkFoldableSection>
 
-	<MkFoldableSection v-if="summary.unreadConversations > 0">
-		<template #header>会话状态</template>
+	<MkFoldableSection v-else persistKey="chat-home-history">
+		<template #header>{{ i18n.ts._chat.history }}</template>
 
-		<div :class="$style.overviewGrid">
-			<div :class="$style.overviewCard">
-				<div :class="$style.overviewLabel">未读私聊</div>
-				<div :class="$style.overviewValue">{{ summary.unreadDirectConversations }}</div>
-			</div>
-			<div :class="$style.overviewCard">
-				<div :class="$style.overviewLabel">未读群聊</div>
-				<div :class="$style.overviewValue">{{ summary.unreadGroupConversations }}</div>
-			</div>
-			<div :class="$style.overviewCard">
-				<div :class="$style.overviewLabel">全部未读会话</div>
-				<div :class="$style.overviewValue">{{ summary.unreadConversations }}</div>
-			</div>
-		</div>
+		<MkChatHistories
+			:filter="currentFilter"
+			:emptyActionLabel="$i.policies.chatAvailability === 'available' ? i18n.ts.startChat : undefined"
+			:emptyDescription="i18n.ts._chat.noMessagesYet"
+			@stats="onHistoryStats"
+			@emptyAction="showStartMenu"
+		/>
 	</MkFoldableSection>
 
-	<MkFoldableSection>
-		<template #header>历史会话</template>
-
-		<MkChatHistories :filter="currentFilter" @stats="onHistoryStats"/>
-	</MkFoldableSection>
+	<MkAd :preferForms="['horizontal', 'horizontal-big']"/>
 </div>
 </template>
 
 <script lang="ts" setup>
-import { computed, onActivated, onMounted, ref, watch } from 'vue';
+import { computed, onActivated, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import * as Misskey from 'misskey-js';
 import XMessage from './XMessage.vue';
 import XRoom from './XRoom.vue';
 import type { ChatConversationFilter, ChatHistoryStats } from './history-items.js';
+import { emitChatHomeInvalidated } from './state.js';
 import MkButton from '@/components/MkButton.vue';
 import { i18n } from '@/i18n.js';
 import { misskeyApi } from '@/utility/misskey-api.js';
@@ -156,16 +181,25 @@ type ChatSummary = {
 	unreadGroupConversations: number;
 };
 
+const props = withDefaults(defineProps<{
+	filter?: ChatConversationFilter;
+	query?: string;
+}>(), {
+	filter: 'all',
+	query: '',
+});
+
 const emit = defineEmits<{
 	(ev: 'openGroups', target: 'invitations' | 'requests' | 'approvals'): void;
+	(ev: 'update:filter', value: ChatConversationFilter): void;
+	(ev: 'update:query', value: string): void;
 }>();
 
-const searchQuery = ref('');
-const searched = ref(false);
+const searchQuery = ref(props.query);
 const searching = ref(false);
 const searchResults = ref<Misskey.entities.ChatMessage[]>([]);
 const groupSearchResults = ref<Misskey.entities.ChatRoom[]>([]);
-const currentFilter = ref<ChatConversationFilter>('all');
+const currentFilter = ref<ChatConversationFilter>(props.filter);
 const summary = ref<ChatSummary>({
 	invitations: 0,
 	myRequests: 0,
@@ -182,8 +216,10 @@ const historyStats = ref<ChatHistoryStats>({
 	direct: 0,
 	group: 0,
 });
+const searchMode = computed(() => searchQuery.value.trim().length > 0);
+const hasUnreadHistories = computed(() => historyStats.value.unread > 0 || summary.value.unreadConversations > 0);
 const groupInboxItems = computed(() => [{
-	label: '邀请',
+	label: i18n.ts._chat.invitations,
 	count: summary.value.invitations,
 	target: 'invitations' as const,
 }, {
@@ -200,35 +236,42 @@ const primaryGroupInboxTarget = computed(() => groupInboxItems.value[0]?.target 
 
 const filterItems: { value: ChatConversationFilter; label: string }[] = [{
 	value: 'all',
-	label: '全部',
+	label: i18n.ts.all,
 }, {
 	value: 'unread',
-	label: '未读',
+	label: i18n.ts.unread,
 }, {
 	value: 'direct',
-	label: '私聊',
+	label: i18n.ts._chat.individualChat,
 }, {
 	value: 'group',
-	label: '群聊',
+	label: i18n.ts._chat.roomChat,
 }];
 
-function start(ev: PointerEvent) {
-	os.popupMenu([{
-		text: '单人聊天',
+let searchTimer: number | null = null;
+let searchSerial = 0;
+
+function buildStartMenu() {
+	return [{
+		text: i18n.ts._chat.individualChat,
 		caption: i18n.ts._chat.individualChat_description,
 		icon: 'ti ti-user',
-		action: () => { startUser(); },
-	}, { type: 'divider' }, {
-		type: 'parent',
-		text: '群聊',
+		action: () => { void startUser(); },
+	}, { type: 'divider' as const }, {
+		type: 'parent' as const,
+		text: i18n.ts._chat.roomChat,
 		caption: i18n.ts._chat.roomChat_description,
 		icon: 'ti ti-users-group',
 		children: [{
-			text: '创建群聊',
+			text: i18n.ts._chat.createRoom,
 			icon: 'ti ti-plus',
-			action: () => { createRoom(); },
+			action: () => { void createRoom(); },
 		}],
-	}], ev.currentTarget ?? ev.target);
+	}];
+}
+
+function showStartMenu(ev?: PointerEvent) {
+	os.popupMenu(buildStartMenu(), ev?.currentTarget ?? ev?.target ?? null);
 }
 
 async function startUser() {
@@ -244,7 +287,7 @@ async function startUser() {
 
 async function createRoom() {
 	const { canceled, result } = await os.inputText({
-		title: '群聊名称',
+		title: i18n.ts._chat.createRoom,
 		minLength: 1,
 	});
 	if (canceled) return;
@@ -271,17 +314,26 @@ async function fetchSummary() {
 	summary.value = await misskeyApi<ChatSummary>('chat/summary' as never, {} as never);
 }
 
-async function search() {
-	const query = searchQuery.value.trim();
+function clearSearchState() {
+	searching.value = false;
+	searchResults.value = [];
+	groupSearchResults.value = [];
+	searchSerial += 1;
+}
+
+function clearSearch() {
+	searchQuery.value = '';
+}
+
+async function runSearch(rawQuery = searchQuery.value) {
+	const query = rawQuery.trim();
 	if (query.length === 0) {
-		searched.value = false;
-		searchResults.value = [];
-		groupSearchResults.value = [];
+		clearSearchState();
 		return;
 	}
 
+	const serial = ++searchSerial;
 	searching.value = true;
-	searched.value = true;
 
 	try {
 		const [messages, discoverRooms, ownedRooms, joiningRooms] = await Promise.all([
@@ -296,6 +348,8 @@ async function search() {
 			misskeyApi('chat/rooms/owned', { limit: 50 }),
 			misskeyApi('chat/rooms/joining', { limit: 50 }),
 		]);
+
+		if (serial !== searchSerial) return;
 
 		const roomMap = new Map<string, Misskey.entities.ChatRoom>();
 		for (const ownedRoom of ownedRooms.filter(item => roomMatchesQuery(item, query))) {
@@ -317,8 +371,44 @@ async function search() {
 			return b.memberCount - a.memberCount;
 		});
 	} finally {
-		searching.value = false;
+		if (serial === searchSerial) {
+			searching.value = false;
+		}
 	}
+}
+
+function scheduleSearch() {
+	if (searchTimer != null) {
+		window.clearTimeout(searchTimer);
+	}
+
+	if (!searchMode.value) {
+		clearSearchState();
+		return;
+	}
+
+	searchTimer = window.setTimeout(() => {
+		searchTimer = null;
+		void runSearch();
+	}, 280);
+}
+
+function triggerImmediateSearch() {
+	if (searchTimer != null) {
+		window.clearTimeout(searchTimer);
+		searchTimer = null;
+	}
+
+	void runSearch();
+}
+
+async function readAllChatMessages() {
+	await os.apiWithDialog('chat/read-all', {});
+	updateCurrentAccountPartial({ hasUnreadChatMessages: false });
+	emitChatHomeInvalidated({
+		reason: 'chat-read-all-from-home',
+	});
+	await fetchSummary();
 }
 
 function onHistoryStats(stats: ChatHistoryStats) {
@@ -328,34 +418,87 @@ function onHistoryStats(stats: ChatHistoryStats) {
 onMounted(() => {
 	updateCurrentAccountPartial({ hasUnreadChatMessages: false });
 	void fetchSummary();
+	if (searchMode.value) {
+		void runSearch(searchQuery.value);
+	}
 });
 
 onActivated(() => {
 	void fetchSummary();
+	if (searchMode.value) {
+		void runSearch(searchQuery.value);
+	}
+});
+
+onBeforeUnmount(() => {
+	if (searchTimer != null) {
+		window.clearTimeout(searchTimer);
+	}
 });
 
 useGlobalEvent('chatHomeInvalidated', () => {
 	void fetchSummary();
+	if (searchMode.value) {
+		void runSearch(searchQuery.value);
+	}
+});
+
+watch(() => props.filter, (value) => {
+	if (value === currentFilter.value) return;
+	currentFilter.value = value;
+});
+
+watch(() => props.query, (value) => {
+	const nextValue = value ?? '';
+	if (nextValue === searchQuery.value) return;
+	searchQuery.value = nextValue;
+	if (nextValue.trim().length === 0) {
+		clearSearchState();
+	} else {
+		void runSearch(nextValue);
+	}
+});
+
+watch(currentFilter, (value) => {
+	emit('update:filter', value);
 });
 
 watch(searchQuery, (value) => {
-	if (value.trim().length === 0) {
-		searched.value = false;
-		searchResults.value = [];
-		groupSearchResults.value = [];
-	}
+	emit('update:query', value);
+	scheduleSearch();
 });
 </script>
 
 <style lang="scss" module>
+.hero {
+	display: grid;
+	gap: 14px;
+}
+
+.heroActions {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: center;
+	gap: 10px;
+}
+
 .start {
 	margin: 0 auto;
 }
 
-.filters {
-	display: flex;
-	flex-wrap: wrap;
-	gap: 8px;
+.clearSearchButton {
+	display: grid;
+	place-items: center;
+	width: 28px;
+	height: 28px;
+	border-radius: 999px;
+	color: color-mix(in srgb, var(--MI_THEME-fg) 66%, transparent);
+	transition: background 0.18s ease, color 0.18s ease;
+
+	&:hover {
+		color: var(--MI_THEME-fg);
+		background: color-mix(in srgb, var(--MI_THEME-bg) 70%, var(--MI_THEME-panel) 30%);
+	}
 }
 
 .groupInboxCard {
@@ -421,10 +564,10 @@ watch(searchQuery, (value) => {
 	border: 1px solid color(from var(--MI_THEME-accent) srgb r g b / 0.24);
 }
 
-.overviewGrid {
-	display: grid;
-	grid-template-columns: repeat(3, minmax(0, 1fr));
-	gap: 12px;
+.filters {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
 }
 
 .filterChip {
@@ -461,27 +604,6 @@ watch(searchQuery, (value) => {
 	border-color: color(from var(--MI_THEME-accent) srgb r g b / 0.28);
 }
 
-.overviewCard {
-	padding: 16px;
-	border-radius: 18px;
-	text-align: left;
-	background:
-		radial-gradient(circle at top right, color(from var(--MI_THEME-accent) srgb r g b / 0.10), transparent 42%),
-		color-mix(in srgb, var(--MI_THEME-panel) 92%, var(--MI_THEME-bg) 8%);
-	border: 1px solid color-mix(in srgb, var(--MI_THEME-divider) 78%, transparent);
-}
-
-.overviewLabel {
-	font-size: 0.9rem;
-	color: color-mix(in srgb, var(--MI_THEME-fg) 72%, transparent);
-}
-
-.overviewValue {
-	margin-top: 8px;
-	font-size: 1.45rem;
-	font-weight: 700;
-}
-
 .searchSectionHeader {
 	display: flex;
 	align-items: center;
@@ -501,14 +623,28 @@ watch(searchQuery, (value) => {
 	border-radius: 12px;
 }
 
-@container (max-width: 600px) {
-	.overviewGrid {
-		grid-template-columns: 1fr;
+@container (max-width: 720px) {
+	.heroActions {
+		flex-direction: column;
+		align-items: stretch;
 	}
 
+	.start {
+		width: 100%;
+	}
+}
+
+@container (max-width: 600px) {
 	.groupInboxHeader {
 		flex-direction: column;
 		align-items: stretch;
+	}
+
+	.filters {
+		flex-wrap: nowrap;
+		overflow-x: auto;
+		padding-bottom: 4px;
+		scrollbar-width: thin;
 	}
 }
 </style>

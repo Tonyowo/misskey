@@ -27,6 +27,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 			:list="id"
 			:min="min"
 			:max="max"
+			:aria-label="ariaLabel"
 			@focus="focused = true"
 			@blur="focused = false"
 			@keydown="onKeydown($event)"
@@ -70,6 +71,7 @@ const props = defineProps<{
 	disabled?: boolean;
 	pattern?: string;
 	placeholder?: string;
+	ariaLabel?: string;
 	autofocus?: boolean;
 	autocomplete?: string;
 	mfmAutocomplete?: boolean | SuggestionType[],
