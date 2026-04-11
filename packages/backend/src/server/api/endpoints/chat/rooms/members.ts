@@ -3,9 +3,8 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
-import { Inject, Injectable } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { Endpoint } from '@/server/api/endpoint-base.js';
-import { DI } from '@/di-symbols.js';
 import { ChatService } from '@/core/ChatService.js';
 import { ApiError } from '@/server/api/error.js';
 import { ChatEntityService } from '@/core/entities/ChatEntityService.js';
@@ -16,7 +15,7 @@ export const meta = {
 
 	requireCredential: true,
 
-	kind: 'write:chat',
+	kind: 'read:chat',
 
 	res: {
 		type: 'array',

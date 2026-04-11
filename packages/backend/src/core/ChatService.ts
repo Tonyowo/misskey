@@ -5,7 +5,7 @@
 
 import { Inject, Injectable } from '@nestjs/common';
 import * as Redis from 'ioredis';
-import { Brackets, EntityManager, IsNull, MoreThan } from 'typeorm';
+import { Brackets, EntityManager, In, IsNull, MoreThan } from 'typeorm';
 import { DI } from '@/di-symbols.js';
 import type { Config } from '@/config.js';
 import { QueueService } from '@/core/QueueService.js';
@@ -108,6 +108,18 @@ export class ChatService {
 		private customEmojiService: CustomEmojiService,
 		private moderationLogService: ModerationLogService,
 	) {
+	}
+
+	private getUserUnreadMarkerKey(userId: MiUser['id'], otherId: MiUser['id']) {
+		return `newUserChatMessageExists:${userId}:${otherId}`;
+	}
+
+	private getRoomUnreadMarkerKey(userId: MiUser['id'], roomId: MiChatRoom['id']) {
+		return `newRoomChatMessageExists:${userId}:${roomId}`;
+	}
+
+	private getUnreadConversationIndexKey(userId: MiUser['id']) {
+		return `newChatMessagesExists:${userId}`;
 	}
 
 	@bindThis
@@ -224,8 +236,8 @@ export class ChatService {
 
 		if (this.userEntityService.isLocalUser(toUser)) {
 			const redisPipeline = this.redisClient.pipeline();
-			redisPipeline.set(`newUserChatMessageExists:${toUser.id}:${fromUser.id}`, message.id);
-			redisPipeline.sadd(`newChatMessagesExists:${toUser.id}`, `user:${fromUser.id}`);
+			redisPipeline.set(this.getUserUnreadMarkerKey(toUser.id, fromUser.id), message.id);
+			redisPipeline.sadd(this.getUnreadConversationIndexKey(toUser.id), `user:${fromUser.id}`);
 			redisPipeline.exec();
 		}
 
@@ -242,7 +254,7 @@ export class ChatService {
 		// 3秒経っても既読にならなかったらイベント発行
 		if (this.userEntityService.isLocalUser(toUser)) {
 			setTimeout(async () => {
-				const marker = await this.redisClient.get(`newUserChatMessageExists:${toUser.id}:${fromUser.id}`);
+				const marker = await this.redisClient.get(this.getUserUnreadMarkerKey(toUser.id, fromUser.id));
 
 				if (marker == null) return; // 既読
 
@@ -301,8 +313,8 @@ export class ChatService {
 		for (const membership of membershipsOtherThanMe) {
 			if (membership.isMuted) continue;
 
-			redisPipeline.set(`newRoomChatMessageExists:${membership.userId}:${toRoom.id}`, message.id);
-			redisPipeline.sadd(`newChatMessagesExists:${membership.userId}`, `room:${toRoom.id}`);
+			redisPipeline.set(this.getRoomUnreadMarkerKey(membership.userId, toRoom.id), message.id);
+			redisPipeline.sadd(this.getUnreadConversationIndexKey(membership.userId), `room:${toRoom.id}`);
 		}
 		redisPipeline.exec();
 
@@ -310,7 +322,7 @@ export class ChatService {
 		setTimeout(async () => {
 			const redisPipeline = this.redisClient.pipeline();
 			for (const membership of membershipsOtherThanMe) {
-				redisPipeline.get(`newRoomChatMessageExists:${membership.userId}:${toRoom.id}`);
+				redisPipeline.get(this.getRoomUnreadMarkerKey(membership.userId, toRoom.id));
 			}
 			const markers = await redisPipeline.exec();
 			if (markers == null) throw new Error('redis error');
@@ -337,8 +349,8 @@ export class ChatService {
 		senderId: MiUser['id'],
 	): Promise<void> {
 		const redisPipeline = this.redisClient.pipeline();
-		redisPipeline.del(`newUserChatMessageExists:${readerId}:${senderId}`);
-		redisPipeline.srem(`newChatMessagesExists:${readerId}`, `user:${senderId}`);
+		redisPipeline.del(this.getUserUnreadMarkerKey(readerId, senderId));
+		redisPipeline.srem(this.getUnreadConversationIndexKey(readerId), `user:${senderId}`);
 		await redisPipeline.exec();
 	}
 
@@ -348,8 +360,8 @@ export class ChatService {
 		roomId: MiChatRoom['id'],
 	): Promise<void> {
 		const redisPipeline = this.redisClient.pipeline();
-		redisPipeline.del(`newRoomChatMessageExists:${readerId}:${roomId}`);
-		redisPipeline.srem(`newChatMessagesExists:${readerId}`, `room:${roomId}`);
+		redisPipeline.del(this.getRoomUnreadMarkerKey(readerId, roomId));
+		redisPipeline.srem(this.getUnreadConversationIndexKey(readerId), `room:${roomId}`);
 		await redisPipeline.exec();
 	}
 
@@ -357,9 +369,19 @@ export class ChatService {
 	public async readAllChatMessages(
 		readerId: MiUser['id'],
 	): Promise<void> {
+		const unreadEntries = await this.redisClient.smembers(this.getUnreadConversationIndexKey(readerId));
+
 		const redisPipeline = this.redisClient.pipeline();
-		// TODO: newUserChatMessageExists とか newRoomChatMessageExists も消したい(けどキーの列挙が必要になって面倒)
-		redisPipeline.del(`newChatMessagesExists:${readerId}`);
+		for (const unreadEntry of unreadEntries) {
+			const [type, targetId] = unreadEntry.split(':');
+			if (type === 'user' && targetId) {
+				redisPipeline.del(this.getUserUnreadMarkerKey(readerId, targetId));
+			} else if (type === 'room' && targetId) {
+				redisPipeline.del(this.getRoomUnreadMarkerKey(readerId, targetId));
+			}
+		}
+
+		redisPipeline.del(this.getUnreadConversationIndexKey(readerId));
 		await redisPipeline.exec();
 	}
 
@@ -457,48 +479,46 @@ export class ChatService {
 
 	@bindThis
 	public async userHistory(meId: MiUser['id'], limit: number): Promise<MiChatMessage[]> {
-		const history: MiChatMessage[] = [];
-
 		const mutingQuery = this.mutingsRepository.createQueryBuilder('muting')
 			.select('muting.muteeId')
 			.where('muting.muterId = :muterId', { muterId: meId });
 
-		for (let i = 0; i < limit; i++) {
-			const found = history.map(m => (m.fromUserId === meId) ? m.toUserId! : m.fromUserId!);
+		const latestPerConversation = await this.chatMessagesRepository.createQueryBuilder('message')
+			.select('MAX(message.id)', 'id')
+			.addSelect('CASE WHEN message."fromUserId" = :meId THEN message."toUserId" ELSE message."fromUserId" END', 'otherId')
+			.where(new Brackets(qb => {
+				qb
+					.where('message.fromUserId = :meId')
+					.orWhere('message.toUserId = :meId');
+			}))
+			.andWhere('message.toRoomId IS NULL')
+			.andWhere(`message.fromUserId NOT IN (${mutingQuery.getQuery()})`)
+			.andWhere(`message.toUserId NOT IN (${mutingQuery.getQuery()})`)
+			.setParameters({
+				meId,
+				...mutingQuery.getParameters(),
+			})
+			.groupBy('CASE WHEN message."fromUserId" = :meId THEN message."toUserId" ELSE message."fromUserId" END')
+			.orderBy('MAX(message.id)', 'DESC')
+			.limit(limit)
+			.getRawMany<{ id: string; otherId: string }>();
 
-			const query = this.chatMessagesRepository.createQueryBuilder('message')
-				.orderBy('message.id', 'DESC')
-				.where(new Brackets(qb => {
-					qb
-						.where('message.fromUserId = :meId', { meId: meId })
-						.orWhere('message.toUserId = :meId', { meId: meId });
-				}))
-				.andWhere('message.toRoomId IS NULL')
-				.andWhere(`message.fromUserId NOT IN (${ mutingQuery.getQuery() })`)
-				.andWhere(`message.toUserId NOT IN (${ mutingQuery.getQuery() })`);
-
-			if (found.length > 0) {
-				query.andWhere('message.fromUserId NOT IN (:...found)', { found: found });
-				query.andWhere('message.toUserId NOT IN (:...found)', { found: found });
-			}
-
-			query.setParameters(mutingQuery.getParameters());
-
-			const message = await query.getOne();
-
-			if (message) {
-				history.push(message);
-			} else {
-				break;
-			}
+		if (latestPerConversation.length === 0) {
+			return [];
 		}
 
-		return history;
+		const messages = await this.chatMessagesRepository.findBy({
+			id: In(latestPerConversation.map(row => row.id)),
+		});
+
+		const messageMap = new Map(messages.map(message => [message.id, message]));
+		return latestPerConversation
+			.map(row => messageMap.get(row.id))
+			.filter((message): message is MiChatMessage => message != null);
 	}
 
 	@bindThis
 	public async roomHistory(meId: MiUser['id'], limit: number): Promise<MiChatMessage[]> {
-		// TODO: 一回のクエリにまとめられるかも
 		const [memberRoomIds, ownedRoomIds] = await Promise.all([
 			this.chatRoomMembershipsRepository.findBy({
 				userId: meId,
@@ -508,35 +528,33 @@ export class ChatService {
 			}).then(xs => xs.map(x => x.id)),
 		]);
 
-		const roomIds = memberRoomIds.concat(ownedRoomIds);
+		const roomIds = [...new Set(memberRoomIds.concat(ownedRoomIds))];
 
 		if (memberRoomIds.length === 0 && ownedRoomIds.length === 0) {
 			return [];
 		}
 
-		const history: MiChatMessage[] = [];
+		const latestPerRoom = await this.chatMessagesRepository.createQueryBuilder('message')
+			.select('MAX(message.id)', 'id')
+			.addSelect('message."toRoomId"', 'roomId')
+			.where('message.toRoomId IN (:...roomIds)', { roomIds })
+			.groupBy('message."toRoomId"')
+			.orderBy('MAX(message.id)', 'DESC')
+			.limit(limit)
+			.getRawMany<{ id: string; roomId: string }>();
 
-		for (let i = 0; i < limit; i++) {
-			const found = history.map(m => m.toRoomId!);
-
-			const query = this.chatMessagesRepository.createQueryBuilder('message')
-				.orderBy('message.id', 'DESC')
-				.where('message.toRoomId IN (:...roomIds)', { roomIds });
-
-			if (found.length > 0) {
-				query.andWhere('message.toRoomId NOT IN (:...found)', { found: found });
-			}
-
-			const message = await query.getOne();
-
-			if (message) {
-				history.push(message);
-			} else {
-				break;
-			}
+		if (latestPerRoom.length === 0) {
+			return [];
 		}
 
-		return history;
+		const messages = await this.chatMessagesRepository.findBy({
+			id: In(latestPerRoom.map(row => row.id)),
+		});
+
+		const messageMap = new Map(messages.map(message => [message.id, message]));
+		return latestPerRoom
+			.map(row => messageMap.get(row.id))
+			.filter((message): message is MiChatMessage => message != null);
 	}
 
 	@bindThis
@@ -546,7 +564,7 @@ export class ChatService {
 		const redisPipeline = this.redisClient.pipeline();
 
 		for (const otherId of otherIds) {
-			redisPipeline.get(`newUserChatMessageExists:${userId}:${otherId}`);
+			redisPipeline.get(this.getUserUnreadMarkerKey(userId, otherId));
 		}
 
 		const markers = await redisPipeline.exec();
@@ -567,7 +585,7 @@ export class ChatService {
 		const redisPipeline = this.redisClient.pipeline();
 
 		for (const roomId of roomIds) {
-			redisPipeline.get(`newRoomChatMessageExists:${userId}:${roomId}`);
+			redisPipeline.get(this.getRoomUnreadMarkerKey(userId, roomId));
 		}
 
 		const markers = await redisPipeline.exec();
@@ -583,8 +601,39 @@ export class ChatService {
 
 	@bindThis
 	public async hasUnreadMessages(userId: MiUser['id']) {
-		const card = await this.redisClient.scard(`newChatMessagesExists:${userId}`);
+		const card = await this.redisClient.scard(this.getUnreadConversationIndexKey(userId));
 		return card > 0;
+	}
+
+	@bindThis
+	public async getUnreadConversationCount(userId: MiUser['id']) {
+		return await this.redisClient.scard(this.getUnreadConversationIndexKey(userId));
+	}
+
+	@bindThis
+	public async getChatSummary(userId: MiUser['id']) {
+		const [invitations, myRequests, joiningRooms, ownedRooms, pendingRequests, unreadConversations] = await Promise.all([
+			this.chatRoomInvitationsRepository.count({
+				where: [
+					{ userId, ignored: false, revokedAt: IsNull(), expiresAt: IsNull() },
+					{ userId, ignored: false, revokedAt: IsNull(), expiresAt: MoreThan(new Date()) },
+				],
+			}),
+			this.chatRoomJoinRequestsRepository.countBy({ userId }),
+			this.chatRoomMembershipsRepository.countBy({ userId }),
+			this.chatRoomsRepository.countBy({ ownerId: userId }),
+			this.getPendingRoomJoinRequestCount(userId),
+			this.getUnreadConversationCount(userId),
+		]);
+
+		return {
+			invitations,
+			myRequests,
+			joiningRooms,
+			ownedRooms,
+			pendingRequests,
+			unreadConversations,
+		};
 	}
 
 	@bindThis
@@ -650,8 +699,8 @@ export class ChatService {
 		// 未読フラグ削除
 		const redisPipeline = this.redisClient.pipeline();
 		for (const membership of memberships) {
-			redisPipeline.del(`newRoomChatMessageExists:${membership.userId}:${room.id}`);
-			redisPipeline.srem(`newChatMessagesExists:${membership.userId}`, `room:${room.id}`);
+			redisPipeline.del(this.getRoomUnreadMarkerKey(membership.userId, room.id));
+			redisPipeline.srem(this.getUnreadConversationIndexKey(membership.userId), `room:${room.id}`);
 		}
 		await redisPipeline.exec();
 
@@ -1310,8 +1359,8 @@ export class ChatService {
 
 		// 未読フラグを消す (「既読にする」というわけでもないのでreadメソッドは使わないでおく)
 		const redisPipeline = this.redisClient.pipeline();
-		redisPipeline.del(`newRoomChatMessageExists:${userId}:${roomId}`);
-		redisPipeline.srem(`newChatMessagesExists:${userId}`, `room:${roomId}`);
+		redisPipeline.del(this.getRoomUnreadMarkerKey(userId, roomId));
+		redisPipeline.srem(this.getUnreadConversationIndexKey(userId), `room:${roomId}`);
 		await redisPipeline.exec();
 
 		await this.createRoomSystemMessage(userId, roomId, {
@@ -1463,8 +1512,8 @@ export class ChatService {
 		await this.chatRoomMembershipsRepository.delete(targetMembership.id);
 
 		const redisPipeline = this.redisClient.pipeline();
-		redisPipeline.del(`newRoomChatMessageExists:${userId}:${roomId}`);
-		redisPipeline.srem(`newChatMessagesExists:${userId}`, `room:${roomId}`);
+		redisPipeline.del(this.getRoomUnreadMarkerKey(userId, roomId));
+		redisPipeline.srem(this.getUnreadConversationIndexKey(userId), `room:${roomId}`);
 		await redisPipeline.exec();
 
 		await this.createRoomSystemMessage(actorId, roomId, {
@@ -1507,8 +1556,8 @@ export class ChatService {
 		});
 
 		const redisPipeline = this.redisClient.pipeline();
-		redisPipeline.del(`newRoomChatMessageExists:${userId}:${roomId}`);
-		redisPipeline.srem(`newChatMessagesExists:${userId}`, `room:${roomId}`);
+		redisPipeline.del(this.getRoomUnreadMarkerKey(userId, roomId));
+		redisPipeline.srem(this.getUnreadConversationIndexKey(userId), `room:${roomId}`);
 		await redisPipeline.exec();
 
 		await this.createRoomSystemMessage(actorId, roomId, {

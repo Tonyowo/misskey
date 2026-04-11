@@ -4,9 +4,9 @@ SPDX-License-Identifier: AGPL-3.0-only
 -->
 
 <template>
-<div v-if="history.length > 0" class="_gaps_s">
+<div v-if="filteredHistory.length > 0" class="_gaps_s">
 	<MkA
-		v-for="item in history"
+		v-for="item in filteredHistory"
 		:key="item.id"
 		:class="[$style.message, { [$style.isMe]: item.isMe, [$style.isRead]: item.message.isRead }]"
 		class="_panel"
@@ -28,27 +28,31 @@ SPDX-License-Identifier: AGPL-3.0-only
 		</div>
 	</MkA>
 </div>
-<MkResult v-if="!initializing && history.length == 0" type="empty" :text="i18n.ts._chat.noHistory"/>
+<MkResult v-if="!initializing && filteredHistory.length == 0" type="empty" :text="i18n.ts._chat.noHistory"/>
 <MkLoading v-if="initializing"/>
 </template>
 
 <script lang="ts" setup>
-import { onActivated, onDeactivated, onMounted, ref } from 'vue';
-import * as Misskey from 'misskey-js';
+import { onActivated, onDeactivated, onMounted, ref, watch } from 'vue';
 import { useInterval } from '@@/js/use-interval.js';
+import type { ChatConversationFilter, ChatHistoryItem } from '@/pages/chat/history-items.js';
+import { filterChatHistoryItems } from '@/pages/chat/history-items.js';
 import { misskeyApi } from '@/utility/misskey-api.js';
 import { formatChatMessagePreviewText, isSystemChatMessage } from '@/utility/chat-system-event-text.js';
 import { i18n } from '@/i18n.js';
 import { ensureSignin } from '@/i.js';
+import { useGlobalEvent } from '@/events.js';
 
 const $i = ensureSignin();
 
-const history = ref<{
-	id: string;
-	message: Misskey.entities.ChatMessage;
-	other: Misskey.entities.ChatMessage['fromUser'] | Misskey.entities.ChatMessage['toUser'] | null;
-	isMe: boolean;
-}[]>([]);
+const props = withDefaults(defineProps<{
+	filter?: ChatConversationFilter;
+}>(), {
+	filter: 'all',
+});
+
+const conversationItems = ref<ChatHistoryItem[]>([]);
+const filteredHistory = ref<ChatHistoryItem[]>([]);
 
 const initializing = ref(true);
 const fetching = ref(false);
@@ -63,7 +67,7 @@ async function fetchHistory() {
 		misskeyApi('chat/history', { room: true }),
 	]);
 
-	history.value = [...userMessages, ...roomMessages]
+	conversationItems.value = [...userMessages, ...roomMessages]
 		.toSorted((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
 		.map(m => ({
 			id: m.id,
@@ -71,9 +75,14 @@ async function fetchHistory() {
 			other: (!('room' in m) || m.room == null) ? (m.fromUserId === $i.id ? m.toUser : m.fromUser) : null,
 			isMe: m.fromUserId === $i.id,
 		}));
+	filteredHistory.value = filterChatHistoryItems(conversationItems.value, props.filter);
 
 	fetching.value = false;
 	initializing.value = false;
+}
+
+function applyFilter() {
+	filteredHistory.value = filterChatHistoryItems(conversationItems.value, props.filter);
 }
 
 let isActivated = true;
@@ -87,21 +96,43 @@ onDeactivated(() => {
 });
 
 useInterval(() => {
-	// TODO: DOM的にバックグラウンドになっていないかどうかも考慮する
+	// Prefer event-driven refreshes; keep a low-frequency poll as a safety net.
 	if (!window.document.hidden && isActivated) {
-		fetchHistory();
+		void fetchHistory();
 	}
-}, 1000 * 10, {
+}, 1000 * 30, {
 	immediate: false,
 	afterMounted: true,
 });
 
+useGlobalEvent('chatHomeInvalidated', () => {
+	void fetchHistory();
+});
+
+useGlobalEvent('chatRoomUpdated', ({ roomId, patch }) => {
+	conversationItems.value = conversationItems.value.map(item => item.message.toRoomId === roomId ? {
+		...item,
+		message: {
+			...item.message,
+			toRoom: item.message.toRoom ? {
+				...item.message.toRoom,
+				...patch,
+			} : item.message.toRoom,
+		},
+	} : item);
+	applyFilter();
+});
+
 onActivated(() => {
-	fetchHistory();
+	void fetchHistory();
 });
 
 onMounted(() => {
-	fetchHistory();
+	void fetchHistory();
+});
+
+watch(() => props.filter, () => {
+	applyFilter();
 });
 </script>
 

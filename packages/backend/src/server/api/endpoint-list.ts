@@ -467,4 +467,5 @@ export * as 'chat/rooms/requests/pending-count' from './endpoints/chat/rooms/req
 export * as 'chat/rooms/bans/list' from './endpoints/chat/rooms/bans/list.js';
 export * as 'chat/history' from './endpoints/chat/history.js';
 export * as 'chat/read-all' from './endpoints/chat/read-all.js';
+export * as 'chat/summary' from './endpoints/chat/summary.js';
 export * as 'v2/admin/emoji/list' from './endpoints/v2/admin/emoji/list.js';

@@ -177,6 +177,8 @@ import { migrateOldSettings } from '@/pref-migrate.js';
 import { hideAllTips as _hideAllTips, resetAllTips as _resetAllTips } from '@/tips.js';
 import { suggestReload } from '@/utility/reload-suggest.js';
 import { cloudBackup } from '@/preferences/utility.js';
+import { updateCurrentAccountPartial } from '@/accounts.js';
+import { emitChatHomeInvalidated } from '@/pages/chat/state.js';
 
 const $i = ensureSignin();
 
@@ -233,8 +235,12 @@ function hideAllTips() {
 	os.success();
 }
 
-function readAllChatMessages() {
-	os.apiWithDialog('chat/read-all', {});
+async function readAllChatMessages() {
+	await os.apiWithDialog('chat/read-all', {});
+	updateCurrentAccountPartial({ hasUnreadChatMessages: false });
+	emitChatHomeInvalidated({
+		reason: 'chat-read-all',
+	});
 }
 
 async function forceCloudBackup() {
