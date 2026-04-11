@@ -12,15 +12,19 @@ SPDX-License-Identifier: AGPL-3.0-only
 				primary
 				gradate
 				rounded
-				:class="$style.start"
-				@click="showStartMenu"
-			><i class="ti ti-plus"></i> {{ i18n.ts.startChat }}</MkButton>
+				:class="$style.startButton"
+				@click="startUser"
+			>
+				<i class="ti ti-user-plus"></i> {{ i18n.ts._chat.individualChat }}
+			</MkButton>
 
 			<MkButton
 				v-if="$i.policies.chatAvailability !== 'unavailable' && hasUnreadHistories"
 				rounded
 				@click="readAllChatMessages"
-			><i class="ti ti-checks"></i> {{ i18n.ts.readAllChatMessages }}</MkButton>
+			>
+				<i class="ti ti-checks"></i> {{ i18n.ts.readAllChatMessages }}
+			</MkButton>
 		</div>
 
 		<MkInfo v-if="$i.policies.chatAvailability !== 'available'">
@@ -133,10 +137,10 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 		<MkChatHistories
 			:filter="currentFilter"
-			:emptyActionLabel="$i.policies.chatAvailability === 'available' ? i18n.ts.startChat : undefined"
+			:emptyActionLabel="$i.policies.chatAvailability === 'available' ? i18n.ts._chat.individualChat : undefined"
 			:emptyDescription="i18n.ts._chat.noMessagesYet"
 			@stats="onHistoryStats"
-			@emptyAction="showStartMenu"
+			@emptyAction="startUser"
 		/>
 	</MkFoldableSection>
 
@@ -251,29 +255,6 @@ const filterItems: { value: ChatConversationFilter; label: string }[] = [{
 let searchTimer: number | null = null;
 let searchSerial = 0;
 
-function buildStartMenu() {
-	return [{
-		text: i18n.ts._chat.individualChat,
-		caption: i18n.ts._chat.individualChat_description,
-		icon: 'ti ti-user',
-		action: () => { void startUser(); },
-	}, { type: 'divider' as const }, {
-		type: 'parent' as const,
-		text: i18n.ts._chat.roomChat,
-		caption: i18n.ts._chat.roomChat_description,
-		icon: 'ti ti-users-group',
-		children: [{
-			text: i18n.ts._chat.createRoom,
-			icon: 'ti ti-plus',
-			action: () => { void createRoom(); },
-		}],
-	}];
-}
-
-function showStartMenu(ev?: PointerEvent) {
-	os.popupMenu(buildStartMenu(), ev?.currentTarget ?? ev?.target ?? null);
-}
-
 async function startUser() {
 	// TODO: localOnly は連合に対応したら消す
 	os.selectUser({ localOnly: true }).then(user => {
@@ -282,24 +263,6 @@ async function startUser() {
 				userId: user.id,
 			},
 		});
-	});
-}
-
-async function createRoom() {
-	const { canceled, result } = await os.inputText({
-		title: i18n.ts._chat.createRoom,
-		minLength: 1,
-	});
-	if (canceled) return;
-
-	const room = await misskeyApi('chat/rooms/create', {
-		name: result,
-	});
-
-	router.push('/chat/room/:roomId', {
-		params: {
-			roomId: room.id,
-		},
 	});
 }
 
@@ -482,8 +445,10 @@ watch(searchQuery, (value) => {
 	gap: 10px;
 }
 
-.start {
+.startButton {
 	margin: 0 auto;
+	width: min(100%, 320px);
+	min-width: min(100%, 220px);
 }
 
 .clearSearchButton {
@@ -629,7 +594,7 @@ watch(searchQuery, (value) => {
 		align-items: stretch;
 	}
 
-	.start {
+	.startButton {
 		width: 100%;
 	}
 }
