@@ -457,6 +457,7 @@ export * as 'chat/rooms/invite-links/create' from './endpoints/chat/rooms/invite
 export * as 'chat/rooms/invite-links/list' from './endpoints/chat/rooms/invite-links/list.js';
 export * as 'chat/rooms/invite-links/revoke' from './endpoints/chat/rooms/invite-links/revoke.js';
 export * as 'chat/rooms/invite-links/use' from './endpoints/chat/rooms/invite-links/use.js';
+export * as 'chat/rooms/discover' from './endpoints/chat/rooms/discover.js';
 export * as 'chat/rooms/requests/create' from './endpoints/chat/rooms/requests/create.js';
 export * as 'chat/rooms/requests/cancel' from './endpoints/chat/rooms/requests/cancel.js';
 export * as 'chat/rooms/requests/list' from './endpoints/chat/rooms/requests/list.js';

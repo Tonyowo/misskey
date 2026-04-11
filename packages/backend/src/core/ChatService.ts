@@ -1014,6 +1014,26 @@ export class ChatService {
 	}
 
 	@bindThis
+	public async getDiscoverableRoomsWithPagination(meId: MiUser['id'], limit: number, searchQuery?: string | null, sinceId?: MiChatRoom['id'] | null, untilId?: MiChatRoom['id'] | null) {
+		const query = this.queryService.makePaginationQuery(this.chatRoomsRepository.createQueryBuilder('room'), sinceId, untilId)
+			.leftJoinAndSelect('room.owner', 'owner')
+			.andWhere('room.discoverability = :discoverability', { discoverability: 'public' });
+
+		const normalizedQuery = searchQuery?.trim();
+		if (normalizedQuery) {
+			query.andWhere(new Brackets((qb) => {
+				qb.where('room.name ILIKE :search')
+					.orWhere('room.description ILIKE :search');
+			}), {
+				search: `%${sqlLikeEscape(normalizedQuery)}%`,
+			});
+		}
+
+		const rooms = await query.take(limit).getMany();
+		return rooms.filter(room => room.ownerId !== meId);
+	}
+
+	@bindThis
 	public async getReceivedRoomInvitationsWithPagination(userId: MiUser['id'], limit: number, sinceId?: MiChatRoomInvitation['id'] | null, untilId?: MiChatRoomInvitation['id'] | null) {
 		const query = this.queryService.makePaginationQuery(this.chatRoomInvitationsRepository.createQueryBuilder('invitation'), sinceId, untilId)
 			.andWhere('invitation.userId = :userId', { userId })

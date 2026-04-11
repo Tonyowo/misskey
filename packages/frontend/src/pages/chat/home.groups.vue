@@ -7,9 +7,19 @@ SPDX-License-Identifier: AGPL-3.0-only
 <div class="_gaps">
 	<div class="_buttons">
 		<MkButton primary rounded @click="createRoom"><i class="ti ti-plus"></i> 创建群聊</MkButton>
-		<MkButton rounded @click="showDiscoverPlaceholder"><i class="ti ti-compass"></i> 发现群聊</MkButton>
+		<MkButton rounded @click="toggleDiscover"><i class="ti ti-compass"></i> 发现群聊</MkButton>
 		<MkButton rounded @click="joinByLink"><i class="ti ti-link"></i> 通过链接加入</MkButton>
 	</div>
+
+	<section v-if="showDiscover" class="_gaps_s">
+		<h2 :class="$style.sectionTitle">发现群聊</h2>
+		<MkInfo>这里会展示公开可发现的群聊，你可以进入群页后直接加入或提交申请。</MkInfo>
+		<div v-if="discoverRooms.length > 0" class="_gaps_s">
+			<XRoom v-for="room in discoverRooms" :key="room.id" :room="room"/>
+		</div>
+		<MkResult v-else-if="!discoverFetching" type="empty" text="暂无可发现的公开群聊"/>
+		<MkLoading v-if="discoverFetching"/>
+	</section>
 
 	<div :class="$style.summaryGrid">
 		<button class="_button" :class="$style.summaryCard" @click="focusSection('invitations')">
@@ -129,10 +139,13 @@ const summary = ref<ChatSummary>({
 	unreadConversations: 0,
 });
 const roomFilter = ref<GroupFilter>('all');
+const showDiscover = ref(false);
 const ownedRooms = ref<Misskey.entities.ChatRoom[]>([]);
 const joiningMemberships = ref<Misskey.entities.ChatRoomMembership[]>([]);
 const invitations = ref<Misskey.entities.ChatRoomInvitation[]>([]);
 const requests = ref<Misskey.entities.ChatRoomJoinRequest[]>([]);
+const discoverRooms = ref<Misskey.entities.ChatRoom[]>([]);
+const discoverFetching = ref(false);
 const invitationSection = useTemplateRef('invitationSection');
 const requestSection = useTemplateRef('requestSection');
 
@@ -191,6 +204,25 @@ async function fetchSummary() {
 	summary.value = await misskeyApi<ChatSummary>('chat/summary' as never, {} as never);
 }
 
+async function fetchDiscoverRooms() {
+	discoverFetching.value = true;
+	try {
+		const rooms = await misskeyApi<Misskey.entities.ChatRoom[]>('chat/rooms/discover' as never, {
+			limit: 30,
+		} as never);
+
+		discoverRooms.value = rooms.filter(room => !room.isJoined);
+	} catch {
+		os.alert({
+			type: 'error',
+			title: '发现群聊',
+			text: '公开群列表加载失败，请稍后再试。',
+		});
+	} finally {
+		discoverFetching.value = false;
+	}
+}
+
 async function fetchAll() {
 	fetching.value = true;
 
@@ -246,11 +278,11 @@ async function createRoom() {
 	});
 }
 
-function showDiscoverPlaceholder() {
-	os.alert({
-		title: '发现群聊',
-		text: '第一阶段先预留入口，公开群发现将在后续版本补齐。',
-	});
+async function toggleDiscover() {
+	showDiscover.value = !showDiscover.value;
+	if (showDiscover.value && discoverRooms.value.length === 0) {
+		await fetchDiscoverRooms();
+	}
 }
 
 async function joinByLink() {
@@ -344,6 +376,10 @@ useGlobalEvent('chatRoomUpdated', ({ roomId, patch }) => {
 		...room,
 		...patch,
 	} : room);
+	discoverRooms.value = discoverRooms.value.map(room => room.id === roomId ? {
+		...room,
+		...patch,
+	} : room);
 	joiningMemberships.value = joiningMemberships.value.map(membership => applyChatRoomPatch(membership, {
 		roomId,
 		patch,
@@ -361,6 +397,9 @@ useGlobalEvent('chatRoomUpdated', ({ roomId, patch }) => {
 useGlobalEvent('chatRoomCollectionsInvalidated', (payload) => {
 	if (!shouldRefreshChatCollections(payload, ['joiningRooms', 'ownedRooms', 'myInvitations', 'myRequests', 'counts'])) return;
 	void fetchAll();
+	if (showDiscover.value) {
+		void fetchDiscoverRooms();
+	}
 });
 </script>
 

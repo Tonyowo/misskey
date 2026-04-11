@@ -753,7 +753,7 @@ const tab = ref('chat');
 
 const headerTabs = computed(() => room.value ? [{
 	key: 'chat',
-	title: '消息',
+	title: '聊天',
 	icon: 'ti ti-messages',
 }, ...(room.value.isJoined ? [{
 	key: 'members',
@@ -769,7 +769,7 @@ const headerTabs = computed(() => room.value ? [{
 	icon: 'ti ti-info-circle',
 }] : [{
 	key: 'chat',
-	title: '消息',
+	title: '聊天',
 	icon: 'ti ti-messages',
 }, {
 	key: 'search',
