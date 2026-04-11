@@ -21,7 +21,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 		<div v-if="searchResults.length > 0" class="_gaps_s">
 			<div v-for="message in searchResults" :key="message.id" :class="$style.searchResultItem">
-				<XMessage :message="message" :user="message.fromUser" :isSearchResult="true"/>
+				<XMessage :message="message" :isSearchResult="true"/>
 			</div>
 		</div>
 		<MkResult v-else type="notFound"/>
@@ -52,6 +52,7 @@ async function search() {
 		query: searchQuery.value,
 		roomId: props.roomId,
 		userId: props.userId,
+		limit: 20,
 	});
 
 	searchResults.value = res;

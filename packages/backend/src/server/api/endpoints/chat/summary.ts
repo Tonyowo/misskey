@@ -42,6 +42,14 @@ export const meta = {
 				type: 'integer',
 				optional: false, nullable: false,
 			},
+			unreadDirectConversations: {
+				type: 'integer',
+				optional: false, nullable: false,
+			},
+			unreadGroupConversations: {
+				type: 'integer',
+				optional: false, nullable: false,
+			},
 		},
 	},
 

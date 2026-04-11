@@ -611,8 +611,29 @@ export class ChatService {
 	}
 
 	@bindThis
+	public async getUnreadConversationBreakdown(userId: MiUser['id']) {
+		const entries = await this.redisClient.smembers(this.getUnreadConversationIndexKey(userId));
+		let unreadDirectConversations = 0;
+		let unreadGroupConversations = 0;
+
+		for (const entry of entries) {
+			if (entry.startsWith('user:')) {
+				unreadDirectConversations++;
+			} else if (entry.startsWith('room:')) {
+				unreadGroupConversations++;
+			}
+		}
+
+		return {
+			unreadDirectConversations,
+			unreadGroupConversations,
+			unreadConversations: unreadDirectConversations + unreadGroupConversations,
+		};
+	}
+
+	@bindThis
 	public async getChatSummary(userId: MiUser['id']) {
-		const [invitations, myRequests, joiningRooms, ownedRooms, pendingRequests, unreadConversations] = await Promise.all([
+		const [invitations, myRequests, joiningRooms, ownedRooms, pendingRequests, unreadBreakdown] = await Promise.all([
 			this.chatRoomInvitationsRepository.count({
 				where: [
 					{ userId, ignored: false, revokedAt: IsNull(), expiresAt: IsNull() },
@@ -623,7 +644,7 @@ export class ChatService {
 			this.chatRoomMembershipsRepository.countBy({ userId }),
 			this.chatRoomsRepository.countBy({ ownerId: userId }),
 			this.getPendingRoomJoinRequestCount(userId),
-			this.getUnreadConversationCount(userId),
+			this.getUnreadConversationBreakdown(userId),
 		]);
 
 		return {
@@ -632,7 +653,9 @@ export class ChatService {
 			joiningRooms,
 			ownedRooms,
 			pendingRequests,
-			unreadConversations,
+			unreadConversations: unreadBreakdown.unreadConversations,
+			unreadDirectConversations: unreadBreakdown.unreadDirectConversations,
+			unreadGroupConversations: unreadBreakdown.unreadGroupConversations,
 		};
 	}
 

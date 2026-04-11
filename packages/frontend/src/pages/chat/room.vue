@@ -7,9 +7,53 @@ SPDX-License-Identifier: AGPL-3.0-only
 <PageWithHeader v-model:tab="tab" :reversed="tab === 'chat'" :tabs="headerTabs" :actions="headerActions">
 	<div v-if="tab === 'chat'" class="_spacer" style="--MI_SPACER-w: 700px;">
 		<div class="_gaps">
-			<div v-if="!initializing && room?.isJoined && (room.announcement || pinnedMessage)" class="_gaps">
-				<MkInfo v-if="room.announcement">{{ room.announcement }}</MkInfo>
+			<div v-if="!initializing && (user != null || room?.isJoined)" :class="$style.contextCard">
+				<div v-if="user != null" :class="$style.contextHeader">
+					<MkAvatar :class="$style.contextAvatar" :user="user" :preview="false"/>
+					<div :class="$style.contextBody">
+						<div :class="$style.contextTitle">{{ user.name ?? user.username }}</div>
+						<div :class="$style.contextMeta">
+							<MkAcct :user="user"/>
+						</div>
+						<div :class="$style.contextBadges">
+							<span :class="$style.contextBadge">私聊</span>
+							<span v-if="userChatScopeLabel" :class="$style.contextBadge">{{ userChatScopeLabel }}</span>
+						</div>
+					</div>
+					<MkA :to="userProfilePath" :class="$style.contextLink">查看主页</MkA>
+				</div>
 
+				<div v-else-if="room != null" :class="$style.contextRoom">
+					<div :class="$style.contextHeader">
+						<div :class="$style.roomHeroAvatar">
+							<img v-if="room.avatarUrl" :src="room.avatarUrl" :class="$style.roomHeroAvatarImage" alt="">
+							<div v-else :class="$style.roomHeroAvatarFallback">
+								<i class="ti ti-users-group"></i>
+							</div>
+						</div>
+						<div :class="$style.contextBody">
+							<div :class="$style.contextTitle">{{ room.name }}</div>
+							<div :class="$style.contextMeta">
+								<span>群主 {{ room.owner.name ?? room.owner.username }}</span>
+								<span>{{ room.memberCount }} 人</span>
+							</div>
+							<div :class="$style.contextBadges">
+								<span :class="$style.contextBadge">{{ roomJoinPolicyLabel }}</span>
+								<span :class="$style.contextBadge">{{ roomDiscoverabilityLabel }}</span>
+								<span v-if="roomRoleLabel" :class="$style.contextBadge">{{ roomRoleLabel }}</span>
+							</div>
+						</div>
+					</div>
+					<div v-if="room.description" :class="$style.contextDescription">{{ room.description }}</div>
+					<MkFolder v-if="room.announcement" :defaultOpen="false" :canPage="false">
+						<template #icon><i class="ti ti-broadcast"></i></template>
+						<template #label>群公告</template>
+						<div :class="$style.announcementBody">{{ room.announcement }}</div>
+					</MkFolder>
+				</div>
+			</div>
+
+			<div v-if="!initializing && room?.isJoined && pinnedMessage" class="_gaps">
 				<div v-if="pinnedMessage" :class="$style.pinnedBox">
 					<div :class="$style.pinnedTitle"><i class="ti ti-pin"></i> 置顶消息</div>
 					<XMessage
@@ -97,13 +141,18 @@ SPDX-License-Identifier: AGPL-3.0-only
 					tag="div" class="_gaps"
 				>
 					<template v-for="item in timeline.toReversed()" :key="item.id">
-						<XMessage
+						<div
 							v-if="item.type === 'item'"
-							:message="item.data"
-							:allowPin="room?.canPinMessages ?? false"
-							:isPinned="room?.pinnedMessageId === item.data.id"
-							@togglePin="togglePinnedMessage"
-						/>
+							:ref="setMessageRef(item.data.id)"
+							:class="[$style.messageItem, highlightedMessageId === item.data.id ? $style.messageItemHighlighted : null]"
+						>
+							<XMessage
+								:message="item.data"
+								:allowPin="room?.canPinMessages ?? false"
+								:isPinned="room?.pinnedMessageId === item.data.id"
+								@togglePin="togglePinnedMessage"
+							/>
+						</div>
 						<div v-else-if="item.type === 'date'" :class="$style.dateDivider">
 							<span><i class="ti ti-chevron-up"></i> {{ item.nextText }}</span>
 							<span style="height: 1em; width: 1px; background: var(--MI_THEME-divider);"></span>
@@ -152,7 +201,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script lang="ts" setup>
-import { ref, useTemplateRef, computed, onMounted, onBeforeUnmount, onDeactivated, onActivated, watch } from 'vue';
+import { computed, nextTick, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, useTemplateRef, watch } from 'vue';
 import * as Misskey from 'misskey-js';
 import { getScrollContainer } from '@@/js/scroll.js';
 import XMessage from './XMessage.vue';
@@ -160,6 +209,12 @@ import XForm from './room.form.vue';
 import XSearch from './room.search.vue';
 import XMembers from './room.members.vue';
 import XInfo from './room.info.vue';
+import {
+	emitChatHomeInvalidated,
+	emitChatRoomCollectionsInvalidated,
+	emitChatRoomUpdated,
+} from './state.js';
+import type { ComponentPublicInstance } from 'vue';
 import type { MenuItem } from '@/types/menu.js';
 import type { PageHeaderItem } from '@/types/page-header.js';
 import * as os from '@/os.js';
@@ -171,16 +226,13 @@ import { misskeyApi } from '@/utility/misskey-api.js';
 import { definePage } from '@/page.js';
 import { prefer } from '@/preferences.js';
 import MkButton from '@/components/MkButton.vue';
+import MkFolder from '@/components/MkFolder.vue';
+import MkInfo from '@/components/MkInfo.vue';
+import MkAcct from '@/components/global/MkAcct.vue';
 import { useRouter } from '@/router.js';
 import { useMutationObserver } from '@/composables/use-mutation-observer.js';
-import MkInfo from '@/components/MkInfo.vue';
-import { makeDateSeparatedTimelineComputedRef } from '@/utility/timeline-date-separate.js';
 import { useGlobalEvent } from '@/events.js';
-import {
-	emitChatHomeInvalidated,
-	emitChatRoomCollectionsInvalidated,
-	emitChatRoomUpdated,
-} from './state.js';
+import { makeDateSeparatedTimelineComputedRef } from '@/utility/timeline-date-separate.js';
 
 const $i = ensureSignin();
 const router = useRouter();
@@ -189,6 +241,7 @@ const props = defineProps<{
 	userId?: string;
 	roomId?: string;
 	inviteCode?: string;
+	messageId?: string;
 }>();
 
 export type NormalizedChatMessage = Omit<Misskey.entities.ChatMessageLite, 'fromUser' | 'reactions'> & {
@@ -213,6 +266,9 @@ const timeline = makeDateSeparatedTimelineComputedRef(messages);
 const isJoinedRoom = computed(() => room.value?.isJoined ?? false);
 const canUseChatForm = computed(() => user.value != null || isJoinedRoom.value);
 const handledInviteCodeKey = ref<string | null>(null);
+const highlightedMessageId = ref<string | null>(null);
+const messageElements = new Map<string, HTMLElement>();
+let highlightTimeoutHandle = 0;
 const speakMuteNotice = computed(() => {
 	if (room.value?.isSpeakMuted !== true) return '';
 
@@ -225,6 +281,42 @@ const speakMuteNotice = computed(() => {
 	}
 
 	return parts.join(' ');
+});
+const roomJoinPolicyLabel = computed(() => {
+	switch (room.value?.joinPolicy) {
+		case 'public': return '公开加入';
+		case 'request_required': return '需申请';
+		case 'invite_only':
+		default: return '仅邀请';
+	}
+});
+const roomDiscoverabilityLabel = computed(() => {
+	switch (room.value?.discoverability) {
+		case 'public': return '公开可发现';
+		case 'unlisted': return '不公开';
+		case 'private':
+		default: return '私密';
+	}
+});
+const roomRoleLabel = computed(() => {
+	switch (room.value?.myRole) {
+		case 'owner': return '群主';
+		case 'admin': return '管理员';
+		default: return null;
+	}
+});
+const userChatScopeLabel = computed(() => {
+	switch (user.value?.chatScope) {
+		case 'followers': return '仅粉丝可私聊';
+		case 'following': return '仅关注可私聊';
+		case 'mutual': return '仅互关可私聊';
+		case 'none': return '暂不接受私聊';
+		default: return null;
+	}
+});
+const userProfilePath = computed(() => {
+	if (user.value == null) return '/chat';
+	return `/@${user.value.username}${user.value.host ? `@${user.value.host}` : ''}`;
 });
 
 const SCROLL_HEAD_THRESHOLD = 200;
@@ -255,6 +347,79 @@ function normalizeMessage(message: Misskey.entities.ChatMessageLite | Misskey.en
 			user: record.user ?? (message.fromUserId === $i.id ? user.value! : $i),
 		})),
 	};
+}
+
+function sortMessagesByTime(items: NormalizedChatMessage[]) {
+	return items.toSorted((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+}
+
+function belongsToCurrentContext(message: Misskey.entities.ChatMessage) {
+	if (props.roomId != null) {
+		return message.toRoomId === props.roomId;
+	}
+
+	if (props.userId != null) {
+		if (message.toRoomId != null) return false;
+		const otherUserId = message.fromUserId === $i.id ? message.toUserId : message.fromUserId;
+		return otherUserId === props.userId;
+	}
+
+	return false;
+}
+
+function highlightMessage(messageId: string) {
+	highlightedMessageId.value = messageId;
+	window.clearTimeout(highlightTimeoutHandle);
+	highlightTimeoutHandle = window.setTimeout(() => {
+		if (highlightedMessageId.value === messageId) {
+			highlightedMessageId.value = null;
+		}
+	}, 2600);
+}
+
+function setMessageRef(messageId: string) {
+	return (value: Element | ComponentPublicInstance | null) => {
+		if (value instanceof HTMLElement) {
+			messageElements.set(messageId, value);
+		} else {
+			messageElements.delete(messageId);
+		}
+	};
+}
+
+async function scrollToMessage(messageId: string) {
+	await nextTick();
+	const element = messageElements.get(messageId);
+	if (element == null) return;
+
+	tab.value = 'chat';
+	element.scrollIntoView({
+		behavior: 'smooth',
+		block: 'center',
+	});
+	highlightMessage(messageId);
+}
+
+async function ensureMessageVisible(messageId: string) {
+	if (!messageId) return;
+
+	const existing = messages.value.find(message => message.id === messageId);
+	if (existing != null) {
+		await scrollToMessage(messageId);
+		return;
+	}
+
+	try {
+		const message = await misskeyApi('chat/messages/show', {
+			messageId,
+		});
+		if (!belongsToCurrentContext(message)) return;
+
+		messages.value = sortMessagesByTime([...messages.value, normalizeMessage(message)]);
+		await scrollToMessage(messageId);
+	} catch {
+		// Keep the room usable even if the deep-linked message is unavailable.
+	}
 }
 
 async function initialize() {
@@ -387,6 +552,10 @@ async function initialize() {
 
 	initialized.value = true;
 	initializing.value = false;
+
+	if (props.messageId) {
+		await ensureMessageVisible(props.messageId);
+	}
 }
 
 let isActivated = true;
@@ -536,6 +705,7 @@ onActivated(() => {
 onBeforeUnmount(() => {
 	connection.value?.dispose();
 	window.document.removeEventListener('visibilitychange', onVisibilitychange);
+	window.clearTimeout(highlightTimeoutHandle);
 });
 
 async function inviteUser(onInvited?: (invitation: Misskey.entities.ChatRoomInvitation) => Promise<void> | void) {
@@ -790,6 +960,13 @@ const headerActions = computed<PageHeaderItem[]>(() => room.value && room.value.
 	handler: showMenu,
 }] : []);
 
+watch(() => [initialized.value, props.messageId] as const, ([ready, messageId]) => {
+	if (!ready || messageId == null) return;
+	void ensureMessageVisible(messageId);
+}, {
+	immediate: true,
+});
+
 watch(() => [room.value?.id, room.value?.isJoined, room.value?.pinnedMessageId] as const, () => {
 	loadPinnedMessage();
 }, {
@@ -915,6 +1092,83 @@ definePage(computed(() => {
 	justify-content: center;
 }
 
+.contextCard {
+	padding: 18px;
+	border-radius: 20px;
+	background:
+		radial-gradient(circle at top right, color(from var(--MI_THEME-accent) srgb r g b / 0.10), transparent 44%),
+		color-mix(in srgb, var(--MI_THEME-panel) 94%, var(--MI_THEME-bg) 6%);
+	border: 1px solid color-mix(in srgb, var(--MI_THEME-divider) 72%, transparent);
+	box-shadow: 0 10px 26px color(from var(--MI_THEME-shadow) srgb r g b / 0.08);
+}
+
+.contextHeader {
+	display: flex;
+	align-items: center;
+	gap: 14px;
+}
+
+.contextAvatar {
+	width: 56px;
+	height: 56px;
+}
+
+.contextBody {
+	min-width: 0;
+	flex: 1;
+}
+
+.contextTitle {
+	font-size: 1.08rem;
+	font-weight: 700;
+}
+
+.contextMeta {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 10px;
+	margin-top: 4px;
+	font-size: 0.9rem;
+	color: color-mix(in srgb, var(--MI_THEME-fg) 72%, transparent);
+}
+
+.contextBadges {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	margin-top: 10px;
+}
+
+.contextBadge {
+	padding: 6px 10px;
+	border-radius: 999px;
+	font-size: 0.78rem;
+	line-height: 1;
+	background: color-mix(in srgb, var(--MI_THEME-bg) 78%, var(--MI_THEME-panel) 22%);
+	border: 1px solid color-mix(in srgb, var(--MI_THEME-divider) 80%, transparent);
+}
+
+.contextLink {
+	padding: 8px 12px;
+	border-radius: 999px;
+	font-size: 0.85rem;
+	color: var(--MI_THEME-accent);
+	background: color(from var(--MI_THEME-accent) srgb r g b / 0.10);
+}
+
+.contextRoom {
+	display: grid;
+	gap: 14px;
+}
+
+.contextDescription,
+.announcementBody {
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+	font-size: 0.95rem;
+	line-height: 1.6;
+}
+
 .pinnedBox {
 	border: solid 1px var(--MI_THEME-divider);
 	border-radius: 18px;
@@ -935,6 +1189,18 @@ definePage(computed(() => {
 	margin: 0 auto;
 	width: 100%;
 	max-width: 700px;
+}
+
+.messageItem {
+	padding: 2px 0;
+	border-radius: 20px;
+	scroll-margin: 120px;
+	transition: background 0.22s ease, box-shadow 0.22s ease;
+}
+
+.messageItemHighlighted {
+	background: color(from var(--MI_THEME-accent) srgb r g b / 0.12);
+	box-shadow: 0 0 0 1px color(from var(--MI_THEME-accent) srgb r g b / 0.28);
 }
 
 .fade-enter-active, .fade-leave-active {

@@ -60,12 +60,16 @@ export const ROUTE_DEF = [{
 	path: '/chat/user/:userId',
 	component: chatPage(() => import('@/pages/chat/room.vue')),
 	loginRequired: true,
+	query: {
+		messageId: 'messageId',
+	},
 }, {
 	path: '/chat/room/:roomId',
 	component: chatPage(() => import('@/pages/chat/room.vue')),
 	loginRequired: true,
 	query: {
 		inviteCode: 'inviteCode',
+		messageId: 'messageId',
 	},
 }, {
 	path: '/chat/messages/:messageId',

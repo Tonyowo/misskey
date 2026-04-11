@@ -38,8 +38,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 		<div :class="$style.footer">
 			<button class="_textButton" style="color: currentColor;" @click="showMenu"><i class="ti ti-dots-circle-horizontal"></i></button>
 			<MkTime :class="$style.time" :time="message.createdAt"/>
-			<MkA v-if="isSearchResult && 'toRoom' in message && message.toRoom != null" :to="`/chat/room/${message.toRoomId}`">{{ message.toRoom.name }}</MkA>
-			<MkA v-if="isSearchResult && 'toUser' in message && message.toUser != null && isMe" :to="`/chat/user/${message.toUserId}`">@{{ message.toUser.username }}</MkA>
+			<MkA v-if="isSearchResult && searchResultTarget != null" :to="searchResultTarget">{{ searchResultLabel }}</MkA>
 		</div>
 		<TransitionGroup
 			:enterActiveClass="prefer.s.animation ? $style.transition_reaction_enterActive : ''"
@@ -67,7 +66,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 import { computed, provide } from 'vue';
 import * as mfm from 'mfm-js';
 import * as Misskey from 'misskey-js';
-import { url } from '@@/js/config.js';
+import { url as baseUrl } from '@@/js/config.js';
 import { isLink } from '@@/js/is-link.js';
 import type { MenuItem } from '@/types/menu.js';
 import type { NormalizedChatMessage } from './room.vue';
@@ -114,6 +113,33 @@ const showSenderHeader = computed(() => {
 	return !isMe.value && prefer.s['chat.showSenderName'];
 });
 const urls = computed(() => props.message.text && !isSystemMessage.value ? extractUrlFromMfm(mfm.parse(props.message.text)) : []);
+const searchResultTarget = computed(() => {
+	if (!props.isSearchResult) return null;
+
+	if ('toRoomId' in props.message && props.message.toRoomId != null) {
+		return `/chat/room/${props.message.toRoomId}?messageId=${encodeURIComponent(props.message.id)}`;
+	}
+
+	if (!('toUserId' in props.message) || props.message.toUserId == null) return null;
+
+	const otherUserId = props.message.fromUserId === $i.id ? props.message.toUserId : props.message.fromUserId;
+	return `/chat/user/${otherUserId}?messageId=${encodeURIComponent(props.message.id)}`;
+});
+const searchResultLabel = computed(() => {
+	if ('toRoom' in props.message && props.message.toRoom != null) {
+		return props.message.toRoom.name;
+	}
+
+	if ('toUser' in props.message && props.message.toUser != null && props.message.fromUserId === $i.id) {
+		return `@${props.message.toUser.username}`;
+	}
+
+	if (props.message.fromUser != null) {
+		return `@${props.message.fromUser.username}`;
+	}
+
+	return '查看原聊天';
+});
 
 provide(DI.mfmEmojiReactCallback, (reaction) => {
 	if ($i.policies.chatAvailability !== 'available' || isSystemMessage.value) return;
@@ -176,8 +202,8 @@ function showMenu(ev: PointerEvent, contextmenu = false) {
 		menu.push({
 			text: '回应',
 			icon: 'ti ti-mood-plus',
-			action: (ev) => {
-				react(ev);
+			action: (event) => {
+				react(event);
 			},
 		});
 
@@ -230,7 +256,7 @@ function showMenu(ev: PointerEvent, contextmenu = false) {
 			text: '举报',
 			icon: 'ti ti-exclamation-circle',
 			action: async () => {
-				const localUrl = `${url}/chat/messages/${props.message.id}`;
+				const localUrl = `${baseUrl}/chat/messages/${props.message.id}`;
 				const { dispose } = await os.popupAsyncWithDialog(import('@/components/MkAbuseReportWindow.vue').then(x => x.default), {
 					user: props.message.fromUser!,
 					initialComment: `${localUrl}\n-----\n`,

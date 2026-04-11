@@ -14,6 +14,13 @@ export type ChatHistoryItem = {
 	isMe: boolean;
 };
 
+export type ChatHistoryStats = {
+	all: number;
+	unread: number;
+	direct: number;
+	group: number;
+};
+
 export function filterChatHistoryItems(items: ChatHistoryItem[], filter: ChatConversationFilter): ChatHistoryItem[] {
 	switch (filter) {
 		case 'unread':
@@ -26,4 +33,13 @@ export function filterChatHistoryItems(items: ChatHistoryItem[], filter: ChatCon
 		default:
 			return items;
 	}
+}
+
+export function getChatHistoryStats(items: ChatHistoryItem[]): ChatHistoryStats {
+	return {
+		all: items.length,
+		unread: items.filter(item => !item.isMe && item.message.isRead !== true).length,
+		direct: items.filter(item => item.message.toRoomId == null).length,
+		group: items.filter(item => item.message.toRoomId != null).length,
+	};
 }
