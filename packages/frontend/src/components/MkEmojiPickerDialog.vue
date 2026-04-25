@@ -8,7 +8,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 	ref="modal"
 	v-slot="{ type, maxHeight }"
 	:zPriority="'middle'"
-	:preferType="prefer.s.emojiPickerStyle"
+	:preferType="preferType ?? prefer.s.emojiPickerStyle"
 	:hasInteractionWithOtherFocusTrappedEls="true"
 	:transparentBg="true"
 	:manualShowing="manualShowing"
@@ -42,9 +42,12 @@ import MkModal from '@/components/MkModal.vue';
 import MkEmojiPicker from '@/components/MkEmojiPicker.vue';
 import { prefer } from '@/preferences.js';
 
+type EmojiPickerStyle = 'auto' | 'popup' | 'drawer';
+
 const props = withDefaults(defineProps<{
 	manualShowing?: boolean | null;
 	anchorElement?: HTMLElement | null;
+	preferType?: EmojiPickerStyle | null;
 	showPinned?: boolean;
 	pinnedEmojis?: string[],
 	asReactionPicker?: boolean;
@@ -52,6 +55,7 @@ const props = withDefaults(defineProps<{
 	choseAndClose?: boolean;
 }>(), {
 	manualShowing: null,
+	preferType: null,
 	showPinned: true,
 	pinnedEmojis: undefined,
 	asReactionPicker: false,

@@ -8,6 +8,8 @@ import type { Ref } from 'vue';
 import { popup } from '@/os.js';
 import { prefer } from '@/preferences.js';
 
+type EmojiPickerStyle = 'auto' | 'popup' | 'drawer';
+
 /**
  * 絵文字ピッカーを表示する。
  * 類似の機能として{@link ReactionPicker}が存在しているが、この機能とは動きが異なる。
@@ -16,6 +18,7 @@ import { prefer } from '@/preferences.js';
  */
 class EmojiPicker {
 	private anchorElement: Ref<HTMLElement | null> = ref(null);
+	private preferType: Ref<EmojiPickerStyle | null> = ref(null);
 	private manualShowing = ref(false);
 	private onChosen?: (emoji: string) => void;
 	private onClosed?: () => void;
@@ -35,6 +38,7 @@ class EmojiPicker {
 
 		await popup(defineAsyncComponent(() => import('@/components/MkEmojiPickerDialog.vue')), {
 			anchorElement: this.anchorElement,
+			preferType: this.preferType,
 			pinnedEmojis: emojisRef,
 			asReactionPicker: false,
 			manualShowing: this.manualShowing,
@@ -48,6 +52,7 @@ class EmojiPicker {
 			},
 			closed: () => {
 				this.anchorElement.value = null;
+				this.preferType.value = null;
 				if (this.onClosed) this.onClosed();
 			},
 		});
@@ -57,8 +62,12 @@ class EmojiPicker {
 		anchorElement: HTMLElement,
 		onChosen?: EmojiPicker['onChosen'],
 		onClosed?: EmojiPicker['onClosed'],
+		options?: {
+			preferType?: EmojiPickerStyle;
+		},
 	) {
 		this.anchorElement.value = anchorElement;
+		this.preferType.value = options?.preferType ?? null;
 		this.manualShowing.value = true;
 		this.onChosen = onChosen;
 		this.onClosed = onClosed;

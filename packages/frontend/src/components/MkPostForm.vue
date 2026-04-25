@@ -1387,6 +1387,7 @@ async function insertEmoji(ev: PointerEvent) {
 				}
 			});
 		},
+		{ preferType: 'popup' },
 	);
 }
 
