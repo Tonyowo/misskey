@@ -5,10 +5,29 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 <template>
 <div
+	ref="rootEl"
 	:class="$style.root"
 	@dragover.stop="onDragover"
 	@drop.stop="onDrop"
 >
+	<Transition name="fade">
+		<div v-if="emojiPickerShown" :class="$style.emojiPanel">
+			<div :class="$style.emojiPanelHeader">
+				<span>选择表情</span>
+				<button class="_button" :class="$style.emojiPanelClose" type="button" @click="closeEmojiPicker({ focusEditor: true })">
+					<i class="ti ti-x"></i>
+				</button>
+			</div>
+			<MkEmojiPicker
+				ref="emojiPickerEl"
+				:class="$style.emojiPicker"
+				:showPinned="true"
+				:asDrawer="true"
+				:max-height="emojiPickerMaxHeight"
+				@chosen="onEmojiChosen"
+			/>
+		</div>
+	</Transition>
 	<MkPostFormTextEditor
 		ref="textEditorEl"
 		v-model="text"
@@ -16,6 +35,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 		class="_acrylic"
 		:placeholder="textareaPlaceholder"
 		:readonly="textareaReadOnly || isSpeakMuted"
+		@focus="onEditorFocus"
 		@keydown="onKeydown"
 		@paste="onPaste"
 	/>
@@ -23,7 +43,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 		<div v-if="file" :class="$style.file" @click="file = null">{{ file.name }}</div>
 		<div :class="$style.buttons">
 			<button class="_button" :class="$style.button" @click="chooseFile"><i class="ti ti-photo-plus"></i></button>
-			<button class="_button" :class="$style.button" @pointerdown.prevent="preserveTextSelection" @click="insertEmoji"><i class="ti ti-mood-happy"></i></button>
+			<button class="_button" :class="[$style.button, { [$style.activeButton]: emojiPickerShown }]" @pointerdown.prevent="preserveTextSelection" @click="toggleEmojiPicker"><i class="ti ti-mood-happy"></i></button>
 			<button class="_button" :class="[$style.button, $style.send]" :disabled="!canSend || sending" :title="sendButtonTitle" @click="send">
 				<template v-if="!sending"><i class="ti ti-send"></i></template><template v-if="sending"><MkLoading :em="true"/></template>
 			</button>
@@ -34,7 +54,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script lang="ts" setup>
-import { defineAsyncComponent, onMounted, watch, ref, shallowRef, computed, nextTick, onBeforeUnmount, useTemplateRef } from 'vue';
+import { onMounted, watch, ref, shallowRef, computed, nextTick, onBeforeUnmount, useTemplateRef } from 'vue';
 import * as Misskey from 'misskey-js';
 import { formatTimeString } from '@/utility/format-time-string.js';
 import { selectFile } from '@/utility/drive.js';
@@ -45,31 +65,40 @@ import { prefer } from '@/preferences.js';
 import { Autocomplete } from '@/utility/autocomplete.js';
 import { checkDragDataType, getDragData } from '@/drag-and-drop.js';
 import MkPostFormTextEditor from '@/components/MkPostFormTextEditor.vue';
+import MkEmojiPicker from '@/components/MkEmojiPicker.vue';
 
 const props = defineProps<{
 	user?: Misskey.entities.UserDetailed | null;
 	room?: Misskey.entities.ChatRoom | null;
 }>();
 
+const rootEl = useTemplateRef<HTMLElement>('rootEl');
 const textEditorEl = useTemplateRef<InstanceType<typeof MkPostFormTextEditor>>('textEditorEl');
+const emojiPickerEl = useTemplateRef<InstanceType<typeof MkEmojiPicker>>('emojiPickerEl');
 const fileEl = shallowRef<HTMLInputElement>();
 
 const text = ref<string>('');
 const file = ref<Misskey.entities.DriveFile | null>(null);
 const sending = ref(false);
 const textareaReadOnly = ref(false);
+const emojiPickerShown = ref(false);
 let autocompleteInstance: Autocomplete | null = null;
+let lastKeyboardScrollHandle = 0;
 
 const isSpeakMuted = computed(() => props.room?.isSpeakMuted ?? false);
 const canSend = computed(() => !isSpeakMuted.value && ((text.value != null && text.value !== '') || file.value != null));
 const textareaPlaceholder = computed(() => isSpeakMuted.value ? '你已被禁言，暂时无法发言' : '输入消息');
 const sendButtonTitle = computed(() => isSpeakMuted.value ? '你已被禁言，暂时无法发言' : '发送');
+const emojiPickerMaxHeight = computed(() => Math.min(260, Math.max(180, Math.round(window.innerHeight * 0.34))));
 
 function getDraftKey() {
 	return props.user ? 'user:' + props.user.id : 'room:' + props.room?.id;
 }
 
 watch([text, file], saveDraft);
+watch(text, () => {
+	keepComposerVisible();
+});
 
 async function onPaste(ev: ClipboardEvent) {
 	if (!ev.clipboardData) return;
@@ -175,6 +204,7 @@ function onKeydown(ev: KeyboardEvent) {
 }
 
 function chooseFile(ev: PointerEvent) {
+	closeEmojiPicker();
 	selectFile({
 		anchorElement: ev.currentTarget ?? ev.target,
 		multiple: false,
@@ -197,6 +227,7 @@ function onChangeFile() {
 async function send() {
 	if (!canSend.value) return;
 
+	closeEmojiPicker();
 	sending.value = true;
 
 	try {
@@ -230,6 +261,7 @@ async function send() {
 function clear() {
 	text.value = '';
 	file.value = null;
+	closeEmojiPicker();
 	deleteDraft();
 }
 
@@ -262,52 +294,85 @@ function getTextSelectionRange() {
 	};
 }
 
-async function insertEmoji(ev: MouseEvent) {
-	textareaReadOnly.value = true;
-	const target = ev.currentTarget ?? ev.target;
-	if (!(target instanceof HTMLElement)) {
-		textareaReadOnly.value = false;
+function insertTextAtSelection(insertedText: string, options?: { focusEditor?: boolean }) {
+	const selection = getTextSelectionRange();
+	const textBefore = text.value.substring(0, selection.start);
+	const textAfter = text.value.substring(selection.end);
+	const pos = selection.start + insertedText.length;
+	text.value = textBefore + insertedText + textAfter;
+
+	nextTick(() => {
+		if (textEditorEl.value) {
+			if (options?.focusEditor) {
+				textEditorEl.value.focus();
+			}
+			textEditorEl.value.setSelectionRange(pos, pos);
+		}
+	});
+}
+
+function onEmojiChosen(emoji: string) {
+	insertTextAtSelection(emoji);
+	keepComposerVisible();
+}
+
+function toggleEmojiPicker() {
+	if (emojiPickerShown.value) {
+		closeEmojiPicker({ focusEditor: true });
 		return;
 	}
 
-	const selection = getTextSelectionRange();
-	let pos = selection.start;
-	let posEnd = selection.end;
-	const { dispose } = os.popup(defineAsyncComponent(() => import('@/components/MkEmojiPickerDialog.vue')), {
-		anchorElement: target,
-		choseAndClose: true,
-	}, {
-		done: (emoji: string) => {
-			const textBefore = text.value.substring(0, pos);
-			const textAfter = text.value.substring(posEnd);
-			text.value = textBefore + emoji + textAfter;
-			pos += emoji.length;
-			posEnd = pos;
-		},
-		close: () => {
-			textareaReadOnly.value = false;
-		},
-		closed: () => {
-			dispose();
-			textareaReadOnly.value = false;
-			nextTick(() => {
-				if (textEditorEl.value) {
-					textEditorEl.value.focus();
-					textEditorEl.value.setSelectionRange(pos, posEnd);
-				}
-			});
-		},
+	preserveTextSelection();
+	emojiPickerShown.value = true;
+	textareaReadOnly.value = true;
+	textEditorEl.value?.blur();
+	nextTick(() => {
+		emojiPickerEl.value?.reset();
+		keepComposerVisible();
 	});
+}
+
+function closeEmojiPicker(options?: { focusEditor?: boolean }) {
+	if (!emojiPickerShown.value && !textareaReadOnly.value) return;
+	emojiPickerShown.value = false;
+	textareaReadOnly.value = false;
+	if (options?.focusEditor) {
+		nextTick(() => {
+			textEditorEl.value?.focus();
+		});
+	}
 }
 
 function preserveTextSelection() {
 	textEditorEl.value?.rememberSelection();
 }
 
+function keepComposerVisible() {
+	window.clearTimeout(lastKeyboardScrollHandle);
+	lastKeyboardScrollHandle = window.setTimeout(() => {
+		rootEl.value?.scrollIntoView({
+			block: 'nearest',
+			behavior: 'smooth',
+		});
+	}, 80);
+}
+
+function onEditorFocus() {
+	closeEmojiPicker();
+	keepComposerVisible();
+}
+
+function onVisualViewportChange() {
+	keepComposerVisible();
+}
+
 onMounted(() => {
 	if (textEditorEl.value != null) {
 		autocompleteInstance = new Autocomplete(textEditorEl.value.getAutocompleteTarget(), text);
 	}
+
+	window.visualViewport?.addEventListener('resize', onVisualViewportChange);
+	window.visualViewport?.addEventListener('scroll', onVisualViewportChange);
 
 	// 書きかけの投稿を復元
 	const draft = JSON.parse(miLocalStorage.getItem('chatMessageDrafts') || '{}')[getDraftKey()];
@@ -322,6 +387,9 @@ onBeforeUnmount(() => {
 		autocompleteInstance.detach();
 		autocompleteInstance = null;
 	}
+	window.clearTimeout(lastKeyboardScrollHandle);
+	window.visualViewport?.removeEventListener('resize', onVisualViewportChange);
+	window.visualViewport?.removeEventListener('scroll', onVisualViewportChange);
 });
 </script>
 
@@ -331,15 +399,17 @@ onBeforeUnmount(() => {
 	border-bottom: none;
 	border-radius: 14px 14px 0 0;
 	overflow: clip;
+	background: var(--MI_THEME-panel);
 }
 
 .editor {
 	cursor: auto;
 	display: block;
 	width: 100%;
-	min-height: 80px;
+	min-height: 72px;
+	max-height: min(32dvh, 180px);
 	margin: 0;
-	padding: 16px 16px 0 16px;
+	padding: 14px 16px 8px 16px;
 	font-size: 1em;
 	font-family: inherit;
 	outline: none;
@@ -351,10 +421,49 @@ onBeforeUnmount(() => {
 	overflow-y: auto;
 }
 
+.emojiPanel {
+	border-bottom: solid 0.5px var(--MI_THEME-divider);
+	background: var(--MI_THEME-panel);
+}
+
+.emojiPanelHeader {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 10px 12px 6px;
+	font-size: 0.85rem;
+	font-weight: 700;
+	color: color-mix(in srgb, var(--MI_THEME-fg) 72%, transparent);
+}
+
+.emojiPanelClose {
+	display: grid;
+	place-items: center;
+	width: 32px;
+	height: 32px;
+	border-radius: 999px;
+	color: color-mix(in srgb, var(--MI_THEME-fg) 70%, transparent);
+
+	&:hover {
+		color: var(--MI_THEME-fg);
+		background: var(--MI_THEME-panelHighlight);
+	}
+}
+
+.emojiPicker {
+	width: 100% !important;
+	height: min(34dvh, 260px) !important;
+	max-height: 260px;
+	box-shadow: none;
+	border-radius: 0;
+	background: var(--MI_THEME-panel);
+}
+
 .footer {
 	position: sticky;
 	bottom: 0;
 	background: var(--MI_THEME-panel);
+	padding-bottom: max(env(safe-area-inset-bottom, 0px), 0px);
 }
 
 .file {
@@ -369,11 +478,18 @@ onBeforeUnmount(() => {
 .button {
 	height: 50px;
 	aspect-ratio: 1;
+	border-radius: 10px;
 
 	&:hover {
 		color: var(--MI_THEME-accent);
 	}
 }
+
+.activeButton {
+	color: var(--MI_THEME-accent);
+	background: color(from var(--MI_THEME-accent) srgb r g b / 0.12);
+}
+
 .send {
 	margin-left: auto;
 	color: var(--MI_THEME-accent);
