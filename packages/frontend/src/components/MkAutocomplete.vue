@@ -62,6 +62,7 @@ import { miLocalStorage } from '@/local-storage.js';
 import { customEmojis } from '@/custom-emojis.js';
 import { searchEmoji, searchEmojiExact } from '@/utility/search-emoji.js';
 import { prefer } from '@/preferences.js';
+import { updateRecentlyUsedEmojis } from '@/utility/recently-used-emojis.js';
 
 export type CompleteInfo = {
 	user: {
@@ -204,10 +205,7 @@ function complete<T extends keyof CompleteInfo>(type: T, value: CompleteInfo[T][
 	emit('done', { type, value });
 	emit('closed');
 	if (type === 'emoji' || type === 'emojiComplete') {
-		let recents = store.s.recentlyUsedEmojis;
-		recents = recents.filter((emoji) => emoji !== value);
-		recents.unshift(value as string);
-		store.set('recentlyUsedEmojis', recents.splice(0, 32));
+		store.set('recentlyUsedEmojis', updateRecentlyUsedEmojis(store.s.recentlyUsedEmojis, value as string));
 	}
 }
 

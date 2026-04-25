@@ -100,6 +100,7 @@ import { $i } from '@/i.js';
 import { checkReactionPermissions } from '@/utility/check-reaction-permissions.js';
 import { prefer } from '@/preferences.js';
 import { haptic } from '@/utility/haptic.js';
+import { RECENTLY_USED_EMOJIS_VISIBLE_ROWS, updateRecentlyUsedEmojis } from '@/utility/recently-used-emojis.js';
 
 type PickerSection = {
 	key: string;
@@ -138,19 +139,21 @@ const {
 
 const recentlyUsedEmojis = store.r.recentlyUsedEmojis;
 
-const recentlyUsedEmojisDef = computed(() => {
-	return recentlyUsedEmojis.value.map(getDef);
-});
-
 const pinned = computed(() => props.pinnedEmojis ?? []);
 const size = computed(() => emojiPickerScale.value);
 const width = computed(() => emojiPickerWidth.value);
 const height = computed(() => emojiPickerHeight.value);
+const columns = computed(() => width.value + 4);
+const recentlyUsedEmojisDisplayLimit = computed(() => columns.value * RECENTLY_USED_EMOJIS_VISIBLE_ROWS);
+
+const recentlyUsedEmojisDef = computed(() => {
+	return recentlyUsedEmojis.value.slice(0, recentlyUsedEmojisDisplayLimit.value).map(getDef);
+});
 
 const customSections = computed<PickerSection[]>(() => {
 	return customEmojiCategories.value
 		.map(category => category ?? '')
-		.map(category => {
+		.map((category): PickerSection | null => {
 			const emojis = customEmojis.value.filter(emoji => filterCategory(emoji, category));
 			if (emojis.length === 0) return null;
 
@@ -187,7 +190,7 @@ const bottomSections = computed<PickerSection[]>(() => {
 	];
 });
 
-const totalNavSlots = computed(() => width.value + 4);
+const totalNavSlots = computed(() => columns.value);
 const activeSectionKey = ref<string>('');
 const currentPageIndex = ref(0);
 const pageTransitionDirection = ref<'forward' | 'backward'>('forward');
@@ -358,10 +361,7 @@ function chosen(emoji: string | Misskey.entities.EmojiSimple | UnicodeEmojiDef, 
 	haptic();
 
 	if (!pinned.value.includes(key)) {
-		let recents = store.s.recentlyUsedEmojis;
-		recents = recents.filter((emoji) => emoji !== key);
-		recents.unshift(key);
-		store.set('recentlyUsedEmojis', recents.splice(0, 32));
+		store.set('recentlyUsedEmojis', updateRecentlyUsedEmojis(store.s.recentlyUsedEmojis, key));
 	}
 }
 
