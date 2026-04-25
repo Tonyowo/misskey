@@ -295,6 +295,7 @@ function onEmojiButtonPointerDown(ev: PointerEvent) {
 				textEditorEl.value?.setSelectionRange(pos, posEnd);
 			});
 		},
+		{ preferType: 'popup' },
 	);
 }
 
