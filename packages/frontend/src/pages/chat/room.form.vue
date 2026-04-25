@@ -11,8 +11,29 @@ SPDX-License-Identifier: AGPL-3.0-only
 	@dragover.stop="onDragover"
 	@drop.stop="onDrop"
 >
+	<MkPostFormTextEditor
+		ref="textEditorEl"
+		v-model="text"
+		:class="$style.editor"
+		class="_acrylic"
+		:placeholder="textareaPlaceholder"
+		:readonly="textareaReadOnly || isSpeakMuted"
+		@focus="onEditorFocus"
+		@keydown="onKeydown"
+		@paste="onPaste"
+	/>
+	<footer :class="[$style.footer, { [$style.footerWithPanel]: isMobileEmojiPicker && emojiPickerShown }]">
+		<div v-if="file" :class="$style.file" @click="file = null">{{ file.name }}</div>
+		<div :class="$style.buttons">
+			<button class="_button" :class="$style.button" @click="chooseFile"><i class="ti ti-photo-plus"></i></button>
+			<button class="_button" :class="[$style.button, { [$style.activeButton]: isMobileEmojiPicker && emojiPickerShown }]" @pointerdown="onEmojiButtonPointerDown"><i class="ti ti-mood-happy"></i></button>
+			<button class="_button" :class="[$style.button, $style.send]" :disabled="!canSend || sending" :title="sendButtonTitle" @click="send">
+				<template v-if="!sending"><i class="ti ti-send"></i></template><template v-if="sending"><MkLoading :em="true"/></template>
+			</button>
+		</div>
+	</footer>
 	<Transition name="fade">
-		<div v-if="emojiPickerShown" :class="$style.emojiPanel" @pointerdown.prevent>
+		<div v-if="isMobileEmojiPicker && emojiPickerShown" :class="$style.emojiPanel">
 			<div :class="$style.emojiPanelHeader">
 				<span>选择表情</span>
 				<button class="_button" :class="$style.emojiPanelClose" type="button" @click="closeEmojiPicker({ focusEditor: true })">
@@ -29,27 +50,6 @@ SPDX-License-Identifier: AGPL-3.0-only
 			/>
 		</div>
 	</Transition>
-	<MkPostFormTextEditor
-		ref="textEditorEl"
-		v-model="text"
-		:class="$style.editor"
-		class="_acrylic"
-		:placeholder="textareaPlaceholder"
-		:readonly="textareaReadOnly || isSpeakMuted"
-		@focus="onEditorFocus"
-		@keydown="onKeydown"
-		@paste="onPaste"
-	/>
-	<footer :class="$style.footer">
-		<div v-if="file" :class="$style.file" @click="file = null">{{ file.name }}</div>
-		<div :class="$style.buttons">
-			<button class="_button" :class="$style.button" @click="chooseFile"><i class="ti ti-photo-plus"></i></button>
-			<button class="_button" :class="[$style.button, { [$style.activeButton]: emojiPickerShown }]" @pointerdown="onEmojiButtonPointerDown"><i class="ti ti-mood-happy"></i></button>
-			<button class="_button" :class="[$style.button, $style.send]" :disabled="!canSend || sending" :title="sendButtonTitle" @click="send">
-				<template v-if="!sending"><i class="ti ti-send"></i></template><template v-if="sending"><MkLoading :em="true"/></template>
-			</button>
-		</div>
-	</footer>
 	<input ref="fileEl" style="display: none;" type="file" @change="onChangeFile"/>
 </div>
 </template>
@@ -64,7 +64,9 @@ import { miLocalStorage } from '@/local-storage.js';
 import { misskeyApi } from '@/utility/misskey-api.js';
 import { prefer } from '@/preferences.js';
 import { Autocomplete } from '@/utility/autocomplete.js';
+import { emojiPicker } from '@/utility/emoji-picker.js';
 import { checkDragDataType, getDragData } from '@/drag-and-drop.js';
+import { deviceKind } from '@/utility/device-kind.js';
 import MkPostFormTextEditor from '@/components/MkPostFormTextEditor.vue';
 import MkEmojiPicker from '@/components/MkEmojiPicker.vue';
 
@@ -85,6 +87,7 @@ const textareaReadOnly = ref(false);
 const emojiPickerShown = ref(false);
 const keyboardInset = ref(0);
 const visualViewportHeight = ref(window.visualViewport?.height ?? window.innerHeight);
+const isMobileEmojiPicker = ref(deviceKind === 'smartphone' || window.innerWidth <= 500);
 let autocompleteInstance: Autocomplete | null = null;
 let lastKeyboardScrollHandle = 0;
 let viewportUpdateHandles: number[] = [];
@@ -324,10 +327,44 @@ function onEmojiButtonPointerDown(ev: PointerEvent) {
 	ev.preventDefault();
 	ev.stopPropagation();
 	preserveTextSelection();
-	toggleEmojiPicker();
+
+	if (isMobileEmojiPicker.value) {
+		toggleEmojiPicker();
+		return;
+	}
+
+	const anchorElement = ev.currentTarget instanceof HTMLElement ? ev.currentTarget : rootEl.value;
+	if (anchorElement == null) return;
+
+	closeEmojiPicker();
+	textareaReadOnly.value = true;
+
+	const selection = getTextSelectionRange();
+	let pos = selection.start;
+	let posEnd = selection.end;
+
+	emojiPicker.show(
+		anchorElement,
+		emoji => {
+			const textBefore = text.value.substring(0, pos);
+			const textAfter = text.value.substring(posEnd);
+			text.value = textBefore + emoji + textAfter;
+			pos += emoji.length;
+			posEnd += emoji.length;
+		},
+		() => {
+			textareaReadOnly.value = false;
+			nextTick(() => {
+				textEditorEl.value?.focus();
+				textEditorEl.value?.setSelectionRange(pos, posEnd);
+			});
+		},
+	);
 }
 
 function toggleEmojiPicker() {
+	if (!isMobileEmojiPicker.value) return;
+
 	if (emojiPickerShown.value) {
 		closeEmojiPicker({ focusEditor: true });
 		return;
@@ -369,7 +406,7 @@ function getKeyboardInset() {
 
 function shouldLiftComposer() {
 	const activeElement = window.document.activeElement;
-	return emojiPickerShown.value || (activeElement != null && (rootEl.value?.contains(activeElement) ?? false));
+	return isMobileEmojiPicker.value && (emojiPickerShown.value || (activeElement != null && (rootEl.value?.contains(activeElement) ?? false)));
 }
 
 function updateViewportState() {
@@ -416,6 +453,15 @@ function onVisualViewportChange() {
 	scheduleViewportAdjustment();
 }
 
+function updateEmojiPickerMode() {
+	const nextIsMobile = deviceKind === 'smartphone' || window.innerWidth <= 500;
+	if (isMobileEmojiPicker.value !== nextIsMobile) {
+		isMobileEmojiPicker.value = nextIsMobile;
+		closeEmojiPicker();
+	}
+	updateViewportState();
+}
+
 onMounted(() => {
 	if (textEditorEl.value != null) {
 		autocompleteInstance = new Autocomplete(textEditorEl.value.getAutocompleteTarget(), text);
@@ -423,6 +469,7 @@ onMounted(() => {
 
 	window.visualViewport?.addEventListener('resize', onVisualViewportChange);
 	window.visualViewport?.addEventListener('scroll', onVisualViewportChange);
+	window.addEventListener('resize', updateEmojiPickerMode);
 
 	// 書きかけの投稿を復元
 	const draft = JSON.parse(miLocalStorage.getItem('chatMessageDrafts') || '{}')[getDraftKey()];
@@ -441,6 +488,7 @@ onBeforeUnmount(() => {
 	window.clearTimeout(lastKeyboardScrollHandle);
 	window.visualViewport?.removeEventListener('resize', onVisualViewportChange);
 	window.visualViewport?.removeEventListener('scroll', onVisualViewportChange);
+	window.removeEventListener('resize', updateEmojiPickerMode);
 });
 </script>
 
@@ -477,8 +525,9 @@ onBeforeUnmount(() => {
 }
 
 .emojiPanel {
-	border-bottom: solid 0.5px var(--MI_THEME-divider);
+	border-top: solid 0.5px var(--MI_THEME-divider);
 	background: var(--MI_THEME-panel);
+	padding-bottom: max(env(safe-area-inset-bottom, 0px), 0px);
 }
 
 .emojiPanelHeader {
@@ -519,6 +568,10 @@ onBeforeUnmount(() => {
 	bottom: 0;
 	background: var(--MI_THEME-panel);
 	padding-bottom: max(env(safe-area-inset-bottom, 0px), 0px);
+}
+
+.footerWithPanel {
+	padding-bottom: 0;
 }
 
 .file {
