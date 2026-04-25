@@ -52,6 +52,7 @@ describe('Autocomplete', () => {
 		const text = ref<string | number | null>('@Tonyo');
 		const inputListeners: EventListener[] = [];
 		let selectionRange: { start: number; end: number } | null = null;
+		let appliedTextUpdate: { value: string; start: number; end: number | undefined } | null = null;
 		const target = {
 			get value() {
 				return '@Tonyo';
@@ -77,6 +78,9 @@ describe('Autocomplete', () => {
 			setSelectionRange(start: number, end: number) {
 				selectionRange = { start, end };
 			},
+			applyTextUpdate(value: string, start: number, end?: number) {
+				appliedTextUpdate = { value, start, end };
+			},
 			getCaretCoordinates() {
 				return { left: 0, top: 0 };
 			},
@@ -97,10 +101,13 @@ describe('Autocomplete', () => {
 			},
 		});
 
-		await Promise.resolve();
-
-		assert.strictEqual(text.value, '@Tonyomo ');
-		assert.deepStrictEqual(selectionRange, { start: '@Tonyomo '.length, end: '@Tonyomo '.length });
+		assert.deepStrictEqual(appliedTextUpdate, {
+			value: '@Tonyomo ',
+			start: '@Tonyomo '.length,
+			end: '@Tonyomo '.length,
+		});
+		assert.strictEqual(text.value, '@Tonyo');
+		assert.strictEqual(selectionRange, null);
 
 		vi.doUnmock('@/os.js');
 	});

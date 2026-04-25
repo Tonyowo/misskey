@@ -22,6 +22,7 @@ export type AutocompleteTarget = {
 	getBoundingClientRect: HTMLElement['getBoundingClientRect'];
 	focus: () => void;
 	setSelectionRange: (start: number, end: number) => void;
+	applyTextUpdate?: (value: string, selectionStart: number, selectionEnd?: number) => void;
 	getCaretCoordinates?: () => { left: number; top: number };
 };
 
@@ -296,14 +297,29 @@ export class Autocomplete {
 	/**
 	 * サジェストを閉じます。
 	 */
-	private close() {
+	private close(focus = true) {
 		if (this.suggestion == null) return;
 
 		this.suggestion.close();
 		this.suggestion = null;
 		this.currentRange = null;
 
-		this.textarea.focus();
+		if (focus) {
+			this.textarea.focus();
+		}
+	}
+
+	private applyCompletionText(text: string, caret: number) {
+		if (this.textarea.applyTextUpdate) {
+			this.textarea.applyTextUpdate(text, caret, caret);
+			return;
+		}
+
+		this.text = text;
+		nextTick(() => {
+			this.textarea.focus();
+			this.textarea.setSelectionRange(caret, caret);
+		});
 	}
 
 	/**
@@ -314,7 +330,7 @@ export class Autocomplete {
 			start: Number(this.textarea.selectionStart),
 			end: Number(this.textarea.selectionStart),
 		};
-		this.close();
+		this.close(false);
 
 		if (isCompleteType('user', props)) {
 			const source = this.text;
@@ -325,14 +341,9 @@ export class Autocomplete {
 			const acct = props.value.host === null ? props.value.username : `${props.value.username}@${toASCII(props.value.host)}`;
 
 			// 挿入
-			this.text = `${before}@${acct} ${after}`;
-
-			// キャレットを戻す
-			nextTick(() => {
-				this.textarea.focus();
-				const pos = before.length + (acct.length + 2);
-				this.textarea.setSelectionRange(pos, pos);
-			});
+			const completedText = `${before}@${acct} ${after}`;
+			const pos = before.length + (acct.length + 2);
+			this.applyCompletionText(completedText, pos);
 		} else if (isCompleteType('hashtag', props)) {
 			const source = this.text;
 
@@ -340,14 +351,9 @@ export class Autocomplete {
 			const after = source.substring(range.end);
 
 			// 挿入
-			this.text = `${before}#${props.value} ${after}`;
-
-			// キャレットを戻す
-			nextTick(() => {
-				this.textarea.focus();
-				const pos = before.length + (props.value.length + 2);
-				this.textarea.setSelectionRange(pos, pos);
-			});
+			const completedText = `${before}#${props.value} ${after}`;
+			const pos = before.length + (props.value.length + 2);
+			this.applyCompletionText(completedText, pos);
 		} else if (isCompleteType('emoji', props)) {
 			const source = this.text;
 
@@ -355,14 +361,9 @@ export class Autocomplete {
 			const after = source.substring(range.end);
 
 			// 挿入
-			this.text = before + props.value + after;
-
-			// キャレットを戻す
-			nextTick(() => {
-				this.textarea.focus();
-				const pos = before.length + props.value.length;
-				this.textarea.setSelectionRange(pos, pos);
-			});
+			const completedText = before + props.value + after;
+			const pos = before.length + props.value.length;
+			this.applyCompletionText(completedText, pos);
 		} else if (isCompleteType('emojiComplete', props)) {
 			const source = this.text;
 
@@ -370,14 +371,9 @@ export class Autocomplete {
 			const after = source.substring(range.end);
 
 			// 挿入
-			this.text = before + props.value + after;
-
-			// キャレットを戻す
-			nextTick(() => {
-				this.textarea.focus();
-				const pos = before.length + props.value.length;
-				this.textarea.setSelectionRange(pos, pos);
-			});
+			const completedText = before + props.value + after;
+			const pos = before.length + props.value.length;
+			this.applyCompletionText(completedText, pos);
 		} else if (isCompleteType('mfmTag', props)) {
 			const source = this.text;
 
@@ -385,14 +381,9 @@ export class Autocomplete {
 			const after = source.substring(range.end);
 
 			// 挿入
-			this.text = `${before}$[${props.value} ]${after}`;
-
-			// キャレットを戻す
-			nextTick(() => {
-				this.textarea.focus();
-				const pos = before.length + (props.value.length + 3);
-				this.textarea.setSelectionRange(pos, pos);
-			});
+			const completedText = `${before}$[${props.value} ]${after}`;
+			const pos = before.length + (props.value.length + 3);
+			this.applyCompletionText(completedText, pos);
 		} else if (isCompleteType('mfmParam', props)) {
 			const source = this.text;
 
@@ -400,14 +391,9 @@ export class Autocomplete {
 			const after = source.substring(range.end);
 
 			// 挿入
-			this.text = `${before}.${props.value}${after}`;
-
-			// キャレットを戻す
-			nextTick(() => {
-				this.textarea.focus();
-				const pos = before.length + (props.value.length + 1);
-				this.textarea.setSelectionRange(pos, pos);
-			});
+			const completedText = `${before}.${props.value}${after}`;
+			const pos = before.length + (props.value.length + 1);
+			this.applyCompletionText(completedText, pos);
 		}
 	}
 }

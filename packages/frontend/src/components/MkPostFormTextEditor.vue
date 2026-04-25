@@ -8,7 +8,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 	ref="editorEl"
 	v-bind="attrs"
 	:class="$style.editor"
-	:contenteditable="(!disabled && !readonly).toString()"
+	:contenteditable="!disabled && !readonly"
 	:data-disabled="disabled"
 	:data-empty="renderedText === '' && !composing"
 	:data-placeholder="placeholder"
@@ -191,19 +191,19 @@ function getCustomEmojiImageUrl(name: string): string {
 }
 
 function createCustomEmojiNode(name: string, raw: string): HTMLSpanElement {
-	const span = document.createElement('span');
+	const span = window.document.createElement('span');
 	span.className = cssModule.customEmoji;
 	span.dataset.raw = raw;
 	span.contentEditable = 'false';
 
-	const img = document.createElement('img');
+	const img = window.document.createElement('img');
 	img.className = cssModule.customEmojiImage;
 	img.src = getCustomEmojiImageUrl(name);
 	img.alt = raw;
 	img.title = raw;
 	img.decoding = 'async';
 	img.draggable = false;
-	img.style.webkitUserDrag = 'none';
+	img.style.setProperty('-webkit-user-drag', 'none');
 	img.style.display = 'inline-block';
 	img.style.width = '1.25em';
 	img.style.height = '1.25em';
@@ -237,10 +237,10 @@ function getCustomEmojiCaretAnchorPoint(node: HTMLElement): { node: Node; offset
 function renderEditorContent(selection: SelectionRange | null = focused.value ? lastSelectionRange.value : null) {
 	if (editorEl.value == null || composing.value) return;
 
-	const fragment = document.createDocumentFragment();
+	const fragment = window.document.createDocumentFragment();
 	for (const segment of getSegments()) {
 		if (segment.type === 'text') {
-			fragment.append(document.createTextNode(segment.value));
+			fragment.append(window.document.createTextNode(segment.value));
 			continue;
 		}
 
@@ -375,6 +375,7 @@ function getPointForOffset(targetOffset: number): { node: Node; offset: number }
 		throw new Error('Editor root not mounted');
 	}
 
+	const editor = editorEl.value;
 	let remaining = Math.max(0, Math.min(targetOffset, getCurrentText().length));
 
 	const walk = (node: Node): { node: Node; offset: number } | null => {
@@ -389,7 +390,7 @@ function getPointForOffset(targetOffset: number): { node: Node; offset: number }
 		}
 
 		if (node instanceof HTMLBRElement) {
-			const parent = node.parentNode ?? editorEl.value;
+			const parent = node.parentNode ?? editor;
 			const index = Array.from(parent.childNodes).indexOf(node);
 			if (remaining <= 1) {
 				return { node: parent, offset: remaining === 0 ? index : index + 1 };
@@ -399,7 +400,7 @@ function getPointForOffset(targetOffset: number): { node: Node; offset: number }
 		}
 
 		if (node instanceof HTMLElement && node.dataset.raw != null) {
-			const parent = node.parentNode ?? editorEl.value;
+			const parent = node.parentNode ?? editor;
 			const index = Array.from(parent.childNodes).indexOf(node);
 			const rawLength = node.dataset.raw.length;
 			if (remaining <= rawLength) {
@@ -422,14 +423,14 @@ function getPointForOffset(targetOffset: number): { node: Node; offset: number }
 		return null;
 	};
 
-	for (const child of Array.from(editorEl.value.childNodes)) {
+	for (const child of Array.from(editor.childNodes)) {
 		const result = walk(child);
 		if (result != null) {
 			return result;
 		}
 	}
 
-	return { node: editorEl.value, offset: editorEl.value.childNodes.length };
+	return { node: editor, offset: editor.childNodes.length };
 }
 
 function setSelectionRange(start: number, end: number) {
@@ -438,7 +439,7 @@ function setSelectionRange(start: number, end: number) {
 	const selection = window.getSelection();
 	if (selection == null) return;
 
-	const range = document.createRange();
+	const range = window.document.createRange();
 	const startPoint = getPointForOffset(start);
 	const endPoint = getPointForOffset(end);
 
@@ -557,23 +558,24 @@ function getAutocompleteTarget(): AutocompleteTarget {
 		get scrollTop() {
 			return editorEl.value?.scrollTop ?? 0;
 		},
-		addEventListener(type, listener, options) {
-			editorEl.value?.addEventListener(type, listener, options);
+		addEventListener(...args: Parameters<HTMLElement['addEventListener']>) {
+			editorEl.value?.addEventListener(...args);
 		},
-		removeEventListener(type, listener, options) {
-			editorEl.value?.removeEventListener(type, listener, options);
+		removeEventListener(...args: Parameters<HTMLElement['removeEventListener']>) {
+			editorEl.value?.removeEventListener(...args);
 		},
 		getBoundingClientRect() {
 			return editorEl.value?.getBoundingClientRect() ?? new DOMRect();
 		},
 		focus,
 		setSelectionRange,
+		applyTextUpdate,
 		getCaretCoordinates() {
 			if (editorEl.value == null) return { left: 0, top: 0 };
 
 			const { start } = getSelectionRange();
 			const point = getPointForOffset(start);
-			const range = document.createRange();
+			const range = window.document.createRange();
 			range.setStart(point.node, point.offset);
 			range.collapse(true);
 
