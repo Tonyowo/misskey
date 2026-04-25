@@ -36,13 +36,13 @@ describe('emoji autocomplete', () => {
 
 describe('Autocomplete', () => {
 	test('uses the opened query range when completing a user mention', async () => {
-		let complete: ((value: unknown) => void) | null = null;
+		const completes: Array<(value: unknown) => void> = [];
 		const dispose = vi.fn();
 
 		vi.resetModules();
 		vi.doMock('@/os.js', () => ({
 			popup: vi.fn((_component, _props, events) => {
-				complete = events.done;
+				completes[0] = events.done;
 				return { dispose };
 			}),
 		}));
@@ -50,7 +50,7 @@ describe('Autocomplete', () => {
 		const { Autocomplete } = await import('@/utility/autocomplete.js');
 		let selectionStart = '@Tonyo'.length;
 		const text = ref<string | number | null>('@Tonyo');
-		let inputListener: EventListener | null = null;
+		const inputListeners: EventListener[] = [];
 		let selectionRange: { start: number; end: number } | null = null;
 		const target = {
 			get value() {
@@ -65,7 +65,7 @@ describe('Autocomplete', () => {
 			scrollLeft: 0,
 			scrollTop: 0,
 			addEventListener(type: string, listener: EventListener) {
-				if (type === 'input') inputListener = listener;
+				if (type === 'input') inputListeners[0] = listener;
 			},
 			removeEventListener() {
 			},
@@ -84,12 +84,12 @@ describe('Autocomplete', () => {
 
 		new Autocomplete(target, text, ['user']);
 
-		assert.exists(inputListener);
-		inputListener!(new Event('input'));
-		assert.exists(complete);
+		assert.exists(inputListeners[0]);
+		inputListeners[0](new Event('input'));
+		assert.exists(completes[0]);
 
 		selectionStart = 0;
-		complete!({
+		completes[0]({
 			type: 'user',
 			value: {
 				username: 'Tonyomo',
