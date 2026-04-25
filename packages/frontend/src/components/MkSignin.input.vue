@@ -62,8 +62,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 				required
 				data-cy-signin-username
 			>
-				<template v-if="inputMode === 'username'" #prefix>@</template>
-				<template v-else #prefix><i class="ti ti-mail"></i></template>
+				<template v-if="inputMode === 'username'" #prefix><span :class="$style.identifierPrefix">@</span></template>
+				<template v-else #prefix><i class="ti ti-mail" :class="$style.identifierPrefix"></i></template>
 				<template v-if="inputMode === 'username'" #suffix>@{{ host }}</template>
 			</MkInput>
 			<MkButton type="submit" large primary rounded style="margin: 0 auto;" data-cy-signin-page-input-continue>{{ i18n.ts.continue }} <i class="ti ti-arrow-right"></i></MkButton>
@@ -247,6 +247,12 @@ async function specifyHostAndOpenRemote(options: OpenOnRemoteOptions): Promise<v
 	&:hover {
 		text-decoration: underline;
 	}
+}
+
+.identifierPrefix {
+	display: inline-flex;
+	justify-content: center;
+	width: 16px;
 }
 
 .loginMethodSwitch {
