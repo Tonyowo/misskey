@@ -37,6 +37,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 <script lang="ts" setup>
 import { onMounted, watch, ref, shallowRef, computed, nextTick, onBeforeUnmount, useTemplateRef } from 'vue';
 import * as Misskey from 'misskey-js';
+import { toASCII } from 'punycode.js';
 import { formatTimeString } from '@/utility/format-time-string.js';
 import { selectFile } from '@/utility/drive.js';
 import * as os from '@/os.js';
@@ -67,6 +68,7 @@ const isSpeakMuted = computed(() => props.room?.isSpeakMuted ?? false);
 const canSend = computed(() => !isSpeakMuted.value && ((text.value != null && text.value !== '') || file.value != null));
 const textareaPlaceholder = computed(() => isSpeakMuted.value ? '你已被禁言，暂时无法发言' : '输入消息');
 const sendButtonTitle = computed(() => isSpeakMuted.value ? '你已被禁言，暂时无法发言' : '发送');
+const canMentionAll = computed(() => props.room?.myRole === 'owner' || props.room?.myRole === 'admin');
 
 function getDraftKey() {
 	return props.user ? 'user:' + props.user.id : 'room:' + props.room?.id;
@@ -236,6 +238,26 @@ function clear() {
 	deleteDraft();
 }
 
+function insertTextAtSelection(insertedText: string) {
+	const selection = getTextSelectionRange();
+	const before = text.value.substring(0, selection.start);
+	const after = text.value.substring(selection.end);
+	const separator = before !== '' && !/\s$/.test(before) ? ' ' : '';
+	const nextText = `${before}${separator}${insertedText}${after}`;
+	const nextPosition = before.length + separator.length + insertedText.length;
+
+	text.value = nextText;
+	nextTick(() => {
+		textEditorEl.value?.focus();
+		textEditorEl.value?.setSelectionRange(nextPosition, nextPosition);
+	});
+}
+
+function mentionUser(user: Misskey.entities.UserLite) {
+	const acct = user.host == null ? user.username : `${user.username}@${toASCII(user.host)}`;
+	insertTextAtSelection(`@${acct} `);
+}
+
 function saveDraft() {
 	const drafts = JSON.parse(miLocalStorage.getItem('chatMessageDrafts') || '{}');
 
@@ -305,7 +327,10 @@ function preserveTextSelection() {
 
 onMounted(() => {
 	if (textEditorEl.value != null) {
-		autocompleteInstance = new Autocomplete(textEditorEl.value.getAutocompleteTarget(), text);
+		autocompleteInstance = new Autocomplete(textEditorEl.value.getAutocompleteTarget(), text, undefined, {
+			chatRoomId: props.room?.id,
+			includeMentionAll: canMentionAll.value,
+		});
 	}
 
 	// 書きかけの投稿を復元
@@ -321,6 +346,10 @@ onBeforeUnmount(() => {
 		autocompleteInstance.detach();
 		autocompleteInstance = null;
 	}
+});
+
+defineExpose({
+	mentionUser,
 });
 </script>
 

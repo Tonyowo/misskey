@@ -166,6 +166,7 @@ type ChatSummary = {
 	unreadConversations: number;
 	unreadDirectConversations: number;
 	unreadGroupConversations: number;
+	unreadMentionConversations: number;
 };
 
 const props = withDefaults(defineProps<{
@@ -196,6 +197,7 @@ const summary = ref<ChatSummary>({
 	unreadConversations: 0,
 	unreadDirectConversations: 0,
 	unreadGroupConversations: 0,
+	unreadMentionConversations: 0,
 });
 const historyStats = ref<ChatHistoryStats>({
 	all: 0,

@@ -55,6 +55,16 @@ export const meta = {
 			code: 'MUTED_IN_ROOM',
 			id: '67512792-fd66-4f82-a4ac-44ec9c75005e',
 		},
+		mentionAllForbidden: {
+			message: 'You do not have permission to mention all room members.',
+			code: 'MENTION_ALL_FORBIDDEN',
+			id: '5380b754-af85-478d-9fa1-afea8ab55a09',
+		},
+		mentionAllRateLimited: {
+			message: 'You can mention all room members only once every 10 minutes.',
+			code: 'MENTION_ALL_RATE_LIMITED',
+			id: 'bb596201-d273-495e-9357-2750666b39e7',
+		},
 	},
 } as const;
 
@@ -110,6 +120,12 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 			} catch (err) {
 				if (err instanceof Error && err.message === 'you are muted in the room') {
 					throw new ApiError(meta.errors.mutedInRoom);
+				}
+				if (err instanceof Error && err.message === 'mention all is forbidden') {
+					throw new ApiError(meta.errors.mentionAllForbidden);
+				}
+				if (err instanceof Error && err.message === 'mention all is rate limited') {
+					throw new ApiError(meta.errors.mentionAllRateLimited);
 				}
 
 				throw err;

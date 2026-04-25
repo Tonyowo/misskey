@@ -114,6 +114,8 @@ export class ChatEntityService {
 			toRoom: message.toRoomId ? (packedRooms?.get(message.toRoomId) ?? await this.packRoom(message.toRoom ?? message.toRoomId, me)) : undefined,
 			fileId: message.fileId,
 			file: message.fileId ? (packedFiles?.get(message.fileId) ?? await this.driveFileEntityService.pack(message.file ?? message.fileId)) : null,
+			mentions: message.mentions,
+			mentionAll: message.mentionAll,
 			reactions: reactions.filter((r): r is { user: Packed<'UserLite'>; reaction: string; } => r.user != null),
 			systemEvent: await this.packSystemEvent(message.systemEvent, me, packedUsers),
 		};
@@ -198,6 +200,8 @@ export class ChatEntityService {
 			toUserId: message.toUserId!,
 			fileId: message.fileId,
 			file: message.fileId ? (packedFiles?.get(message.fileId) ?? await this.driveFileEntityService.pack(message.file ?? message.fileId)) : null,
+			mentions: message.mentions,
+			mentionAll: message.mentionAll,
 			reactions,
 			systemEvent: await this.packSystemEvent(message.systemEvent),
 		};
@@ -253,6 +257,8 @@ export class ChatEntityService {
 			toRoomId: message.toRoomId!,
 			fileId: message.fileId,
 			file: message.fileId ? (packedFiles?.get(message.fileId) ?? await this.driveFileEntityService.pack(message.file ?? message.fileId)) : null,
+			mentions: message.mentions,
+			mentionAll: message.mentionAll,
 			reactions: reactions.filter((r): r is { user: Packed<'UserLite'>; reaction: string; } => r.user != null),
 			systemEvent: await this.packSystemEvent(message.systemEvent, undefined, packedUsers),
 		};

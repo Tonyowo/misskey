@@ -10,7 +10,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 		:key="item.id"
 		:class="[$style.message, { [$style.isMe]: item.isMe, [$style.isRead]: item.message.isRead, [$style.isUnread]: item.isUnread }]"
 		class="_panel"
-		:to="item.message.toRoomId ? `/chat/room/${item.message.toRoomId}` : `/chat/user/${item.other!.id}`"
+		:to="getItemPath(item)"
 	>
 		<div v-if="item.message.toRoomId" :class="$style.roomAvatar">
 			<img v-if="item.message.toRoom?.avatarUrl" :src="item.message.toRoom.avatarUrl" :class="$style.roomAvatarImage" alt="">
@@ -28,7 +28,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 							<i class="ti ti-users"></i>
 							{{ item.message.toRoom.memberCount }}
 						</span>
-						<span v-if="item.isUnread" :class="[$style.badge, $style.badgeUnread]">{{ i18n.ts.unread }}</span>
+						<span v-if="item.hasUnreadMention" :class="[$style.badge, $style.badgeMention]">有人@我</span>
+						<span v-else-if="item.isUnread" :class="[$style.badge, $style.badgeUnread]">{{ i18n.ts.unread }}</span>
 						<span v-if="item.message.toRoom.isMuted" :class="$style.badge" :title="i18n.ts._chat.muteThisRoom">
 							<i class="ti ti-bell-off"></i>
 						</span>
@@ -74,6 +75,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 				{{ item.message.fromUser.name ?? item.message.fromUser.username }}
 			</div>
 			<div :class="$style.messageBodyText">
+				<span v-if="item.hasUnreadMention" :class="$style.mentionPreview">有人@我</span>
 				<span v-if="item.isMe && !isSystemChatMessage(item.message)" :class="$style.youSaid">{{ i18n.ts.you }}:</span>
 				{{ formatChatMessagePreviewText(item.message) }}
 			</div>
@@ -115,6 +117,8 @@ const router = useRouter();
 
 type ChatHistoryViewItem = ChatHistoryItem & {
 	isUnread: boolean;
+	hasUnreadMention: boolean;
+	mentionMessageId: string | null;
 };
 
 const props = withDefaults(defineProps<{
@@ -149,7 +153,18 @@ function decorateItem(item: ChatHistoryItem): ChatHistoryViewItem {
 	return {
 		...item,
 		isUnread: !item.isMe && item.message.isRead !== true,
+		hasUnreadMention: item.message.hasUnreadMention === true,
+		mentionMessageId: item.message.mentionMessageId ?? null,
 	};
+}
+
+function getItemPath(item: ChatHistoryViewItem) {
+	if (item.message.toRoomId) {
+		const query = item.hasUnreadMention && item.mentionMessageId != null ? `?messageId=${encodeURIComponent(item.mentionMessageId)}` : '';
+		return `/chat/room/${item.message.toRoomId}${query}`;
+	}
+
+	return `/chat/user/${item.other!.id}`;
 }
 
 function applyFilter() {
@@ -485,6 +500,12 @@ watch(() => props.filter, () => {
 	margin-right: 0.45em;
 }
 
+.mentionPreview {
+	color: var(--MI_THEME-mentionMe);
+	font-weight: 700;
+	margin-right: 0.45em;
+}
+
 .badges {
 	display: inline-flex;
 	flex-wrap: wrap;
@@ -507,6 +528,12 @@ watch(() => props.filter, () => {
 	color: var(--MI_THEME-accent);
 	border-color: color(from var(--MI_THEME-accent) srgb r g b / 0.26);
 	background: color(from var(--MI_THEME-accent) srgb r g b / 0.10);
+}
+
+.badgeMention {
+	color: var(--MI_THEME-mentionMe);
+	border-color: color(from var(--MI_THEME-mentionMe) srgb r g b / 0.26);
+	background: color(from var(--MI_THEME-mentionMe) srgb r g b / 0.12);
 }
 
 .badgeWarn {

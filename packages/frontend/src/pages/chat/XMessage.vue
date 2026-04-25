@@ -10,7 +10,16 @@ SPDX-License-Identifier: AGPL-3.0-only
 </div>
 
 <div v-else :class="[$style.root, { [$style.isMe]: isMe }]">
-	<MkAvatar :class="[$style.avatar, prefer.s.useStickyIcons ? $style.useSticky : null]" :user="message.fromUser!" :link="!isMe" :preview="false"/>
+	<MkAvatar
+		:class="[$style.avatar, prefer.s.useStickyIcons ? $style.useSticky : null]"
+		:user="message.fromUser!"
+		:link="!isMe"
+		:preview="false"
+		@pointerdown="onAvatarPointerDown"
+		@pointerup="clearAvatarLongPress"
+		@pointercancel="clearAvatarLongPress"
+		@pointerleave="clearAvatarLongPress"
+	/>
 	<div :class="[$style.body, message.file != null ? $style.fullWidth : null]" @contextmenu.stop="onContextmenu">
 		<div :class="$style.header">
 			<template v-if="showSenderHeader && message.fromUser != null">
@@ -22,6 +31,10 @@ SPDX-License-Identifier: AGPL-3.0-only
 			</template>
 		</div>
 		<MkFukidashi :class="$style.fukidashi" :tail="isMe ? 'right' : 'left'" :fullWidth="message.file != null" :accented="isMe">
+			<div v-if="isMentionAll" :class="$style.mentionAll">
+				<i class="ti ti-speakerphone"></i>
+				<span>@全体成员</span>
+			</div>
 			<Mfm
 				v-if="message.text"
 				ref="text"
@@ -98,11 +111,13 @@ const props = defineProps<{
 
 const emit = defineEmits<{
 	(ev: 'togglePin', messageId: string | null): void;
+	(ev: 'mentionUser', user: Misskey.entities.UserLite): void;
 }>();
 
 const isSystemMessage = computed(() => isSystemChatMessage(props.message));
 const systemEventText = computed(() => formatChatSystemEventText(props.message));
 const isMe = computed(() => props.message.fromUserId === $i.id);
+const isMentionAll = computed(() => (props.message as { mentionAll?: boolean }).mentionAll === true);
 const isRoomMessage = computed(() => {
 	return 'toRoomId' in props.message && props.message.toRoomId != null;
 });
@@ -140,6 +155,8 @@ const searchResultLabel = computed(() => {
 
 	return '查看原聊天';
 });
+
+let avatarLongPressTimer = 0;
 
 provide(DI.mfmEmojiReactCallback, (reaction) => {
 	if ($i.policies.chatAvailability !== 'available' || isSystemMessage.value) return;
@@ -193,12 +210,42 @@ function onContextmenu(ev: PointerEvent) {
 	showMenu(ev, true);
 }
 
+function mentionSender() {
+	if (!isRoomMessage.value || isMe.value || props.message.fromUser == null) return;
+	emit('mentionUser', props.message.fromUser);
+}
+
+function onAvatarPointerDown(ev: PointerEvent) {
+	if (!isRoomMessage.value || isMe.value || props.message.fromUser == null || $i.policies.chatAvailability !== 'available') return;
+
+	window.clearTimeout(avatarLongPressTimer);
+	avatarLongPressTimer = window.setTimeout(() => {
+		ev.preventDefault();
+		mentionSender();
+	}, 550);
+}
+
+function clearAvatarLongPress() {
+	window.clearTimeout(avatarLongPressTimer);
+	avatarLongPressTimer = 0;
+}
+
 function showMenu(ev: PointerEvent, contextmenu = false) {
 	if (isSystemMessage.value) return;
 
 	const menu: MenuItem[] = [];
 
 	if (!isMe.value && $i.policies.chatAvailability === 'available') {
+		if (isRoomMessage.value && props.message.fromUser != null) {
+			menu.push({
+				text: '@TA',
+				icon: 'ti ti-at',
+				action: () => {
+					mentionSender();
+				},
+			});
+		}
+
 		menu.push({
 			text: '回应',
 			icon: 'ti ti-mood-plus',
@@ -403,6 +450,19 @@ function showMenu(ev: PointerEvent, contextmenu = false) {
 	gap: 0.5em;
 	margin-top: 4px;
 	font-size: 75%;
+}
+
+.mentionAll {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	margin: 0 0 6px;
+	padding: 3px 7px;
+	border-radius: 999px;
+	font-size: 0.85em;
+	font-weight: 700;
+	color: var(--MI_THEME-mentionMe);
+	background: color(from var(--MI_THEME-mentionMe) srgb r g b / 0.12);
 }
 
 .time {

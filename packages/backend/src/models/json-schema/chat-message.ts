@@ -60,9 +60,29 @@ export const packedChatMessageSchema = {
 			optional: true, nullable: true,
 			ref: 'DriveFile',
 		},
+		mentions: {
+			type: 'array',
+			optional: false, nullable: false,
+			items: {
+				type: 'string',
+				optional: false, nullable: false,
+			},
+		},
+		mentionAll: {
+			type: 'boolean',
+			optional: false, nullable: false,
+		},
 		isRead: {
 			type: 'boolean',
 			optional: true, nullable: false,
+		},
+		hasUnreadMention: {
+			type: 'boolean',
+			optional: true, nullable: false,
+		},
+		mentionMessageId: {
+			type: 'string',
+			optional: true, nullable: true,
 		},
 		reactions: {
 			type: 'array',
@@ -175,6 +195,18 @@ export const packedChatMessageLiteSchema = {
 			optional: true, nullable: true,
 			ref: 'DriveFile',
 		},
+		mentions: {
+			type: 'array',
+			optional: false, nullable: false,
+			items: {
+				type: 'string',
+				optional: false, nullable: false,
+			},
+		},
+		mentionAll: {
+			type: 'boolean',
+			optional: false, nullable: false,
+		},
 		reactions: {
 			type: 'array',
 			optional: false, nullable: false,
@@ -277,6 +309,18 @@ export const packedChatMessageLiteFor1on1Schema = {
 			optional: true, nullable: true,
 			ref: 'DriveFile',
 		},
+		mentions: {
+			type: 'array',
+			optional: false, nullable: false,
+			items: {
+				type: 'string',
+				optional: false, nullable: false,
+			},
+		},
+		mentionAll: {
+			type: 'boolean',
+			optional: false, nullable: false,
+		},
 		reactions: {
 			type: 'array',
 			optional: false, nullable: false,
@@ -378,6 +422,18 @@ export const packedChatMessageLiteForRoomSchema = {
 			type: 'object',
 			optional: true, nullable: true,
 			ref: 'DriveFile',
+		},
+		mentions: {
+			type: 'array',
+			optional: false, nullable: false,
+			items: {
+				type: 'string',
+				optional: false, nullable: false,
+			},
+		},
+		mentionAll: {
+			type: 'boolean',
+			optional: false, nullable: false,
 		},
 		reactions: {
 			type: 'array',

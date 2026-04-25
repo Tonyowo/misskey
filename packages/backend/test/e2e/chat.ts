@@ -14,15 +14,18 @@ type ChatSummary = {
 	ownedRooms: number;
 	pendingRequests: number;
 	unreadConversations: number;
+	unreadMentionConversations: number;
 };
 
 describe('chat', () => {
 	let alice: Misskey.entities.SignupResponse;
 	let bob: Misskey.entities.SignupResponse;
+	let charlie: Misskey.entities.SignupResponse;
 
 	beforeAll(async () => {
 		alice = await signup();
 		bob = await signup();
+		charlie = await signup();
 	}, 1000 * 60 * 2);
 
 	test('summary, history, and read-all stay in sync for direct and group chats', async () => {
@@ -136,6 +139,160 @@ describe('chat', () => {
 		assert.strictEqual(roomHistoryAfter[0].isRead, true);
 	});
 
+	test('group chat mentions are persisted and mention-all is admin-only', async () => {
+		const room = await successfulApiCall({
+			endpoint: 'chat/rooms/create',
+			parameters: {
+				name: 'chat-mention-room',
+			},
+			user: alice,
+		});
+
+		await successfulApiCall({
+			endpoint: 'chat/rooms/invitations/create',
+			parameters: {
+				roomId: room.id,
+				userId: bob.id,
+			},
+			user: alice,
+		});
+
+		await successfulApiCall({
+			endpoint: 'chat/rooms/join',
+			parameters: {
+				roomId: room.id,
+			},
+			user: bob,
+		}, {
+			status: 204,
+		});
+
+		const memberMention = await successfulApiCall({
+			endpoint: 'chat/messages/create-to-room',
+			parameters: {
+				toRoomId: room.id,
+				text: `hello @${bob.username}`,
+			},
+			user: alice,
+		});
+		assert.deepStrictEqual((memberMention as any).mentions, [bob.id]);
+		assert.strictEqual((memberMention as any).mentionAll, false);
+
+		const nonMemberMention = await successfulApiCall({
+			endpoint: 'chat/messages/create-to-room',
+			parameters: {
+				toRoomId: room.id,
+				text: `hello @${charlie.username}`,
+			},
+			user: alice,
+		});
+		assert.deepStrictEqual((nonMemberMention as any).mentions, []);
+
+		await failedApiCall({
+			endpoint: 'chat/messages/create-to-room',
+			parameters: {
+				toRoomId: room.id,
+				text: '@all please read',
+			},
+			user: bob,
+		}, {
+			status: 400,
+			code: 'MENTION_ALL_FORBIDDEN',
+			id: '5380b754-af85-478d-9fa1-afea8ab55a09',
+		});
+
+		const allMention = await successfulApiCall({
+			endpoint: 'chat/messages/create-to-room',
+			parameters: {
+				toRoomId: room.id,
+				text: '@全体成员 please read',
+			},
+			user: alice,
+		});
+		assert.strictEqual((allMention as any).mentionAll, true);
+	});
+
+	test('group mention unread survives room mute and clears when read', async () => {
+		const room = await successfulApiCall({
+			endpoint: 'chat/rooms/create',
+			parameters: {
+				name: 'chat-muted-mention-room',
+			},
+			user: alice,
+		});
+
+		await successfulApiCall({
+			endpoint: 'chat/rooms/invitations/create',
+			parameters: {
+				roomId: room.id,
+				userId: bob.id,
+			},
+			user: alice,
+		});
+
+		await successfulApiCall({
+			endpoint: 'chat/rooms/join',
+			parameters: {
+				roomId: room.id,
+			},
+			user: bob,
+		}, {
+			status: 204,
+		});
+
+		await successfulApiCall({
+			endpoint: 'chat/rooms/mute',
+			parameters: {
+				roomId: room.id,
+				mute: true,
+			},
+			user: bob,
+		}, {
+			status: 204,
+		});
+
+		const mention = await successfulApiCall({
+			endpoint: 'chat/messages/create-to-room',
+			parameters: {
+				toRoomId: room.id,
+				text: `muted room ping @${bob.username}`,
+			},
+			user: alice,
+		});
+
+		const summaryBefore = await api('chat/summary' as never, {} as never, bob);
+		assert.strictEqual(summaryBefore.status, 200);
+		const summaryBeforeBody = summaryBefore.body as ChatSummary;
+		assert.strictEqual(summaryBeforeBody.unreadConversations, 1);
+		assert.strictEqual(summaryBeforeBody.unreadMentionConversations, 1);
+
+		const roomHistory = await successfulApiCall({
+			endpoint: 'chat/history',
+			parameters: {
+				room: true,
+				limit: 10,
+			},
+			user: bob,
+		});
+		assert.strictEqual((roomHistory[0] as any).hasUnreadMention, true);
+		assert.strictEqual((roomHistory[0] as any).mentionMessageId, mention.id);
+
+		await successfulApiCall({
+			endpoint: 'chat/messages/room-timeline',
+			parameters: {
+				roomId: room.id,
+				limit: 10,
+			},
+			user: bob,
+		});
+
+		const summaryAfter = await api('chat/summary' as never, {} as never, bob);
+		assert.strictEqual(summaryAfter.status, 200);
+		const summaryAfterBody = summaryAfter.body as ChatSummary;
+		assert.strictEqual(summaryAfterBody.unreadConversations, 0);
+		assert.strictEqual(summaryAfterBody.unreadMentionConversations, 0);
+	});
+
 	test('group discovery, requests, moderation, and removal work together', async () => {
 		const roomName = `chat-flow-room-${Date.now()}`;
 		const room = await successfulApiCall({
@@ -160,14 +317,14 @@ describe('chat', () => {
 		assert.strictEqual(updatedRoom.discoverability, 'public');
 
 		const discoveredRooms = await successfulApiCall({
-			endpoint: 'chat/rooms/discover',
+			endpoint: 'chat/rooms/discover' as never,
 			parameters: {
 				query: roomName,
 				limit: 10,
-			},
+			} as never,
 			user: bob,
 		});
-		assert.ok(discoveredRooms.some(item => item.id === room.id));
+		assert.ok((discoveredRooms as any[]).some(item => item.id === room.id));
 
 		await successfulApiCall({
 			endpoint: 'chat/rooms/requests/create',

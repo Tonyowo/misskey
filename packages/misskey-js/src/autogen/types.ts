@@ -5833,7 +5833,11 @@ export type components = {
             text?: string | null;
             fileId?: string | null;
             file?: components['schemas']['DriveFile'] | null;
+            mentions: string[];
+            mentionAll: boolean;
             isRead?: boolean;
+            hasUnreadMention?: boolean;
+            mentionMessageId?: string | null;
             reactions: {
                 reaction: string;
                 user: components['schemas']['UserLite'];
@@ -5863,6 +5867,8 @@ export type components = {
             text?: string | null;
             fileId?: string | null;
             file?: components['schemas']['DriveFile'] | null;
+            mentions: string[];
+            mentionAll: boolean;
             reactions: {
                 reaction: string;
                 user?: components['schemas']['UserLite'] | null;
@@ -5890,6 +5896,8 @@ export type components = {
             text?: string | null;
             fileId?: string | null;
             file?: components['schemas']['DriveFile'] | null;
+            mentions: string[];
+            mentionAll: boolean;
             reactions: {
                 reaction: string;
             }[];
@@ -5917,6 +5925,8 @@ export type components = {
             text?: string | null;
             fileId?: string | null;
             file?: components['schemas']['DriveFile'] | null;
+            mentions: string[];
+            mentionAll: boolean;
             reactions: {
                 reaction: string;
                 user: components['schemas']['UserLite'];

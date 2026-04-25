@@ -61,6 +61,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 						:allowPin="room?.canPinMessages ?? false"
 						:isPinned="true"
 						@togglePin="togglePinnedMessage"
+						@mentionUser="mentionUser"
 					/>
 				</div>
 			</div>
@@ -135,6 +136,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 								:allowPin="room?.canPinMessages ?? false"
 								:isPinned="room?.pinnedMessageId === item.data.id"
 								@togglePin="togglePinnedMessage"
+								@mentionUser="mentionUser"
 							/>
 						</div>
 						<div v-else-if="item.type === 'date'" :class="$style.dateDivider">
@@ -177,7 +179,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 					</div>
 				</Transition>
 				<MkInfo v-if="room?.isSpeakMuted" warn>{{ speakMuteNotice }}</MkInfo>
-				<XForm v-if="initialized" :user="user" :room="room" :class="$style.form"/>
+				<XForm v-if="initialized" ref="formEl" :user="user" :room="room" :class="$style.form"/>
 			</div>
 		</div>
 	</template>
@@ -248,6 +250,7 @@ const pinnedMessage = ref<Misskey.entities.ChatMessage | null>(null);
 const connection = ref<Misskey.IChannelConnection<Misskey.Channels['chatUser']> | Misskey.IChannelConnection<Misskey.Channels['chatRoom']> | null>(null);
 const showIndicator = ref(false);
 const timelineEl = useTemplateRef('timelineEl');
+const formEl = useTemplateRef<InstanceType<typeof XForm>>('formEl');
 const timeline = makeDateSeparatedTimelineComputedRef(messages);
 const isJoinedRoom = computed(() => room.value?.isJoined ?? false);
 const handledInviteCodeKey = ref<string | null>(null);
@@ -687,6 +690,12 @@ function onUnreact(ctx: Parameters<Misskey.Channels['chatUser']['events']['unrea
 
 function onIndicatorClick() {
 	showIndicator.value = false;
+}
+
+async function mentionUser(user: Misskey.entities.UserLite) {
+	tab.value = 'chat';
+	await nextTick();
+	formEl.value?.mentionUser(user);
 }
 
 function onVisibilitychange() {

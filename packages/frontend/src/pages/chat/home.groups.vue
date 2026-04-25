@@ -208,6 +208,7 @@ type ChatSummary = {
 	unreadConversations: number;
 	unreadDirectConversations: number;
 	unreadGroupConversations: number;
+	unreadMentionConversations: number;
 };
 
 type GroupFilter = 'all' | 'owned' | 'managed' | 'joined';
@@ -230,6 +231,7 @@ const summary = ref<ChatSummary>({
 	unreadConversations: 0,
 	unreadDirectConversations: 0,
 	unreadGroupConversations: 0,
+	unreadMentionConversations: 0,
 });
 const roomFilter = ref<GroupFilter>('all');
 const showDiscover = ref(false);

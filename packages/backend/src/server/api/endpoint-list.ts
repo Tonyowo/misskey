@@ -448,6 +448,7 @@ export * as 'chat/rooms/members/unmute' from './endpoints/chat/rooms/members/unm
 export * as 'chat/rooms/admins/add' from './endpoints/chat/rooms/admins/add.js';
 export * as 'chat/rooms/admins/remove' from './endpoints/chat/rooms/admins/remove.js';
 export * as 'chat/rooms/transfer-owner' from './endpoints/chat/rooms/transfer-owner.js';
+export * as 'chat/rooms/mentionable-users' from './endpoints/chat/rooms/mentionable-users.js';
 export * as 'chat/rooms/invitations/create' from './endpoints/chat/rooms/invitations/create.js';
 export * as 'chat/rooms/invitations/ignore' from './endpoints/chat/rooms/invitations/ignore.js';
 export * as 'chat/rooms/invitations/inbox' from './endpoints/chat/rooms/invitations/inbox.js';

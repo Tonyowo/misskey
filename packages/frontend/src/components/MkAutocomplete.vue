@@ -6,6 +6,11 @@ SPDX-License-Identifier: AGPL-3.0-only
 <template>
 <div ref="rootEl" :class="$style.root" class="_popup _shadow" :style="{ zIndex }" @contextmenu.prevent="() => {}">
 	<ol v-if="type === 'user'" ref="suggests" :class="$style.list">
+		<li v-if="showMentionAll" tabindex="-1" :class="$style.item" @click="complete('mentionAll', '@全体成员')" @keydown="onKeydown">
+			<span :class="$style.mentionAllIcon"><i class="ti ti-speakerphone"></i></span>
+			<span :class="$style.userName">全体成员</span>
+			<span>@全体成员</span>
+		</li>
 		<li v-for="user in users" tabindex="-1" :class="$style.item" @click="complete(type, user)" @keydown="onKeydown">
 			<img :class="$style.avatar" :src="user.avatarUrl"/>
 			<span :class="$style.userName">
@@ -13,7 +18,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 			</span>
 			<span>@{{ acct(user) }}</span>
 		</li>
-		<li tabindex="-1" :class="$style.item" @click="chooseUser()" @keydown="onKeydown">{{ i18n.ts.selectUser }}</li>
+		<li v-if="chatRoomId == null" tabindex="-1" :class="$style.item" @click="chooseUser()" @keydown="onKeydown">{{ i18n.ts.selectUser }}</li>
 	</ol>
 	<ol v-else-if="type === 'hashtag' && hashtags.length > 0" ref="suggests" :class="$style.list">
 		<li v-for="hashtag in hashtags" tabindex="-1" :class="$style.item" @click="complete(type, hashtag)" @keydown="onKeydown">
@@ -68,6 +73,10 @@ export type CompleteInfo = {
 	user: {
 		payload: Misskey.entities.User;
 		query: string | null;
+	},
+	mentionAll: {
+		payload: string;
+		query: null;
 	},
 	hashtag: {
 		payload: string;
@@ -172,6 +181,8 @@ type PropsType<T extends keyof CompleteInfo> = {
 	close: () => void;
 	x: number;
 	y: number;
+	chatRoomId?: string;
+	includeMentionAll?: boolean;
 };
 //const props = defineProps<PropsType<keyof CompleteInfo>>();
 // ↑と同じだけど↓にしないとdiscriminated unionにならない。
@@ -195,6 +206,12 @@ const mfmTags = ref<string[]>([]);
 const mfmParams = ref<string[]>([]);
 const select = ref(-1);
 const zIndex = os.claimZIndex('high');
+const showMentionAll = computed(() => {
+	if (props.type !== 'user') return false;
+	if (props.chatRoomId == null || props.includeMentionAll !== true) return false;
+	if (props.q == null || props.q === '') return true;
+	return ['all', 'everyone', '全体成员'].some(keyword => keyword.startsWith(props.q!.toString().toLowerCase()));
+});
 
 function completeMfmParam(param: string) {
 	if (props.type !== 'mfmParam') throw new Error('Invalid type');
@@ -233,6 +250,18 @@ function exec() {
 		}
 	}
 	if (props.type === 'user') {
+		if (props.chatRoomId != null) {
+			misskeyApi('chat/rooms/mentionable-users' as never, {
+				roomId: props.chatRoomId,
+				query: props.q,
+				limit: 10,
+			} as never).then(searchedUsers => {
+				users.value = searchedUsers as Misskey.entities.User[];
+				fetching.value = false;
+			});
+			return;
+		}
+
 		if (!props.q) {
 			users.value = [];
 			fetching.value = false;
@@ -481,6 +510,19 @@ onBeforeUnmount(() => {
 	max-height: 28px;
 	margin: 0 8px 0 0;
 	border-radius: 100%;
+}
+
+.mentionAllIcon {
+	display: grid;
+	place-items: center;
+	min-width: 28px;
+	min-height: 28px;
+	max-width: 28px;
+	max-height: 28px;
+	margin: 0 8px 0 0;
+	border-radius: 100%;
+	background: var(--MI_THEME-accentedBg);
+	color: var(--MI_THEME-accent);
 }
 
 .userName {

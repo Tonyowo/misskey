@@ -9,7 +9,10 @@ export type ChatConversationFilter = 'all' | 'unread' | 'direct' | 'group';
 
 export type ChatHistoryItem = {
 	id: string;
-	message: Misskey.entities.ChatMessage;
+	message: Misskey.entities.ChatMessage & {
+		hasUnreadMention?: boolean;
+		mentionMessageId?: string | null;
+	};
 	other: Misskey.entities.ChatMessage['fromUser'] | Misskey.entities.ChatMessage['toUser'] | null;
 	isMe: boolean;
 };

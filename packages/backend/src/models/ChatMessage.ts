@@ -107,6 +107,17 @@ export class MiChatMessage {
 
 	@Column({
 		...id(),
+		array: true, default: '{}',
+	})
+	public mentions: MiUser['id'][];
+
+	@Column('boolean', {
+		default: false,
+	})
+	public mentionAll: boolean;
+
+	@Column({
+		...id(),
 		nullable: true,
 	})
 	public fileId: MiDriveFile['id'] | null;

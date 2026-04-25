@@ -11,6 +11,10 @@ import type { CompleteInfo } from '@/components/MkAutocomplete.vue';
 import { popup } from '@/os.js';
 
 export type SuggestionType = 'user' | 'hashtag' | 'emoji' | 'mfmTag' | 'mfmParam';
+export type AutocompleteOptions = {
+	chatRoomId?: string;
+	includeMentionAll?: boolean;
+};
 export type AutocompleteTarget = {
 	value: string;
 	selectionStart: number | null;
@@ -35,6 +39,7 @@ type CompletionRange = {
 	start: number;
 	end: number;
 };
+type PopupCompleteType = Exclude<keyof CompleteInfo, 'mentionAll'>;
 
 function isCompleteType<T extends keyof CompleteInfo>(expectedType: T, props: CompleteProps<keyof CompleteInfo>): props is CompleteProps<T> {
 	return props.type === expectedType;
@@ -48,11 +53,12 @@ export class Autocomplete {
 		close: () => void;
 	} | null;
 	private textarea: AutocompleteTarget;
-	private currentType: keyof CompleteInfo | undefined;
+	private currentType: PopupCompleteType | undefined;
 	private currentRange: CompletionRange | null;
 	private textRef: Ref<string | number | null>;
 	private opening: boolean;
 	private onlyType: SuggestionType[];
+	private options: AutocompleteOptions;
 
 	private get text(): string {
 		// Use raw .value to get the latest value
@@ -69,7 +75,7 @@ export class Autocomplete {
 	/**
 	 * 対象のテキストエリアを与えてインスタンスを初期化します。
 	 */
-	constructor(textarea: AutocompleteTarget, textRef: Ref<string | number | null>, onlyType?: SuggestionType[]) {
+	constructor(textarea: AutocompleteTarget, textRef: Ref<string | number | null>, onlyType?: SuggestionType[], options?: AutocompleteOptions) {
 		//#region BIND
 		this.onInput = this.onInput.bind(this);
 		this.complete = this.complete.bind(this);
@@ -82,6 +88,7 @@ export class Autocomplete {
 		this.textRef = textRef;
 		this.opening = false;
 		this.onlyType = onlyType ?? ['user', 'hashtag', 'emoji', 'mfmTag', 'mfmParam'];
+		this.options = options ?? {};
 
 		this.attach();
 	}
@@ -240,7 +247,7 @@ export class Autocomplete {
 	/**
 	 * サジェストを提示します。
 	 */
-	private async open<T extends keyof CompleteInfo>(type: T, q: CompleteInfo[T]['query'], range: CompletionRange) {
+	private async open<T extends PopupCompleteType>(type: T, q: CompleteInfo[T]['query'], range: CompletionRange) {
 		if (type !== this.currentType) {
 			this.close();
 		}
@@ -275,6 +282,8 @@ export class Autocomplete {
 				type: type,
 				//@ts-expect-error popupは今のところジェネリック型のコンポーネントに対応していない
 				q: _q,
+				chatRoomId: this.options.chatRoomId,
+				includeMentionAll: this.options.includeMentionAll,
 				x: _x,
 				y: _y,
 			}, {
@@ -343,6 +352,15 @@ export class Autocomplete {
 			// 挿入
 			const completedText = `${before}@${acct} ${after}`;
 			const pos = before.length + (acct.length + 2);
+			this.applyCompletionText(completedText, pos);
+		} else if (isCompleteType('mentionAll', props)) {
+			const source = this.text;
+
+			const before = source.substring(0, range.start);
+			const after = source.substring(range.end);
+
+			const completedText = `${before}@全体成员 ${after}`;
+			const pos = before.length + '@全体成员 '.length;
 			this.applyCompletionText(completedText, pos);
 		} else if (isCompleteType('hashtag', props)) {
 			const source = this.text;

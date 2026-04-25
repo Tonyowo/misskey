@@ -4,6 +4,7 @@
  */
 
 import { Inject, Injectable } from '@nestjs/common';
+import * as mfm from 'mfm-js';
 import * as Redis from 'ioredis';
 import { Brackets, EntityManager, In, IsNull, MoreThan } from 'typeorm';
 import { DI } from '@/di-symbols.js';
@@ -33,12 +34,15 @@ import { emojiRegex } from '@/misc/emoji-regex.js';
 import { NotificationService } from '@/core/NotificationService.js';
 import { ModerationLogService } from '@/core/ModerationLogService.js';
 import { L_CHARS, secureRndstr } from '@/misc/secure-rndstr.js';
+import { extractMentions } from '@/misc/extract-mentions.js';
 
 const DEFAULT_ROOM_MAX_MEMBERS = 50;
 const DEFAULT_INVITATION_EXPIRATION_MS = 1000 * 60 * 60 * 24 * 7;
 const ROOM_INVITE_LINK_CODE_LENGTH = 12;
 const MAX_REACTIONS_PER_MESSAGE = 100;
+const ROOM_MENTION_ALL_COOLDOWN_MS = 1000 * 60 * 10;
 const isCustomEmojiRegexp = /^:([\w+-]+)(?:@\.)?:$/;
+const mentionAllRegexp = /(^|[\s　])@(all|everyone|全体成员)(?=$|[\s　.,!?，。！？:：;；])/i;
 
 // TODO: ReactionServiceのやつと共通化
 function normalizeEmojiString(x: string) {
@@ -118,8 +122,16 @@ export class ChatService {
 		return `newRoomChatMessageExists:${userId}:${roomId}`;
 	}
 
+	private getRoomMentionUnreadMarkerKey(userId: MiUser['id'], roomId: MiChatRoom['id']) {
+		return `newRoomChatMentionExists:${userId}:${roomId}`;
+	}
+
 	private getUnreadConversationIndexKey(userId: MiUser['id']) {
 		return `newChatMessagesExists:${userId}`;
+	}
+
+	private getRoomMentionAllCooldownKey(userId: MiUser['id'], roomId: MiChatRoom['id']) {
+		return `chatRoomMentionAllCooldown:${userId}:${roomId}`;
 	}
 
 	@bindThis
@@ -217,6 +229,8 @@ export class ChatService {
 			toUserId: toUser.id,
 			text: params.text ? params.text.trim() : null,
 			fileId: params.file ? params.file.id : null,
+			mentions: [],
+			mentionAll: false,
 			reads: [],
 			uri: params.uri ?? null,
 		} satisfies Partial<MiChatMessage>;
@@ -267,18 +281,66 @@ export class ChatService {
 		return packedMessage;
 	}
 
+	private resolveRoomMentionIds(text: string | null | undefined, members: { userId: MiUser['id']; user?: MiUser | null }[], fromUser: { host: MiUser['host']; }) {
+		if (!text) return [];
+
+		const memberByAcct = new Map<string, MiUser['id']>();
+		for (const member of members) {
+			if (member.user == null) continue;
+			const host = member.user.host ?? fromUser.host ?? '';
+			memberByAcct.set(`${member.user.username.toLowerCase()}@${host.toLowerCase()}`, member.userId);
+			if (member.user.host == null) {
+				memberByAcct.set(member.user.username.toLowerCase(), member.userId);
+			}
+		}
+
+		const tokens = mfm.parse(text);
+		const mentionIds = extractMentions(tokens)
+			.map(mention => {
+				const host = mention.host ?? fromUser.host ?? '';
+				return memberByAcct.get(`${mention.username.toLowerCase()}@${host.toLowerCase()}`) ?? memberByAcct.get(mention.username.toLowerCase()) ?? null;
+			})
+			.filter((id): id is MiUser['id'] => id != null);
+
+		return [...new Set(mentionIds)];
+	}
+
+	private textMentionsAllMembers(text: string | null | undefined) {
+		if (!text) return false;
+		return mentionAllRegexp.test(text);
+	}
+
+	private canMentionAll(memberships: { userId: MiUser['id']; role: 'owner' | ChatRoomMembershipRole }[], userId: MiUser['id']) {
+		const actor = memberships.find(member => member.userId === userId);
+		return actor?.role === 'owner' || actor?.role === 'admin';
+	}
+
 	@bindThis
 	public async createMessageToRoom(fromUser: { id: MiUser['id']; host: MiUser['host']; }, toRoom: MiChatRoom, params: {
 		text?: string | null;
 		file?: MiDriveFile | null;
 		uri?: string | null;
 	}): Promise<Packed<'ChatMessageLiteForRoom'>> {
-		const memberships = (await this.chatRoomMembershipsRepository.findBy({ roomId: toRoom.id })).map(m => ({
+		const memberships: {
+			userId: MiUser['id'];
+			user: MiUser | null;
+			role: 'owner' | ChatRoomMembershipRole;
+			isMuted: boolean;
+			isSpeakMuted: boolean;
+		}[] = (await this.chatRoomMembershipsRepository.find({
+			where: { roomId: toRoom.id },
+			relations: ['user'],
+		})).map(m => ({
 			userId: m.userId,
+			user: m.user,
+			role: m.role,
 			isMuted: m.isMuted,
 			isSpeakMuted: this.isRoomSpeakMuted(m),
-		})).concat({ // ownerはmembershipレコードを作らないため
+		}));
+		memberships.push({ // ownerはmembershipレコードを作らないため
 			userId: toRoom.ownerId,
+			user: toRoom.owner,
+			role: 'owner',
 			isMuted: false,
 			isSpeakMuted: false,
 		});
@@ -292,6 +354,18 @@ export class ChatService {
 		}
 
 		const membershipsOtherThanMe = memberships.filter(member => member.userId !== fromUser.id);
+		const mentionAll = this.textMentionsAllMembers(params.text);
+		if (mentionAll) {
+			if (!this.canMentionAll(memberships, fromUser.id)) {
+				throw new Error('mention all is forbidden');
+			}
+
+			if (await this.redisClient.get(this.getRoomMentionAllCooldownKey(fromUser.id, toRoom.id)) != null) {
+				throw new Error('mention all is rate limited');
+			}
+		}
+		const mentionIds = mentionAll ? [] : this.resolveRoomMentionIds(params.text, memberships, fromUser).filter(id => id !== fromUser.id);
+		const mentionTargetIds = new Set(mentionAll ? membershipsOtherThanMe.map(member => member.userId) : mentionIds);
 
 		const message = {
 			id: this.idService.gen(),
@@ -299,11 +373,16 @@ export class ChatService {
 			toRoomId: toRoom.id,
 			text: params.text ? params.text.trim() : null,
 			fileId: params.file ? params.file.id : null,
+			mentions: mentionIds,
+			mentionAll,
 			reads: [],
 			uri: params.uri ?? null,
 		} satisfies Partial<MiChatMessage>;
 
 		const inserted = await this.chatMessagesRepository.insertOne(message);
+		if (mentionAll) {
+			this.redisClient.set(this.getRoomMentionAllCooldownKey(fromUser.id, toRoom.id), message.id, 'PX', ROOM_MENTION_ALL_COOLDOWN_MS);
+		}
 
 		const packedMessage = await this.chatEntityService.packMessageLiteForRoom(inserted);
 
@@ -311,10 +390,14 @@ export class ChatService {
 
 		const redisPipeline = this.redisClient.pipeline();
 		for (const membership of membershipsOtherThanMe) {
-			if (membership.isMuted) continue;
+			const isMentionTarget = mentionTargetIds.has(membership.userId);
+			if (membership.isMuted && !isMentionTarget) continue;
 
 			redisPipeline.set(this.getRoomUnreadMarkerKey(membership.userId, toRoom.id), message.id);
 			redisPipeline.sadd(this.getUnreadConversationIndexKey(membership.userId), `room:${toRoom.id}`);
+			if (isMentionTarget) {
+				redisPipeline.set(this.getRoomMentionUnreadMarkerKey(membership.userId, toRoom.id), message.id);
+			}
 		}
 		redisPipeline.exec();
 
@@ -361,6 +444,7 @@ export class ChatService {
 	): Promise<void> {
 		const redisPipeline = this.redisClient.pipeline();
 		redisPipeline.del(this.getRoomUnreadMarkerKey(readerId, roomId));
+		redisPipeline.del(this.getRoomMentionUnreadMarkerKey(readerId, roomId));
 		redisPipeline.srem(this.getUnreadConversationIndexKey(readerId), `room:${roomId}`);
 		await redisPipeline.exec();
 	}
@@ -378,6 +462,7 @@ export class ChatService {
 				redisPipeline.del(this.getUserUnreadMarkerKey(readerId, targetId));
 			} else if (type === 'room' && targetId) {
 				redisPipeline.del(this.getRoomUnreadMarkerKey(readerId, targetId));
+				redisPipeline.del(this.getRoomMentionUnreadMarkerKey(readerId, targetId));
 			}
 		}
 
@@ -600,6 +685,30 @@ export class ChatService {
 	}
 
 	@bindThis
+	public async getRoomMentionStateMap(userId: MiUser['id'], roomIds: MiChatRoom['id'][]) {
+		const mentionStateMap: Record<MiChatRoom['id'], { hasUnreadMention: boolean; mentionMessageId: MiChatMessage['id'] | null }> = {};
+
+		const redisPipeline = this.redisClient.pipeline();
+
+		for (const roomId of roomIds) {
+			redisPipeline.get(this.getRoomMentionUnreadMarkerKey(userId, roomId));
+		}
+
+		const markers = await redisPipeline.exec();
+		if (markers == null) throw new Error('redis error');
+
+		for (let i = 0; i < roomIds.length; i++) {
+			const marker = markers[i][1];
+			mentionStateMap[roomIds[i]] = {
+				hasUnreadMention: typeof marker === 'string',
+				mentionMessageId: typeof marker === 'string' ? marker : null,
+			};
+		}
+
+		return mentionStateMap;
+	}
+
+	@bindThis
 	public async hasUnreadMessages(userId: MiUser['id']) {
 		const card = await this.redisClient.scard(this.getUnreadConversationIndexKey(userId));
 		return card > 0;
@@ -615,18 +724,32 @@ export class ChatService {
 		const entries = await this.redisClient.smembers(this.getUnreadConversationIndexKey(userId));
 		let unreadDirectConversations = 0;
 		let unreadGroupConversations = 0;
+		let unreadMentionConversations = 0;
+		const roomIds: string[] = [];
 
 		for (const entry of entries) {
 			if (entry.startsWith('user:')) {
 				unreadDirectConversations++;
 			} else if (entry.startsWith('room:')) {
 				unreadGroupConversations++;
+				roomIds.push(entry.slice('room:'.length));
 			}
+		}
+
+		if (roomIds.length > 0) {
+			const redisPipeline = this.redisClient.pipeline();
+			for (const roomId of roomIds) {
+				redisPipeline.get(this.getRoomMentionUnreadMarkerKey(userId, roomId));
+			}
+			const markers = await redisPipeline.exec();
+			if (markers == null) throw new Error('redis error');
+			unreadMentionConversations = markers.filter(marker => marker[1] != null).length;
 		}
 
 		return {
 			unreadDirectConversations,
 			unreadGroupConversations,
+			unreadMentionConversations,
 			unreadConversations: unreadDirectConversations + unreadGroupConversations,
 		};
 	}
@@ -656,6 +779,7 @@ export class ChatService {
 			unreadConversations: unreadBreakdown.unreadConversations,
 			unreadDirectConversations: unreadBreakdown.unreadDirectConversations,
 			unreadGroupConversations: unreadBreakdown.unreadGroupConversations,
+			unreadMentionConversations: unreadBreakdown.unreadMentionConversations,
 		};
 	}
 
@@ -723,6 +847,7 @@ export class ChatService {
 		const redisPipeline = this.redisClient.pipeline();
 		for (const membership of memberships) {
 			redisPipeline.del(this.getRoomUnreadMarkerKey(membership.userId, room.id));
+			redisPipeline.del(this.getRoomMentionUnreadMarkerKey(membership.userId, room.id));
 			redisPipeline.srem(this.getUnreadConversationIndexKey(membership.userId), `room:${room.id}`);
 		}
 		await redisPipeline.exec();
@@ -914,6 +1039,8 @@ export class ChatService {
 			type: 'system',
 			text: null,
 			fileId: null,
+			mentions: [],
+			mentionAll: false,
 			reads: [],
 			uri: null,
 			reactions: [],
@@ -1403,6 +1530,7 @@ export class ChatService {
 		// 未読フラグを消す (「既読にする」というわけでもないのでreadメソッドは使わないでおく)
 		const redisPipeline = this.redisClient.pipeline();
 		redisPipeline.del(this.getRoomUnreadMarkerKey(userId, roomId));
+		redisPipeline.del(this.getRoomMentionUnreadMarkerKey(userId, roomId));
 		redisPipeline.srem(this.getUnreadConversationIndexKey(userId), `room:${roomId}`);
 		await redisPipeline.exec();
 
@@ -1512,6 +1640,28 @@ export class ChatService {
 		const memberships = await query.take(limit).getMany();
 
 		return memberships;
+	}
+
+	@bindThis
+	public async searchRoomMentionableUsers(room: MiChatRoom, query: string | null | undefined, limit: number) {
+		const memberships = await this.chatRoomMembershipsRepository.find({
+			where: { roomId: room.id },
+			relations: ['user'],
+		});
+		const users = [
+			room.owner,
+			...memberships.map(membership => membership.user),
+		].filter((user): user is MiUser => user != null);
+
+		const normalizedQuery = query?.trim().toLowerCase() ?? '';
+		const filtered = normalizedQuery === '' ? users : users.filter(user => {
+			const acct = user.host == null ? user.username : `${user.username}@${user.host}`;
+			return user.username.toLowerCase().includes(normalizedQuery) ||
+				acct.toLowerCase().includes(normalizedQuery) ||
+				(user.name?.toLowerCase().includes(normalizedQuery) ?? false);
+		});
+
+		return filtered.slice(0, limit);
 	}
 
 	@bindThis

@@ -46,6 +46,7 @@ type ChatSummary = {
 	unreadConversations: number;
 	unreadDirectConversations: number;
 	unreadGroupConversations: number;
+	unreadMentionConversations: number;
 };
 
 type GroupFocusTarget = ChatHomeFocusTarget | null;
@@ -72,6 +73,7 @@ const summary = ref<ChatSummary>({
 	unreadConversations: 0,
 	unreadDirectConversations: 0,
 	unreadGroupConversations: 0,
+	unreadMentionConversations: 0,
 });
 
 const pendingCount = computed(() => summary.value.invitations + summary.value.myRequests + summary.value.pendingRequests);

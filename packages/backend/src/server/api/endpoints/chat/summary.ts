@@ -50,6 +50,10 @@ export const meta = {
 				type: 'integer',
 				optional: false, nullable: false,
 			},
+			unreadMentionConversations: {
+				type: 'integer',
+				optional: false, nullable: false,
+			},
 		},
 	},
 
