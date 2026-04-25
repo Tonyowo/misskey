@@ -63,6 +63,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 				data-cy-signin-username
 			>
 				<template v-if="inputMode === 'username'" #prefix>@</template>
+				<template v-else #prefix><i class="ti ti-mail"></i></template>
 				<template v-if="inputMode === 'username'" #suffix>@{{ host }}</template>
 			</MkInput>
 			<MkButton type="submit" large primary rounded style="margin: 0 auto;" data-cy-signin-page-input-continue>{{ i18n.ts.continue }} <i class="ti ti-arrow-right"></i></MkButton>
@@ -125,7 +126,7 @@ function switchInputMode(mode: SigninInputMode): void {
 }
 
 function isValidEmailAddress(value: string): boolean {
-	const input = document.createElement('input');
+	const input = window.document.createElement('input');
 	input.type = 'email';
 	input.value = value;
 	return input.checkValidity();
