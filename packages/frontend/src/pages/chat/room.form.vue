@@ -12,7 +12,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 	@drop.stop="onDrop"
 >
 	<Transition name="fade">
-		<div v-if="emojiPickerShown" :class="$style.emojiPanel">
+		<div v-if="emojiPickerShown" :class="$style.emojiPanel" @pointerdown.prevent>
 			<div :class="$style.emojiPanelHeader">
 				<span>选择表情</span>
 				<button class="_button" :class="$style.emojiPanelClose" type="button" @click="closeEmojiPicker({ focusEditor: true })">

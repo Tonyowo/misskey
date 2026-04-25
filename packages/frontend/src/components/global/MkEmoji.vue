@@ -5,12 +5,12 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 <template>
 <img v-if="shouldMute" :class="$style.root" src="/client-assets/unknown.png" :alt="props.emoji" decoding="async" @pointerenter="computeTitle" @click="onClick"/>
-<img v-else-if="!useOsNativeEmojis" :class="$style.root" :src="url" :alt="props.emoji" decoding="async" @pointerenter="computeTitle" @click="onClick"/>
+<img v-else-if="!useOsNativeEmojis" :class="$style.root" :src="url" :alt="props.emoji" decoding="async" @error="onError" @pointerenter="computeTitle" @click="onClick"/>
 <span v-else :alt="props.emoji" @pointerenter="computeTitle" @click="onClick">{{ colorizedNativeEmoji }}</span>
 </template>
 
 <script lang="ts" setup>
-import { computed, inject } from 'vue';
+import { computed, inject, ref, watch } from 'vue';
 import { colorizeEmoji, getEmojiName } from '@@/js/emojilist.js';
 import { char2fluentEmojiFilePath, char2twemojiFilePath } from '@@/js/emoji-base.js';
 import type { MenuItem } from '@/types/menu.js';
@@ -30,17 +30,28 @@ const props = defineProps<{
 
 const react = inject(DI.mfmEmojiReactCallback, null);
 
-const char2path = prefer.s.emojiStyle === 'twemoji' ? char2twemojiFilePath : char2fluentEmojiFilePath;
-
 const useOsNativeEmojis = computed(() => prefer.s.emojiStyle === 'native');
-const url = computed(() => char2path(props.emoji));
+const errored = ref(false);
+const primaryUrl = computed(() => prefer.s.emojiStyle === 'twemoji' ? char2twemojiFilePath(props.emoji) : char2fluentEmojiFilePath(props.emoji));
+const fallbackUrl = computed(() => prefer.s.emojiStyle === 'fluentEmoji' ? char2twemojiFilePath(props.emoji) : null);
+const url = computed(() => (errored.value && fallbackUrl.value) ? fallbackUrl.value : primaryUrl.value);
 const colorizedNativeEmoji = computed(() => colorizeEmoji(props.emoji));
 const isMuted = checkMutedEmoji(props.emoji);
 const shouldMute = computed(() => isMuted.value && !props.ignoreMuted);
 
+watch(() => [props.emoji, prefer.s.emojiStyle], () => {
+	errored.value = false;
+});
+
 // Searching from an array with 2000 items for every emoji felt like too energy-consuming, so I decided to do it lazily on pointerenter
 function computeTitle(event: PointerEvent): void {
 	(event.target as HTMLElement).title = getEmojiName(props.emoji);
+}
+
+function onError() {
+	if (fallbackUrl.value != null && url.value !== fallbackUrl.value) {
+		errored.value = true;
+	}
 }
 
 function mute() {

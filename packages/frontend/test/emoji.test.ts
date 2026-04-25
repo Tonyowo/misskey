@@ -4,7 +4,7 @@
  */
 
 import { describe, test, assert, afterEach } from 'vitest';
-import { render, cleanup, type RenderResult } from '@testing-library/vue';
+import { render, cleanup, fireEvent, type RenderResult } from '@testing-library/vue';
 import { preferState } from './init.js';
 import { getEmojiName } from '@@/js/emojilist.js';
 import { components } from '@/components/index.js';
@@ -30,6 +30,18 @@ describe('Emoji', () => {
 			const mkEmoji = await renderEmoji('\u2764'); // monochrome heart
 			assert.ok(mkEmoji.queryByText('\u2764\uFE0F')); // colored heart
 			assert.ok(!mkEmoji.queryByText('\u2764'));
+		});
+
+		test('Should fall back to Twemoji when a Fluent Emoji image fails to load', async () => {
+			preferState.emojiStyle = 'fluentEmoji';
+			const mkEmoji = await renderEmoji('🍋‍🟩');
+			const img = mkEmoji.getByAltText('🍋‍🟩') as HTMLImageElement;
+
+			assert.strictEqual(img.getAttribute('src'), '/fluent-emoji/1f34b-200d-1f7e9.png');
+
+			await fireEvent.error(img);
+
+			assert.strictEqual(img.getAttribute('src'), '/twemoji/1f34b-200d-1f7e9.svg');
 		});
 	});
 
