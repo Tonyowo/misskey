@@ -96,6 +96,7 @@ onUpdated(() => {
 	margin: 0 0 0 auto;
 	max-width: max-content;
 	border-radius: 16px;
+	text-align: start;
 }
 
 .reactions {
