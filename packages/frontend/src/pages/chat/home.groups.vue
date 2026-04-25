@@ -11,6 +11,13 @@ SPDX-License-Identifier: AGPL-3.0-only
 		<MkButton rounded @click="joinByLink"><i class="ti ti-link"></i> 通过链接加入</MkButton>
 	</div>
 
+	<div v-if="fetchError" class="_gaps_s">
+		<MkInfo warn>群聊信息加载失败，请稍后重试。</MkInfo>
+		<div class="_buttons">
+			<MkButton rounded @click="fetchAll"><i class="ti ti-refresh"></i> 重试</MkButton>
+		</div>
+	</div>
+
 	<section v-if="showDiscover" class="_gaps_s">
 		<h2 :class="$style.sectionTitle">发现群聊</h2>
 		<MkInfo>这里会展示公开可发现的群聊，你可以进入群页后直接加入或提交申请。</MkInfo>
@@ -45,15 +52,15 @@ SPDX-License-Identifier: AGPL-3.0-only
 	</section>
 
 	<div :class="$style.summaryGrid">
-		<button class="_button" :class="$style.summaryCard" @click="focusSection('invitations')">
+		<button class="_button" :class="$style.summaryCard" :disabled="summary.invitations === 0" @click="focusSection('invitations')">
 			<div :class="$style.summaryLabel">邀请</div>
 			<div :class="$style.summaryValue">{{ summary.invitations }}</div>
 		</button>
-		<button class="_button" :class="$style.summaryCard" @click="focusSection('requests')">
+		<button class="_button" :class="$style.summaryCard" :disabled="summary.myRequests === 0" @click="focusSection('requests')">
 			<div :class="$style.summaryLabel">我的申请</div>
 			<div :class="$style.summaryValue">{{ summary.myRequests }}</div>
 		</button>
-		<button class="_button" :class="$style.summaryCard" @click="focusSection('approvals')">
+		<button class="_button" :class="$style.summaryCard" :disabled="summary.pendingRequests === 0" @click="focusSection('approvals')">
 			<div :class="$style.summaryLabel">待审批</div>
 			<div :class="$style.summaryValue">{{ summary.pendingRequests }}</div>
 		</button>
@@ -158,7 +165,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 		<div v-if="filteredRooms.length > 0" class="_gaps_s">
 			<XRoom v-for="room in filteredRooms" :key="room.id" :room="room"/>
 		</div>
-		<MkResult v-else-if="!fetching" type="empty" text="暂无群聊"/>
+		<MkResult v-else-if="!fetching && !fetchError" type="empty" text="暂无群聊"/>
 		<MkLoading v-if="fetching"/>
 	</section>
 </div>
@@ -213,6 +220,7 @@ const props = defineProps<{
 }>();
 
 const fetching = ref(true);
+const fetchError = ref(false);
 const summary = ref<ChatSummary>({
 	invitations: 0,
 	myRequests: 0,
@@ -330,27 +338,32 @@ async function fetchDiscoverRooms(options?: {
 
 async function fetchAll() {
 	fetching.value = true;
+	fetchError.value = false;
 
-	const [summaryResult, ownedResult, joiningResult, invitationResult, requestResult] = await Promise.all([
-		misskeyApi<ChatSummary>('chat/summary' as never, {} as never),
-		misskeyApi('chat/rooms/owned', { limit: 100 }),
-		misskeyApi('chat/rooms/joining', { limit: 100 }),
-		misskeyApi('chat/rooms/invitations/inbox', { limit: 20 }),
-		misskeyApi('chat/rooms/requests/mine', { limit: 20 }),
-	]);
+	try {
+		const [summaryResult, ownedResult, joiningResult, invitationResult, requestResult] = await Promise.all([
+			misskeyApi<ChatSummary>('chat/summary' as never, {} as never),
+			misskeyApi('chat/rooms/owned', { limit: 100 }),
+			misskeyApi('chat/rooms/joining', { limit: 100 }),
+			misskeyApi('chat/rooms/invitations/inbox', { limit: 20 }),
+			misskeyApi('chat/rooms/requests/mine', { limit: 20 }),
+		]);
 
-	summary.value = summaryResult;
-	ownedRooms.value = ownedResult;
-	joiningMemberships.value = joiningResult;
-	invitations.value = invitationResult;
-	requests.value = requestResult;
+		summary.value = summaryResult;
+		ownedRooms.value = ownedResult;
+		joiningMemberships.value = joiningResult;
+		invitations.value = invitationResult;
+		requests.value = requestResult;
 
-	fetching.value = false;
-
-	if (props.focusTarget != null) {
-		requestAnimationFrame(() => {
-			focusSection(props.focusTarget ?? 'invitations');
-		});
+		if (props.focusTarget != null) {
+			requestAnimationFrame(() => {
+				focusSection(props.focusTarget ?? 'invitations');
+			});
+		}
+	} catch {
+		fetchError.value = true;
+	} finally {
+		fetching.value = false;
 	}
 }
 
@@ -369,14 +382,75 @@ function focusSection(target: 'invitations' | 'requests' | 'approvals') {
 }
 
 async function createRoom() {
-	const { canceled, result } = await os.inputText({
-		title: '群聊名称',
-		minLength: 1,
+	const { canceled, result } = await os.form('创建群聊', {
+		name: {
+			type: 'string',
+			label: '群聊名称',
+			required: true,
+		},
+		description: {
+			type: 'string',
+			label: i18n.ts.description,
+			required: false,
+			multiline: true,
+		},
+		joinPolicy: {
+			type: 'enum',
+			label: '加入方式',
+			default: 'invite_only',
+			enum: [{
+				label: '仅邀请',
+				value: 'invite_only',
+			}, {
+				label: '需申请审核',
+				value: 'request_required',
+			}, {
+				label: '公开可加入',
+				value: 'public',
+			}],
+		},
+		discoverability: {
+			type: 'enum',
+			label: '可发现性',
+			default: 'private',
+			enum: [{
+				label: '私密',
+				value: 'private',
+			}, {
+				label: '不公开（仅链接可见）',
+				value: 'unlisted',
+			}, {
+				label: '公开可发现',
+				value: 'public',
+			}],
+		},
 	});
 	if (canceled) return;
 
+	const name = result.name.trim();
+	if (name.length === 0) {
+		await os.alert({
+			type: 'warning',
+			text: '请输入群聊名称。',
+		});
+		return;
+	}
+
+	const joinPolicy = result.joinPolicy as Misskey.entities.ChatRoom['joinPolicy'];
+	const discoverability = result.discoverability as Misskey.entities.ChatRoom['discoverability'];
+	if (joinPolicy === 'public' && discoverability === 'private') {
+		await os.alert({
+			type: 'warning',
+			text: '公开可加入的群聊不能设为私密，请选择“不公开”或“公开可发现”。',
+		});
+		return;
+	}
+
 	const room = await misskeyApi('chat/rooms/create', {
-		name: result,
+		name,
+		description: result.description?.trim() || undefined,
+		joinPolicy,
+		discoverability,
 	});
 
 	router.push('/chat/room/:roomId', {
@@ -656,6 +730,16 @@ watch(() => props.focusTarget, (target) => {
 	&:hover {
 		background: color-mix(in srgb, var(--MI_THEME-panel) 92%, var(--MI_THEME-bg) 8%);
 		border-color: color(from var(--MI_THEME-accent) srgb r g b / 0.26);
+	}
+
+	&:disabled {
+		cursor: default;
+		opacity: 0.72;
+
+		&:hover {
+			background: color-mix(in srgb, var(--MI_THEME-panel) 96%, var(--MI_THEME-bg) 4%);
+			border-color: color-mix(in srgb, var(--MI_THEME-divider) 78%, transparent);
+		}
 	}
 }
 

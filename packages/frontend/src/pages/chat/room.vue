@@ -79,34 +79,18 @@ SPDX-License-Identifier: AGPL-3.0-only
 					</div>
 					<div>{{ i18n.ts._chat.youAreNotAMemberOfThisRoom }}</div>
 					<div v-if="room.description" :class="$style.roomDescription">{{ room.description }}</div>
-					<MkInfo v-if="room.joinRequestExists">
-						{{ i18n.ts._chat.joinRequestPending }}
+					<MkInfo v-if="roomJoinCta.notice">
+						{{ roomJoinCta.notice }}
 					</MkInfo>
 					<div :class="$style.roomActions">
 						<MkButton
-							v-if="room.joinPolicy === 'public'"
-							primary
+							v-if="roomJoinCta.action !== 'none'"
+							:primary="roomJoinCta.primary"
 							rounded
-							:disabled="$i.policies.chatAvailability !== 'available'"
-							@click="joinRoomDirectly"
+							:disabled="roomJoinCta.disabled"
+							@click="handleRoomJoinCta"
 						>
-							<i class="ti ti-plus"></i> 加入群聊
-						</MkButton>
-						<MkButton
-							v-else-if="!room.joinRequestExists && room.allowJoinRequest && room.joinPolicy !== 'invite_only'"
-							primary
-							rounded
-							:disabled="$i.policies.chatAvailability !== 'available'"
-							@click="requestToJoinRoom"
-						>
-							<i class="ti ti-user-plus"></i> 申请加入
-						</MkButton>
-						<MkButton
-							v-else
-							rounded
-							@click="cancelJoinRequest"
-						>
-							<i class="ti ti-x"></i> 取消申请
+							<i :class="roomJoinCta.icon"></i> {{ roomJoinCta.text }}
 						</MkButton>
 					</div>
 				</div>
@@ -234,6 +218,7 @@ import { useMutationObserver } from '@/composables/use-mutation-observer.js';
 import { useGlobalEvent } from '@/events.js';
 import { makeDateSeparatedTimelineComputedRef } from '@/utility/timeline-date-separate.js';
 import { canWriteInDirectChat } from './direct-chat-availability.js';
+import { getRoomJoinCta } from './room-join-cta.js';
 
 const $i = ensureSignin();
 const router = useRouter();
@@ -334,6 +319,9 @@ const userProfilePath = computed(() => {
 	if (user.value == null) return '/chat';
 	return `/@${user.value.username}${user.value.host ? `@${user.value.host}` : ''}`;
 });
+const roomJoinCta = computed(() => room.value == null ? getRoomJoinCta({
+	joinPolicy: 'invite_only',
+}, $i.policies.chatAvailability) : getRoomJoinCta(room.value, $i.policies.chatAvailability));
 
 const SCROLL_HEAD_THRESHOLD = 200;
 
@@ -806,6 +794,23 @@ async function requestToJoinRoom() {
 		scopes: ['myRequests', 'counts'],
 	});
 	void refreshRoomState();
+}
+
+function handleRoomJoinCta() {
+	switch (roomJoinCta.value.action) {
+		case 'join':
+			void joinRoomDirectly();
+			return;
+		case 'request':
+			void requestToJoinRoom();
+			return;
+		case 'cancel-request':
+			void cancelJoinRequest();
+			return;
+		case 'none':
+		default:
+			return;
+	}
 }
 
 async function joinRoomDirectly() {

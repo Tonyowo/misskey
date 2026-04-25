@@ -4,7 +4,7 @@
  */
 
 import * as assert from 'node:assert';
-import { api, signup, successfulApiCall } from '../utils.js';
+import { api, failedApiCall, signup, successfulApiCall } from '../utils.js';
 import type * as Misskey from 'misskey-js';
 
 type ChatSummary = {
@@ -134,5 +134,134 @@ describe('chat', () => {
 			user: alice,
 		});
 		assert.strictEqual(roomHistoryAfter[0].isRead, true);
+	});
+
+	test('group discovery, requests, moderation, and removal work together', async () => {
+		const roomName = `chat-flow-room-${Date.now()}`;
+		const room = await successfulApiCall({
+			endpoint: 'chat/rooms/create',
+			parameters: {
+				name: roomName,
+			},
+			user: alice,
+		});
+
+		const updatedRoom = await successfulApiCall({
+			endpoint: 'chat/rooms/update-settings',
+			parameters: {
+				roomId: room.id,
+				joinPolicy: 'request_required',
+				discoverability: 'public',
+				allowJoinRequest: true,
+			},
+			user: alice,
+		});
+		assert.strictEqual(updatedRoom.joinPolicy, 'request_required');
+		assert.strictEqual(updatedRoom.discoverability, 'public');
+
+		const discoveredRooms = await successfulApiCall({
+			endpoint: 'chat/rooms/discover',
+			parameters: {
+				query: roomName,
+				limit: 10,
+			},
+			user: bob,
+		});
+		assert.ok(discoveredRooms.some(item => item.id === room.id));
+
+		await successfulApiCall({
+			endpoint: 'chat/rooms/requests/create',
+			parameters: {
+				roomId: room.id,
+				message: 'please let me in',
+			},
+			user: bob,
+		});
+
+		const pendingRequests = await successfulApiCall({
+			endpoint: 'chat/rooms/requests/list',
+			parameters: {
+				roomId: room.id,
+				limit: 10,
+			},
+			user: alice,
+		});
+		assert.ok(pendingRequests.some(item => item.userId === bob.id));
+
+		const membership = await successfulApiCall({
+			endpoint: 'chat/rooms/requests/accept',
+			parameters: {
+				roomId: room.id,
+				userId: bob.id,
+			},
+			user: alice,
+		});
+		assert.strictEqual(membership.userId, bob.id);
+
+		const message = await successfulApiCall({
+			endpoint: 'chat/messages/create-to-room',
+			parameters: {
+				toRoomId: room.id,
+				text: 'hello after approval',
+			},
+			user: bob,
+		});
+		assert.strictEqual(message.text, 'hello after approval');
+
+		await successfulApiCall({
+			endpoint: 'chat/rooms/members/mute',
+			parameters: {
+				roomId: room.id,
+				userId: bob.id,
+				reason: 'test mute',
+			},
+			user: alice,
+		}, {
+			status: 204,
+		});
+
+		await failedApiCall({
+			endpoint: 'chat/messages/create-to-room',
+			parameters: {
+				toRoomId: room.id,
+				text: 'blocked while muted',
+			},
+			user: bob,
+		}, {
+			status: 400,
+			code: 'MUTED_IN_ROOM',
+			id: '67512792-fd66-4f82-a4ac-44ec9c75005e',
+		});
+
+		await successfulApiCall({
+			endpoint: 'chat/rooms/members/unmute',
+			parameters: {
+				roomId: room.id,
+				userId: bob.id,
+			},
+			user: alice,
+		}, {
+			status: 204,
+		});
+
+		await successfulApiCall({
+			endpoint: 'chat/rooms/members/kick',
+			parameters: {
+				roomId: room.id,
+				userId: bob.id,
+			},
+			user: alice,
+		}, {
+			status: 204,
+		});
+
+		const roomAfterKick = await successfulApiCall({
+			endpoint: 'chat/rooms/show',
+			parameters: {
+				roomId: room.id,
+			},
+			user: bob,
+		});
+		assert.strictEqual(roomAfterKick.isJoined, false);
 	});
 });

@@ -88,6 +88,10 @@ SPDX-License-Identifier: AGPL-3.0-only
 		</div>
 	</div>
 
+	<div v-if="membershipsHasMore" class="_buttons">
+		<MkButton rounded :wait="membershipsFetchingMore" @click="loadMoreMemberships"><i class="ti ti-chevron-down"></i> 加载更多成员</MkButton>
+	</div>
+
 	<template v-if="canManageJoinRequests">
 		<hr>
 
@@ -108,6 +112,10 @@ SPDX-License-Identifier: AGPL-3.0-only
 				<MkButton rounded small danger @click="rejectJoinRequest(joinRequest)"><i class="ti ti-x"></i> 拒绝</MkButton>
 			</div>
 		</div>
+
+		<div v-if="joinRequestsHasMore" class="_buttons">
+			<MkButton rounded :wait="joinRequestsFetchingMore" @click="loadMoreJoinRequests"><i class="ti ti-chevron-down"></i> 加载更多申请</MkButton>
+		</div>
 	</template>
 
 	<template v-if="canInvite">
@@ -124,6 +132,10 @@ SPDX-License-Identifier: AGPL-3.0-only
 			<div :class="$style.requestActions">
 				<MkButton rounded small danger @click="revokeInvitation(invitation)"><i class="ti ti-x"></i> 取消</MkButton>
 			</div>
+		</div>
+
+		<div v-if="invitationsHasMore" class="_buttons">
+			<MkButton rounded :wait="invitationsFetchingMore" @click="loadMoreInvitations"><i class="ti ti-chevron-down"></i> 加载更多邀请</MkButton>
 		</div>
 	</template>
 
@@ -151,6 +163,10 @@ SPDX-License-Identifier: AGPL-3.0-only
 			<div :class="$style.requestActions">
 				<MkButton rounded small @click="unbanMember(ban)"><i class="ti ti-lock-open"></i> 解除封禁</MkButton>
 			</div>
+		</div>
+
+		<div v-if="bansHasMore" class="_buttons">
+			<MkButton rounded :wait="bansFetchingMore" @click="loadMoreBans"><i class="ti ti-chevron-down"></i> 加载更多封禁记录</MkButton>
 		</div>
 	</template>
 </div>
@@ -191,10 +207,20 @@ const canKickMembers = computed(() => props.room.canKickMembers ?? false);
 const canBanMembers = computed(() => props.room.canBanMembers ?? false);
 const canMuteMembers = computed(() => props.room.canMuteMembers ?? false);
 
+const PAGE_LIMIT = 50;
+
 const memberships = ref<Misskey.entities.ChatRoomMembership[]>([]);
 const invitations = ref<Misskey.entities.ChatRoomInvitation[]>([]);
 const joinRequests = ref<Misskey.entities.ChatRoomJoinRequest[]>([]);
 const bans = ref<Misskey.entities.ChatRoomBan[]>([]);
+const membershipsHasMore = ref(false);
+const invitationsHasMore = ref(false);
+const joinRequestsHasMore = ref(false);
+const bansHasMore = ref(false);
+const membershipsFetchingMore = ref(false);
+const invitationsFetchingMore = ref(false);
+const joinRequestsFetchingMore = ref(false);
+const bansFetchingMore = ref(false);
 
 function formatUserName(user: Misskey.entities.UserLite) {
 	return user.name?.trim() || `@${user.username}`;
@@ -219,47 +245,66 @@ async function refreshRoomState() {
 	emit('updated', updated);
 }
 
-async function fetchMemberships() {
-	memberships.value = await misskeyApi('chat/rooms/members', {
-		roomId: props.room.id,
-		limit: 50,
-	});
+function getLastId<T extends { id: string }>(items: T[]) {
+	return items.length > 0 ? items[items.length - 1].id : undefined;
 }
 
-async function fetchInvitations() {
+async function fetchMemberships(options?: { append?: boolean }) {
+	const result = await misskeyApi('chat/rooms/members', {
+		roomId: props.room.id,
+		limit: PAGE_LIMIT,
+		untilId: options?.append ? getLastId(memberships.value) : undefined,
+	});
+	memberships.value = options?.append ? [...memberships.value, ...result] : result;
+	membershipsHasMore.value = result.length === PAGE_LIMIT;
+}
+
+async function fetchInvitations(options?: { append?: boolean }) {
 	if (!canInvite.value) {
 		invitations.value = [];
+		invitationsHasMore.value = false;
 		return;
 	}
 
-	invitations.value = await misskeyApi('chat/rooms/invitations/outbox', {
+	const result = await misskeyApi('chat/rooms/invitations/outbox', {
 		roomId: props.room.id,
-		limit: 50,
+		limit: PAGE_LIMIT,
+		untilId: options?.append ? getLastId(invitations.value) : undefined,
 	});
+	invitations.value = options?.append ? [...invitations.value, ...result] : result;
+	invitationsHasMore.value = result.length === PAGE_LIMIT;
 }
 
-async function fetchJoinRequests() {
+async function fetchJoinRequests(options?: { append?: boolean }) {
 	if (!canManageJoinRequests.value) {
 		joinRequests.value = [];
+		joinRequestsHasMore.value = false;
 		return;
 	}
 
-	joinRequests.value = await misskeyApi('chat/rooms/requests/list', {
+	const result = await misskeyApi('chat/rooms/requests/list', {
 		roomId: props.room.id,
-		limit: 50,
+		limit: PAGE_LIMIT,
+		untilId: options?.append ? getLastId(joinRequests.value) : undefined,
 	});
+	joinRequests.value = options?.append ? [...joinRequests.value, ...result] : result;
+	joinRequestsHasMore.value = result.length === PAGE_LIMIT;
 }
 
-async function fetchBans() {
+async function fetchBans(options?: { append?: boolean }) {
 	if (!canBanMembers.value) {
 		bans.value = [];
+		bansHasMore.value = false;
 		return;
 	}
 
-	bans.value = await misskeyApi('chat/rooms/bans/list', {
+	const result = await misskeyApi('chat/rooms/bans/list', {
 		roomId: props.room.id,
-		limit: 50,
+		limit: PAGE_LIMIT,
+		untilId: options?.append ? getLastId(bans.value) : undefined,
 	});
+	bans.value = options?.append ? [...bans.value, ...result] : result;
+	bansHasMore.value = result.length === PAGE_LIMIT;
 }
 
 async function fetchAll() {
@@ -269,6 +314,46 @@ async function fetchAll() {
 		fetchJoinRequests(),
 		fetchBans(),
 	]);
+}
+
+async function loadMoreMemberships() {
+	if (membershipsFetchingMore.value) return;
+	membershipsFetchingMore.value = true;
+	try {
+		await fetchMemberships({ append: true });
+	} finally {
+		membershipsFetchingMore.value = false;
+	}
+}
+
+async function loadMoreInvitations() {
+	if (invitationsFetchingMore.value) return;
+	invitationsFetchingMore.value = true;
+	try {
+		await fetchInvitations({ append: true });
+	} finally {
+		invitationsFetchingMore.value = false;
+	}
+}
+
+async function loadMoreJoinRequests() {
+	if (joinRequestsFetchingMore.value) return;
+	joinRequestsFetchingMore.value = true;
+	try {
+		await fetchJoinRequests({ append: true });
+	} finally {
+		joinRequestsFetchingMore.value = false;
+	}
+}
+
+async function loadMoreBans() {
+	if (bansFetchingMore.value) return;
+	bansFetchingMore.value = true;
+	try {
+		await fetchBans({ append: true });
+	} finally {
+		bansFetchingMore.value = false;
+	}
 }
 
 function invalidateChat(scopes: ChatCollectionScope[], reason: string) {

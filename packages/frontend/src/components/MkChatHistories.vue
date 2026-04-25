@@ -80,7 +80,13 @@ SPDX-License-Identifier: AGPL-3.0-only
 		</div>
 	</MkA>
 </div>
-<MkResult v-if="!initializing && filteredHistory.length == 0" type="empty" :text="i18n.ts._chat.noHistory">
+<div v-if="fetchError && !initializing && filteredHistory.length === 0" class="_gaps_s">
+	<MkInfo warn>聊天历史加载失败，请稍后重试。</MkInfo>
+	<div class="_buttons">
+		<MkButton rounded @click="fetchHistory"><i class="ti ti-refresh"></i> 重试</MkButton>
+	</div>
+</div>
+<MkResult v-else-if="!initializing && filteredHistory.length == 0" type="empty" :text="i18n.ts._chat.noHistory">
 	<div v-if="emptyDescription" :class="$style.emptyDescription">{{ emptyDescription }}</div>
 	<MkButton v-if="emptyActionLabel" rounded @click="emit('emptyAction')">{{ emptyActionLabel }}</MkButton>
 </MkResult>
@@ -100,6 +106,7 @@ import { ensureSignin } from '@/i.js';
 import { useGlobalEvent } from '@/events.js';
 import * as os from '@/os.js';
 import MkButton from '@/components/MkButton.vue';
+import MkInfo from '@/components/MkInfo.vue';
 import { useRouter } from '@/router.js';
 import { updateCurrentAccountPartial } from '@/accounts.js';
 
@@ -136,6 +143,7 @@ const filteredHistory = ref<ChatHistoryViewItem[]>([]);
 
 const initializing = ref(true);
 const fetching = ref(false);
+const fetchError = ref(false);
 
 function decorateItem(item: ChatHistoryItem): ChatHistoryViewItem {
 	return {
@@ -153,24 +161,29 @@ async function fetchHistory() {
 	if (fetching.value) return;
 
 	fetching.value = true;
+	fetchError.value = false;
 
-	const [userMessages, roomMessages] = await Promise.all([
-		misskeyApi('chat/history', { room: false }),
-		misskeyApi('chat/history', { room: true }),
-	]);
+	try {
+		const [userMessages, roomMessages] = await Promise.all([
+			misskeyApi('chat/history', { room: false }),
+			misskeyApi('chat/history', { room: true }),
+		]);
 
-	conversationItems.value = [...userMessages, ...roomMessages]
-		.toSorted((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-		.map(m => ({
-			id: m.id,
-			message: m,
-			other: (!('room' in m) || m.room == null) ? (m.fromUserId === $i.id ? m.toUser : m.fromUser) : null,
-			isMe: m.fromUserId === $i.id,
-		}));
-	applyFilter();
-
-	fetching.value = false;
-	initializing.value = false;
+		conversationItems.value = [...userMessages, ...roomMessages]
+			.toSorted((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+			.map(m => ({
+				id: m.id,
+				message: m,
+				other: (!('room' in m) || m.room == null) ? (m.fromUserId === $i.id ? m.toUser : m.fromUser) : null,
+				isMe: m.fromUserId === $i.id,
+			}));
+		applyFilter();
+	} catch {
+		fetchError.value = true;
+	} finally {
+		fetching.value = false;
+		initializing.value = false;
+	}
 }
 
 async function readAllFromMenu(item: ChatHistoryItem) {
