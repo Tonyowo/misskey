@@ -6,7 +6,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 <template>
 <div
 	ref="rootEl"
-	:class="$style.root"
+	:class="[$style.root, { [$style.rootFloating]: isComposerFloating }]"
 	:style="{ '--chatKeyboardInset': `${keyboardInset}px` }"
 	@dragover.stop="onDragover"
 	@drop.stop="onDrop"
@@ -17,8 +17,11 @@ SPDX-License-Identifier: AGPL-3.0-only
 		:class="$style.editor"
 		class="_acrylic"
 		:placeholder="textareaPlaceholder"
+		:inputmode="isMobileEmojiPicker && emojiPickerShown ? 'none' : undefined"
 		:readonly="textareaReadOnly || isSpeakMuted"
+		@pointerdown="onEditorPointerDown"
 		@focus="onEditorFocus"
+		@blur="onEditorBlur"
 		@keydown="onKeydown"
 		@paste="onPaste"
 	/>
@@ -88,15 +91,18 @@ const emojiPickerShown = ref(false);
 const keyboardInset = ref(0);
 const visualViewportHeight = ref(window.visualViewport?.height ?? window.innerHeight);
 const isMobileEmojiPicker = ref(deviceKind === 'smartphone' || window.innerWidth <= 500);
+const composerActive = ref(false);
 let autocompleteInstance: Autocomplete | null = null;
 let lastKeyboardScrollHandle = 0;
 let viewportUpdateHandles: number[] = [];
+let editorBlurHandle = 0;
 
 const isSpeakMuted = computed(() => props.room?.isSpeakMuted ?? false);
 const canSend = computed(() => !isSpeakMuted.value && ((text.value != null && text.value !== '') || file.value != null));
 const textareaPlaceholder = computed(() => isSpeakMuted.value ? '你已被禁言，暂时无法发言' : '输入消息');
 const sendButtonTitle = computed(() => isSpeakMuted.value ? '你已被禁言，暂时无法发言' : '发送');
 const emojiPickerMaxHeight = computed(() => Math.min(260, Math.max(180, Math.round(visualViewportHeight.value * 0.34))));
+const isComposerFloating = computed(() => isMobileEmojiPicker.value && keyboardInset.value > 0);
 
 function getDraftKey() {
 	return props.user ? 'user:' + props.user.id : 'room:' + props.room?.id;
@@ -372,7 +378,7 @@ function toggleEmojiPicker() {
 
 	preserveTextSelection();
 	emojiPickerShown.value = true;
-	textareaReadOnly.value = true;
+	textareaReadOnly.value = false;
 	textEditorEl.value?.blur();
 	nextTick(() => {
 		emojiPickerEl.value?.reset();
@@ -406,7 +412,7 @@ function getKeyboardInset() {
 
 function shouldLiftComposer() {
 	const activeElement = window.document.activeElement;
-	return isMobileEmojiPicker.value && (emojiPickerShown.value || (activeElement != null && (rootEl.value?.contains(activeElement) ?? false)));
+	return isMobileEmojiPicker.value && (composerActive.value || emojiPickerShown.value || (activeElement != null && (rootEl.value?.contains(activeElement) ?? false)));
 }
 
 function updateViewportState() {
@@ -437,6 +443,7 @@ function scheduleViewportAdjustment() {
 function keepComposerVisible() {
 	window.clearTimeout(lastKeyboardScrollHandle);
 	lastKeyboardScrollHandle = window.setTimeout(() => {
+		if (isComposerFloating.value) return;
 		rootEl.value?.scrollIntoView({
 			block: 'nearest',
 			behavior: 'smooth',
@@ -444,9 +451,30 @@ function keepComposerVisible() {
 	}, 80);
 }
 
+function onEditorPointerDown() {
+	composerActive.value = true;
+	scheduleViewportAdjustment();
+}
+
 function onEditorFocus() {
+	composerActive.value = true;
+	window.clearTimeout(editorBlurHandle);
+	if (isMobileEmojiPicker.value && emojiPickerShown.value) {
+		scheduleViewportAdjustment();
+		return;
+	}
 	closeEmojiPicker();
 	scheduleViewportAdjustment();
+}
+
+function onEditorBlur() {
+	window.clearTimeout(editorBlurHandle);
+	editorBlurHandle = window.setTimeout(() => {
+		if (!emojiPickerShown.value) {
+			composerActive.value = false;
+			updateViewportState();
+		}
+	}, 120);
 }
 
 function onVisualViewportChange() {
@@ -485,6 +513,7 @@ onBeforeUnmount(() => {
 		autocompleteInstance = null;
 	}
 	clearViewportUpdateHandles();
+	window.clearTimeout(editorBlurHandle);
 	window.clearTimeout(lastKeyboardScrollHandle);
 	window.visualViewport?.removeEventListener('resize', onVisualViewportChange);
 	window.visualViewport?.removeEventListener('scroll', onVisualViewportChange);
@@ -503,6 +532,16 @@ onBeforeUnmount(() => {
 	transform: translateY(calc(-1 * var(--chatKeyboardInset, 0px)));
 	transition: transform 0.18s ease;
 	will-change: transform;
+}
+
+.rootFloating {
+	position: fixed;
+	right: 0;
+	left: 0;
+	bottom: var(--chatKeyboardInset, 0px);
+	z-index: 2000;
+	transform: none;
+	box-shadow: 0 -12px 32px color(from var(--MI_THEME-shadow) srgb r g b / 0.18);
 }
 
 .editor {
@@ -561,6 +600,36 @@ onBeforeUnmount(() => {
 	box-shadow: none;
 	border-radius: 0;
 	background: var(--MI_THEME-panel);
+
+	:global(.body) {
+		grid-template-columns: repeat(8, minmax(0, 1fr)) !important;
+		gap: 2px 4px;
+		padding: 6px 10px !important;
+	}
+
+	:global(.body > .item) {
+		aspect-ratio: 1 / 1;
+		width: auto !important;
+		height: auto !important;
+		min-width: 0;
+		padding: 0;
+		font-size: 22px;
+	}
+
+	:global(.bottomBar) {
+		gap: 4px !important;
+		padding: 6px 8px !important;
+	}
+
+	:global(.bottomBarViewport .bottomBarPage) {
+		gap: 4px !important;
+	}
+
+	:global(.navArrow),
+	:global(.bottomTab) {
+		width: 38px !important;
+		height: 38px !important;
+	}
 }
 
 .footer {
