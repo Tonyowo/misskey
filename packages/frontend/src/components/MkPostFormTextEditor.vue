@@ -87,6 +87,7 @@ const lastSelectionRange = ref<SelectionRange>({ start: renderedText.value.lengt
 let skipInputNormalizationUntilRender = false;
 let pendingPointerCaret: { pointerId: number; offset: number; x: number; y: number } | null = null;
 const TOKEN_CARET_ANCHOR = '\u200b';
+const fluentEmojiFallbackCache = new Set<string>();
 
 function stripCaretAnchors(value: string) {
 	return value.replaceAll(TOKEN_CARET_ANCHOR, '');
@@ -228,7 +229,9 @@ function getCustomEmojiImageUrl(name: string): string {
 }
 
 function getUnicodeEmojiImageUrl(emoji: string): string {
-	return getEmojiStyle() === 'twemoji' ? char2twemojiFilePath(emoji) : char2fluentEmojiFilePath(emoji);
+	return getEmojiStyle() === 'twemoji' || fluentEmojiFallbackCache.has(emoji)
+		? char2twemojiFilePath(emoji)
+		: char2fluentEmojiFilePath(emoji);
 }
 
 function createCustomEmojiNode(name: string, raw: string): HTMLSpanElement {
@@ -282,6 +285,7 @@ function createUnicodeEmojiNode(raw: string): HTMLSpanElement {
 	img.onerror = () => {
 		const fallbackUrl = char2twemojiFilePath(raw);
 		if (getEmojiStyle() === 'fluentEmoji' && img.getAttribute('src') !== fallbackUrl) {
+			fluentEmojiFallbackCache.add(raw);
 			img.src = fallbackUrl;
 		}
 	};

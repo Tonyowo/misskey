@@ -134,6 +134,41 @@ describe('MkPostFormTextEditor', () => {
 		assert.strictEqual(img!.getAttribute('src'), '/twemoji/1f600.svg');
 	});
 
+	test('uses cached Twemoji fallback after a Fluent Emoji image fails', async () => {
+		const { default: MkPostFormTextEditor } = await import('@/components/MkPostFormTextEditor.vue');
+		const text = ref('🍋‍🟩');
+		const Wrapper = defineComponent({
+			components: {
+				MkPostFormTextEditor,
+			},
+			setup() {
+				return {
+					text,
+				};
+			},
+			template: '<MkPostFormTextEditor v-model="text" />',
+		});
+
+		const view = render(Wrapper);
+		await nextTick();
+
+		const editor = view.getByRole('textbox') as HTMLDivElement;
+		const img = editor.querySelector('img');
+		assert.exists(img);
+		assert.strictEqual(img!.getAttribute('src'), '/fluent-emoji/1f34b-200d-1f7e9.png');
+
+		img!.dispatchEvent(new Event('error'));
+		assert.strictEqual(img!.getAttribute('src'), '/twemoji/1f34b-200d-1f7e9.svg');
+
+		text.value = `${text.value}8`;
+		await nextTick();
+		await nextTick();
+
+		const nextImg = editor.querySelector('img');
+		assert.exists(nextImg);
+		assert.strictEqual(nextImg!.getAttribute('src'), '/twemoji/1f34b-200d-1f7e9.svg');
+	});
+
 	test('inserts text at a caret anchor between rendered unicode emoji', async () => {
 		const { default: MkPostFormTextEditor } = await import('@/components/MkPostFormTextEditor.vue');
 		const editorRef = ref<{ setSelectionRange: (start: number, end: number) => void } | null>(null);
