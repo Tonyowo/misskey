@@ -54,7 +54,8 @@ describe('MkPostFormTextEditor', () => {
 
 		const editor = view.getByRole('textbox') as HTMLDivElement;
 		assert.strictEqual(editor.childNodes.length, 2);
-		assert.instanceOf(editor.childNodes[1], Text);
+		assert.instanceOf(editor.childNodes[1], HTMLSpanElement);
+		assert.strictEqual((editor.childNodes[1] as HTMLElement).dataset.caretAnchor, 'true');
 		assert.strictEqual(editor.childNodes[1].textContent, '\u200b');
 
 		assert.exists(editorRef.value);
@@ -88,6 +89,7 @@ describe('MkPostFormTextEditor', () => {
 		assert.strictEqual(imgs[1].getAttribute('alt'), ':miku:');
 		assert.strictEqual(imgs[1].getAttribute('src'), customEmoji.url);
 		assert.strictEqual(editor.textContent, 'Hi \u200b \u200b');
+		assert.strictEqual(editor.querySelectorAll('[data-caret-anchor="true"]').length, 2);
 	});
 
 	test('keeps unicode emoji as text when emoji style is native', async () => {
@@ -130,5 +132,43 @@ describe('MkPostFormTextEditor', () => {
 		assert.exists(img);
 		assert.strictEqual(img!.getAttribute('alt'), '😀');
 		assert.strictEqual(img!.getAttribute('src'), '/twemoji/1f600.svg');
+	});
+
+	test('inserts text at a caret anchor between rendered unicode emoji', async () => {
+		const { default: MkPostFormTextEditor } = await import('@/components/MkPostFormTextEditor.vue');
+		const editorRef = ref<{ setSelectionRange: (start: number, end: number) => void } | null>(null);
+		const text = ref('😀😀');
+		const Wrapper = defineComponent({
+			components: {
+				MkPostFormTextEditor,
+			},
+			setup() {
+				return {
+					editorRef,
+					text,
+				};
+			},
+			template: '<MkPostFormTextEditor ref="editorRef" v-model="text" />',
+		});
+
+		const view = render(Wrapper);
+		await nextTick();
+
+		const editor = view.getByRole('textbox') as HTMLDivElement;
+		editorRef.value!.setSelectionRange('😀'.length, '😀'.length);
+
+		const event = new InputEvent('beforeinput', {
+			inputType: 'insertText',
+			data: '8',
+			bubbles: true,
+			cancelable: true,
+		});
+		editor.dispatchEvent(event);
+		await nextTick();
+		await nextTick();
+
+		assert.strictEqual(text.value, '😀8😀');
+		assert.strictEqual(editor.querySelectorAll('img').length, 2);
+		assert.strictEqual(editor.textContent, '\u200b8\u200b');
 	});
 });

@@ -288,19 +288,33 @@ function createUnicodeEmojiNode(raw: string): HTMLSpanElement {
 }
 
 function createTokenCaretAnchorNode() {
-	return window.document.createTextNode(TOKEN_CARET_ANCHOR);
+	const span = window.document.createElement('span');
+	span.className = cssModule.tokenCaretAnchor;
+	span.dataset.caretAnchor = 'true';
+	span.append(window.document.createTextNode(TOKEN_CARET_ANCHOR));
+	return span;
 }
 
 function getTokenCaretAnchorPoint(node: HTMLElement): { node: Node; offset: number } | null {
 	const nextSibling = node.nextSibling;
-	if (nextSibling?.nodeType !== Node.TEXT_NODE) return null;
+	if (nextSibling?.nodeType === Node.TEXT_NODE) {
+		const text = nextSibling.textContent ?? '';
+		if (!text.startsWith(TOKEN_CARET_ANCHOR)) return null;
 
-	const text = nextSibling.textContent ?? '';
-	if (!text.startsWith(TOKEN_CARET_ANCHOR)) return null;
+		return {
+			node: nextSibling,
+			offset: getLeadingCaretAnchorLength(text),
+		};
+	}
+
+	if (!(nextSibling instanceof HTMLElement) || nextSibling.dataset.caretAnchor !== 'true') return null;
+
+	const anchorText = nextSibling.firstChild;
+	if (anchorText?.nodeType !== Node.TEXT_NODE) return null;
 
 	return {
-		node: nextSibling,
-		offset: getLeadingCaretAnchorLength(text),
+		node: anchorText,
+		offset: getLeadingCaretAnchorLength(anchorText.textContent ?? ''),
 	};
 }
 
@@ -551,6 +565,29 @@ function rememberSelection() {
 	getSelectionRange();
 }
 
+function isInTokenCaretAnchor(node: Node | null) {
+	let current: Node | null = node;
+
+	while (current != null && current !== editorEl.value) {
+		if (current instanceof HTMLElement && current.dataset.caretAnchor === 'true') {
+			return true;
+		}
+		current = current.parentNode;
+	}
+
+	return false;
+}
+
+function isSelectionInTokenCaretAnchor() {
+	const selection = window.getSelection();
+	if (selection == null || selection.rangeCount === 0 || editorEl.value == null) return false;
+
+	const range = selection.getRangeAt(0);
+	if (!editorEl.value.contains(range.startContainer) || !editorEl.value.contains(range.endContainer)) return false;
+
+	return isInTokenCaretAnchor(range.startContainer) || isInTokenCaretAnchor(range.endContainer);
+}
+
 function focus() {
 	editorEl.value?.focus();
 }
@@ -720,6 +757,11 @@ function onBeforeInput(ev: InputEvent) {
 	switch (ev.inputType) {
 		case 'insertText':
 		case 'insertReplacementText':
+			if (isSelectionInTokenCaretAnchor()) {
+				ev.preventDefault();
+				replaceRange(start, end, ev.data ?? '', { skipNextInputNormalization: true });
+				return;
+			}
 			if (start !== end && rangeIntersectsToken(start, end)) {
 				ev.preventDefault();
 				replaceRange(start, end, ev.data ?? '', { skipNextInputNormalization: true });
@@ -876,5 +918,15 @@ defineExpose({
 .unicodeEmojiImage {
 	height: 1.25em;
 	vertical-align: -0.25em;
+}
+
+.tokenCaretAnchor {
+	display: inline-block;
+	width: 0.35em;
+	margin: 0 -0.175em;
+	overflow: hidden;
+	vertical-align: baseline;
+	user-select: text;
+	-webkit-user-select: text;
 }
 </style>
