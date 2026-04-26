@@ -197,7 +197,16 @@ describe('MkPostFormTextEditor', () => {
 		tokens[0].getClientRects = () => [new DOMRect(0, 0, 20, 20)] as unknown as DOMRectList;
 		tokens[1].getClientRects = () => [new DOMRect(20, 0, 20, 20)] as unknown as DOMRectList;
 
-		editor.dispatchEvent(new MouseEvent('pointerdown', {
+		const pointerDown = new MouseEvent('pointerdown', {
+			clientX: 20,
+			clientY: 10,
+			button: 0,
+			bubbles: true,
+			cancelable: true,
+		});
+		assert.strictEqual(editor.dispatchEvent(pointerDown), true);
+
+		editor.dispatchEvent(new MouseEvent('pointerup', {
 			clientX: 20,
 			clientY: 10,
 			button: 0,
@@ -215,5 +224,52 @@ describe('MkPostFormTextEditor', () => {
 		await nextTick();
 
 		assert.strictEqual(text.value, '😀8😀');
+	});
+
+	test('moves over rendered unicode emoji in one arrow key press', async () => {
+		const { default: MkPostFormTextEditor } = await import('@/components/MkPostFormTextEditor.vue');
+		const editorRef = ref<{
+			getSelectionRange: () => { start: number; end: number };
+			setSelectionRange: (start: number, end: number) => void;
+		} | null>(null);
+		const Wrapper = defineComponent({
+			components: {
+				MkPostFormTextEditor,
+			},
+			setup() {
+				return {
+					editorRef,
+				};
+			},
+			template: '<MkPostFormTextEditor ref="editorRef" modelValue="😀😀" />',
+		});
+
+		const view = render(Wrapper);
+		await nextTick();
+
+		const editor = view.getByRole('textbox') as HTMLDivElement;
+		editorRef.value!.setSelectionRange(0, 0);
+
+		editor.dispatchEvent(new KeyboardEvent('keydown', {
+			key: 'ArrowRight',
+			bubbles: true,
+			cancelable: true,
+		}));
+
+		assert.deepStrictEqual(editorRef.value!.getSelectionRange(), {
+			start: '😀'.length,
+			end: '😀'.length,
+		});
+
+		editor.dispatchEvent(new KeyboardEvent('keydown', {
+			key: 'ArrowLeft',
+			bubbles: true,
+			cancelable: true,
+		}));
+
+		assert.deepStrictEqual(editorRef.value!.getSelectionRange(), {
+			start: 0,
+			end: 0,
+		});
 	});
 });

@@ -20,6 +20,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 	@beforeinput="onBeforeInput"
 	@input="onInput"
 	@pointerdown="onPointerDown"
+	@pointerup="onPointerUp"
 	@keydown="onKeydown"
 	@keyup="onKeyup"
 	@mouseup="rememberSelection"
@@ -84,6 +85,7 @@ const composing = ref(false);
 const focused = ref(false);
 const lastSelectionRange = ref<SelectionRange>({ start: renderedText.value.length, end: renderedText.value.length });
 let skipInputNormalizationUntilRender = false;
+let pendingPointerCaret: { pointerId: number; offset: number; x: number; y: number } | null = null;
 const TOKEN_CARET_ANCHOR = '\u200b';
 
 function stripCaretAnchors(value: string) {
@@ -782,14 +784,32 @@ function onInput() {
 }
 
 function onPointerDown(ev: PointerEvent) {
+	pendingPointerCaret = null;
 	if (props.disabled || props.readonly || composing.value || ev.button !== 0 || ev.shiftKey) return;
 
 	const offset = getTokenCaretOffsetFromPointer(ev);
 	if (offset == null) return;
 
-	ev.preventDefault();
+	pendingPointerCaret = {
+		pointerId: ev.pointerId,
+		offset,
+		x: ev.clientX,
+		y: ev.clientY,
+	};
+}
+
+function onPointerUp(ev: PointerEvent) {
+	const pending = pendingPointerCaret;
+	pendingPointerCaret = null;
+	if (pending == null || pending.pointerId !== ev.pointerId) return;
+	if (props.disabled || props.readonly || composing.value || ev.button !== 0 || ev.shiftKey) return;
+	if (Math.hypot(ev.clientX - pending.x, ev.clientY - pending.y) > 4) return;
+
+	const selection = window.getSelection();
+	if (selection != null && !selection.isCollapsed) return;
+
 	focus();
-	setSelectionRange(offset, offset);
+	setSelectionRange(pending.offset, pending.offset);
 }
 
 function onBeforeInput(ev: InputEvent) {
@@ -843,6 +863,19 @@ function onBeforeInput(ev: InputEvent) {
 function onKeydown(ev: KeyboardEvent) {
 	emit('keydown', ev);
 	if (ev.defaultPrevented || props.disabled || props.readonly) return;
+
+	if (!ev.isComposing && getEmojiStyle() !== 'native' && (ev.key === 'ArrowLeft' || ev.key === 'ArrowRight') && !ev.shiftKey && !ev.ctrlKey && !ev.metaKey && !ev.altKey) {
+		const selection = getSelectionRange();
+		if (selection.start === selection.end) {
+			ev.preventDefault();
+			const offset = selection.start;
+			const nextOffset = ev.key === 'ArrowLeft'
+				? (getTokenBefore(offset)?.start ?? Math.max(0, offset - 1))
+				: (getTokenAfter(offset)?.end ?? Math.min(renderedText.value.length, offset + 1));
+			setSelectionRange(nextOffset, nextOffset);
+			return;
+		}
+	}
 
 	if (!ev.isComposing && ev.key === 'Enter' && (ev.ctrlKey || ev.metaKey)) {
 		ev.preventDefault();
