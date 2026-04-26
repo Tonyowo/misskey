@@ -253,7 +253,7 @@ export const store = markRaw(new Pizzax('base', {
 	},
 	emojiStyle: {
 		where: 'device',
-		default: 'twemoji' as 'twemoji' | 'fluentEmoji' | 'native',
+		default: 'fluentEmoji' as 'twemoji' | 'fluentEmoji' | 'native',
 	},
 	menuStyle: {
 		where: 'device',
