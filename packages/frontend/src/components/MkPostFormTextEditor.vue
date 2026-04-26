@@ -34,6 +34,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 <script lang="ts" setup>
 import { nextTick, onMounted, ref, useAttrs, useCssModule, useTemplateRef, watch } from 'vue';
+import { parse as parseTwemoji } from '@twemoji/parser';
+import { char2fluentEmojiFilePath, char2twemojiFilePath } from '@@/js/emoji-base.js';
 import type { AutocompleteTarget } from '@/utility/autocomplete.js';
 import { customEmojis, customEmojisMap } from '@/custom-emojis.js';
 import { getProxiedImageUrl, getStaticImageUrl } from '@/utility/media-proxy.js';
@@ -81,15 +83,15 @@ const composing = ref(false);
 const focused = ref(false);
 const lastSelectionRange = ref<SelectionRange>({ start: renderedText.value.length, end: renderedText.value.length });
 let skipInputNormalizationUntilRender = false;
-const CUSTOM_EMOJI_CARET_ANCHOR = '\u200b';
+const TOKEN_CARET_ANCHOR = '\u200b';
 
 function stripCaretAnchors(value: string) {
-	return value.replaceAll(CUSTOM_EMOJI_CARET_ANCHOR, '');
+	return value.replaceAll(TOKEN_CARET_ANCHOR, '');
 }
 
 function getLeadingCaretAnchorLength(value: string) {
 	let length = 0;
-	while (value[length] === CUSTOM_EMOJI_CARET_ANCHOR) {
+	while (value[length] === TOKEN_CARET_ANCHOR) {
 		length++;
 	}
 	return length;
@@ -98,7 +100,7 @@ function getLeadingCaretAnchorLength(value: string) {
 function getRawTextLength(value: string, endOffset = value.length) {
 	let length = 0;
 	for (let i = 0; i < Math.min(endOffset, value.length); i++) {
-		if (value[i] !== CUSTOM_EMOJI_CARET_ANCHOR) {
+		if (value[i] !== TOKEN_CARET_ANCHOR) {
 			length++;
 		}
 	}
@@ -112,7 +114,7 @@ function getDomOffsetForRawTextOffset(value: string, rawOffset: number) {
 
 	let length = 0;
 	for (let i = 0; i < value.length; i++) {
-		if (value[i] === CUSTOM_EMOJI_CARET_ANCHOR) continue;
+		if (value[i] === TOKEN_CARET_ANCHOR) continue;
 		length++;
 		if (length === rawOffset) {
 			return i + 1;
@@ -127,32 +129,42 @@ function getSegments() {
 }
 
 function getTokenBoundaries() {
-	const boundaries: Array<{ start: number; end: number; type: 'text' | 'customEmoji' }> = [];
+	const boundaries: Array<{ start: number; end: number; type: 'customEmoji' | 'unicodeEmoji' }> = [];
 	let cursor = 0;
 
 	for (const segment of getSegments()) {
 		const length = segment.value.length;
-		boundaries.push({
-			start: cursor,
-			end: cursor + length,
-			type: segment.type,
-		});
+		if (segment.type === 'customEmoji') {
+			boundaries.push({
+				start: cursor,
+				end: cursor + length,
+				type: segment.type,
+			});
+		} else if (getEmojiStyle() !== 'native') {
+			for (const emoji of parseUnicodeEmojis(segment.value)) {
+				boundaries.push({
+					start: cursor + emoji.start,
+					end: cursor + emoji.end,
+					type: 'unicodeEmoji',
+				});
+			}
+		}
 		cursor += length;
 	}
 
 	return boundaries;
 }
 
-function rangeIntersectsCustomEmoji(start: number, end: number) {
-	return getTokenBoundaries().some(segment => segment.type === 'customEmoji' && start < segment.end && end > segment.start);
+function rangeIntersectsToken(start: number, end: number) {
+	return getTokenBoundaries().some(segment => start < segment.end && end > segment.start);
 }
 
-function getCustomEmojiBefore(offset: number) {
-	return getTokenBoundaries().find(segment => segment.type === 'customEmoji' && segment.end === offset);
+function getTokenBefore(offset: number) {
+	return getTokenBoundaries().find(segment => segment.end === offset);
 }
 
-function getCustomEmojiAfter(offset: number) {
-	return getTokenBoundaries().find(segment => segment.type === 'customEmoji' && segment.start === offset);
+function getTokenAfter(offset: number) {
+	return getTokenBoundaries().find(segment => segment.start === offset);
 }
 
 watch(() => props.modelValue, (value) => {
@@ -175,9 +187,31 @@ watch(customEmojis, () => {
 	});
 });
 
+watch(() => prefer.s.emojiStyle, () => {
+	if (composing.value) return;
+	const selection = focused.value ? getSelectionRange() : null;
+	nextTick(() => {
+		renderEditorContent(selection);
+	});
+});
+
 onMounted(() => {
 	renderEditorContent();
 });
+
+function getEmojiStyle(): 'native' | 'fluentEmoji' | 'twemoji' {
+	return prefer.s.emojiStyle === 'native' || prefer.s.emojiStyle === 'twemoji' ? prefer.s.emojiStyle : 'fluentEmoji';
+}
+
+function parseUnicodeEmojis(value: string) {
+	return parseTwemoji(value)
+		.map(emoji => ({
+			value: emoji.text,
+			start: emoji.indices[0],
+			end: emoji.indices[1],
+		}))
+		.filter(emoji => emoji.value !== '\uFE0F');
+}
 
 function getCustomEmojiImageUrl(name: string): string {
 	const rawUrl = customEmojisMap.get(name)?.url ?? `/emoji/${name}.webp`;
@@ -188,6 +222,10 @@ function getCustomEmojiImageUrl(name: string): string {
 	return prefer.s.disableShowingAnimatedImages
 		? getStaticImageUrl(proxiedUrl)
 		: proxiedUrl;
+}
+
+function getUnicodeEmojiImageUrl(emoji: string): string {
+	return getEmojiStyle() === 'twemoji' ? char2twemojiFilePath(emoji) : char2fluentEmojiFilePath(emoji);
 }
 
 function createCustomEmojiNode(name: string, raw: string): HTMLSpanElement {
@@ -217,21 +255,74 @@ function createCustomEmojiNode(name: string, raw: string): HTMLSpanElement {
 	return span;
 }
 
-function createCustomEmojiCaretAnchorNode() {
-	return window.document.createTextNode(CUSTOM_EMOJI_CARET_ANCHOR);
+function createUnicodeEmojiNode(raw: string): HTMLSpanElement {
+	const span = window.document.createElement('span');
+	span.className = cssModule.unicodeEmoji;
+	span.dataset.raw = raw;
+	span.contentEditable = 'false';
+
+	const img = window.document.createElement('img');
+	img.className = cssModule.unicodeEmojiImage;
+	img.src = getUnicodeEmojiImageUrl(raw);
+	img.alt = raw;
+	img.decoding = 'async';
+	img.draggable = false;
+	img.style.setProperty('-webkit-user-drag', 'none');
+	img.style.display = 'inline-block';
+	img.style.width = '1.25em';
+	img.style.height = '1.25em';
+	img.style.maxWidth = 'none';
+	img.style.maxHeight = 'none';
+	img.style.objectFit = 'contain';
+	img.style.verticalAlign = '-0.25em';
+	img.style.flex = 'none';
+	img.onerror = () => {
+		const fallbackUrl = char2twemojiFilePath(raw);
+		if (getEmojiStyle() === 'fluentEmoji' && img.getAttribute('src') !== fallbackUrl) {
+			img.src = fallbackUrl;
+		}
+	};
+
+	span.append(img);
+	return span;
 }
 
-function getCustomEmojiCaretAnchorPoint(node: HTMLElement): { node: Node; offset: number } | null {
+function createTokenCaretAnchorNode() {
+	return window.document.createTextNode(TOKEN_CARET_ANCHOR);
+}
+
+function getTokenCaretAnchorPoint(node: HTMLElement): { node: Node; offset: number } | null {
 	const nextSibling = node.nextSibling;
 	if (nextSibling?.nodeType !== Node.TEXT_NODE) return null;
 
 	const text = nextSibling.textContent ?? '';
-	if (!text.startsWith(CUSTOM_EMOJI_CARET_ANCHOR)) return null;
+	if (!text.startsWith(TOKEN_CARET_ANCHOR)) return null;
 
 	return {
 		node: nextSibling,
 		offset: getLeadingCaretAnchorLength(text),
 	};
+}
+
+function appendTextWithUnicodeEmojis(fragment: DocumentFragment, value: string) {
+	if (value === '') return;
+
+	const emojis = getEmojiStyle() === 'native' ? [] : parseUnicodeEmojis(value);
+	let cursor = 0;
+
+	for (const emoji of emojis) {
+		if (emoji.start > cursor) {
+			fragment.append(window.document.createTextNode(value.slice(cursor, emoji.start)));
+		}
+
+		fragment.append(createUnicodeEmojiNode(emoji.value));
+		fragment.append(createTokenCaretAnchorNode());
+		cursor = emoji.end;
+	}
+
+	if (cursor < value.length) {
+		fragment.append(window.document.createTextNode(value.slice(cursor)));
+	}
 }
 
 function renderEditorContent(selection: SelectionRange | null = focused.value ? lastSelectionRange.value : null) {
@@ -240,12 +331,12 @@ function renderEditorContent(selection: SelectionRange | null = focused.value ? 
 	const fragment = window.document.createDocumentFragment();
 	for (const segment of getSegments()) {
 		if (segment.type === 'text') {
-			fragment.append(window.document.createTextNode(segment.value));
+			appendTextWithUnicodeEmojis(fragment, segment.value);
 			continue;
 		}
 
 		fragment.append(createCustomEmojiNode(segment.name, segment.value));
-		fragment.append(createCustomEmojiCaretAnchorNode());
+		fragment.append(createTokenCaretAnchorNode());
 	}
 
 	const scrollLeft = editorEl.value.scrollLeft;
@@ -407,7 +498,7 @@ function getPointForOffset(targetOffset: number): { node: Node; offset: number }
 				if (remaining === 0) {
 					return { node: parent, offset: index };
 				}
-				return getCustomEmojiCaretAnchorPoint(node) ?? { node: parent, offset: index + 1 };
+				return getTokenCaretAnchorPoint(node) ?? { node: parent, offset: index + 1 };
 			}
 			remaining -= rawLength;
 			return null;
@@ -506,7 +597,7 @@ function deleteBackward(options: ApplyTextUpdateOptions = {}) {
 	}
 	if (start === 0) return;
 
-	const token = getCustomEmojiBefore(start);
+	const token = getTokenBefore(start);
 	const deleteStart = token?.start ?? Math.max(0, start - 1);
 	replaceRange(deleteStart, end, '', options);
 }
@@ -519,7 +610,7 @@ function deleteForward(options: ApplyTextUpdateOptions = {}) {
 	}
 	if (end >= renderedText.value.length) return;
 
-	const token = getCustomEmojiAfter(end);
+	const token = getTokenAfter(end);
 	const deleteEnd = token?.end ?? Math.min(renderedText.value.length, end + 1);
 	replaceRange(start, deleteEnd, '', options);
 }
@@ -629,7 +720,7 @@ function onBeforeInput(ev: InputEvent) {
 	switch (ev.inputType) {
 		case 'insertText':
 		case 'insertReplacementText':
-			if (start !== end && rangeIntersectsCustomEmoji(start, end)) {
+			if (start !== end && rangeIntersectsToken(start, end)) {
 				ev.preventDefault();
 				replaceRange(start, end, ev.data ?? '', { skipNextInputNormalization: true });
 			}
@@ -642,14 +733,14 @@ function onBeforeInput(ev: InputEvent) {
 			return;
 
 		case 'deleteContentBackward':
-			if ((start !== end && rangeIntersectsCustomEmoji(start, end)) || getCustomEmojiBefore(start) != null) {
+			if ((start !== end && rangeIntersectsToken(start, end)) || getTokenBefore(start) != null) {
 				ev.preventDefault();
 				deleteBackward({ skipNextInputNormalization: true });
 			}
 			return;
 
 		case 'deleteContentForward':
-			if ((start !== end && rangeIntersectsCustomEmoji(start, end)) || getCustomEmojiAfter(end) != null) {
+			if ((start !== end && rangeIntersectsToken(start, end)) || getTokenAfter(end) != null) {
 				ev.preventDefault();
 				deleteForward({ skipNextInputNormalization: true });
 			}
@@ -770,6 +861,19 @@ defineExpose({
 }
 
 .customEmojiImage {
+	height: 1.25em;
+	vertical-align: -0.25em;
+}
+
+.unicodeEmoji {
+	display: inline-flex;
+	align-items: center;
+	pointer-events: none;
+	user-select: text;
+	-webkit-user-select: text;
+}
+
+.unicodeEmojiImage {
 	height: 1.25em;
 	vertical-align: -0.25em;
 }

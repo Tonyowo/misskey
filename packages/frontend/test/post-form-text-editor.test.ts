@@ -6,7 +6,7 @@
 import { afterEach, assert, describe, test, vi } from 'vitest';
 import { cleanup, render } from '@testing-library/vue';
 import { defineComponent, nextTick, ref, shallowRef } from 'vue';
-import './init';
+import { preferState } from './init';
 
 const customEmoji = {
 	name: 'miku',
@@ -31,6 +31,7 @@ vi.mock('@/utility/media-proxy.js', () => ({
 describe('MkPostFormTextEditor', () => {
 	afterEach(() => {
 		cleanup();
+		preferState.emojiStyle = undefined;
 	});
 
 	test('restores the caret to a text anchor after a trailing custom emoji', async () => {
@@ -64,5 +65,70 @@ describe('MkPostFormTextEditor', () => {
 		assert.instanceOf(selection!.anchorNode, Text);
 		assert.strictEqual(selection!.anchorNode?.textContent, '\u200b');
 		assert.strictEqual(selection!.anchorOffset, 1);
+	});
+
+	test('renders unicode emoji as Fluent Emoji by default while keeping custom emoji images', async () => {
+		const { default: MkPostFormTextEditor } = await import('@/components/MkPostFormTextEditor.vue');
+		const Wrapper = defineComponent({
+			components: {
+				MkPostFormTextEditor,
+			},
+			template: '<MkPostFormTextEditor modelValue="Hi 😀 :miku:" />',
+		});
+
+		const view = render(Wrapper);
+		await nextTick();
+
+		const editor = view.getByRole('textbox') as HTMLDivElement;
+		const imgs = editor.querySelectorAll('img');
+
+		assert.strictEqual(imgs.length, 2);
+		assert.strictEqual(imgs[0].getAttribute('alt'), '😀');
+		assert.strictEqual(imgs[0].getAttribute('src'), '/fluent-emoji/1f600.png');
+		assert.strictEqual(imgs[1].getAttribute('alt'), ':miku:');
+		assert.strictEqual(imgs[1].getAttribute('src'), customEmoji.url);
+		assert.strictEqual(editor.textContent, 'Hi \u200b \u200b');
+	});
+
+	test('keeps unicode emoji as text when emoji style is native', async () => {
+		preferState.emojiStyle = 'native';
+		const { default: MkPostFormTextEditor } = await import('@/components/MkPostFormTextEditor.vue');
+		const Wrapper = defineComponent({
+			components: {
+				MkPostFormTextEditor,
+			},
+			template: '<MkPostFormTextEditor modelValue="Hi 😀 :miku:" />',
+		});
+
+		const view = render(Wrapper);
+		await nextTick();
+
+		const editor = view.getByRole('textbox') as HTMLDivElement;
+		const imgs = editor.querySelectorAll('img');
+
+		assert.strictEqual(imgs.length, 1);
+		assert.strictEqual(imgs[0].getAttribute('alt'), ':miku:');
+		assert.strictEqual(editor.textContent, 'Hi 😀 \u200b');
+	});
+
+	test('renders unicode emoji as Twemoji when emoji style is twemoji', async () => {
+		preferState.emojiStyle = 'twemoji';
+		const { default: MkPostFormTextEditor } = await import('@/components/MkPostFormTextEditor.vue');
+		const Wrapper = defineComponent({
+			components: {
+				MkPostFormTextEditor,
+			},
+			template: '<MkPostFormTextEditor modelValue="Hi 😀" />',
+		});
+
+		const view = render(Wrapper);
+		await nextTick();
+
+		const editor = view.getByRole('textbox') as HTMLDivElement;
+		const img = editor.querySelector('img');
+
+		assert.exists(img);
+		assert.strictEqual(img!.getAttribute('alt'), '😀');
+		assert.strictEqual(img!.getAttribute('src'), '/twemoji/1f600.svg');
 	});
 });
