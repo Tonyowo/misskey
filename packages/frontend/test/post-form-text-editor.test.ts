@@ -92,6 +92,26 @@ describe('MkPostFormTextEditor', () => {
 		assert.strictEqual(editor.querySelectorAll('[data-caret-anchor="true"]').length, 2);
 	});
 
+	test('keeps custom emoji shortcode followed by ASCII alphanumeric text as plain text', async () => {
+		const { default: MkPostFormTextEditor } = await import('@/components/MkPostFormTextEditor.vue');
+		const Wrapper = defineComponent({
+			components: {
+				MkPostFormTextEditor,
+			},
+			template: '<MkPostFormTextEditor modelValue=":miku:1 :miku:a :miku:_" />',
+		});
+
+		const view = render(Wrapper);
+		await nextTick();
+
+		const editor = view.getByRole('textbox') as HTMLDivElement;
+		const imgs = editor.querySelectorAll('img');
+
+		assert.strictEqual(imgs.length, 1);
+		assert.strictEqual(imgs[0].getAttribute('alt'), ':miku:');
+		assert.strictEqual(editor.textContent, ':miku:1 :miku:a \u200b_');
+	});
+
 	test('keeps unicode emoji as text when emoji style is native', async () => {
 		preferState.emojiStyle = 'native';
 		const { default: MkPostFormTextEditor } = await import('@/components/MkPostFormTextEditor.vue');

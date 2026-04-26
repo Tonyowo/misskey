@@ -28,8 +28,7 @@ describe('tokenizePostFormCustomEmojis', () => {
 		const segments = tokenizePostFormCustomEmojis('今天好开心 :miku:', () => false);
 
 		assert.deepStrictEqual(segments, [
-			{ type: 'text', value: '今天好开心 ' },
-			{ type: 'text', value: ':miku:' },
+			{ type: 'text', value: '今天好开心 :miku:' },
 		]);
 	});
 
@@ -40,6 +39,18 @@ describe('tokenizePostFormCustomEmojis', () => {
 			{ type: 'text', value: '😀 ' },
 			{ type: 'customEmoji', name: 'miku', value: ':miku:' },
 			{ type: 'text', value: ' 🚀' },
+		]);
+	});
+
+	test('keeps a custom emoji shortcode followed by ASCII alphanumeric text as plain text', () => {
+		const segments = tokenizePostFormCustomEmojis(':miku:1 :miku:a :miku:_ :miku:中', (name) => name === 'miku');
+
+		assert.deepStrictEqual(segments, [
+			{ type: 'text', value: ':miku:1 :miku:a ' },
+			{ type: 'customEmoji', name: 'miku', value: ':miku:' },
+			{ type: 'text', value: '_ ' },
+			{ type: 'customEmoji', name: 'miku', value: ':miku:' },
+			{ type: 'text', value: '中' },
 		]);
 	});
 });

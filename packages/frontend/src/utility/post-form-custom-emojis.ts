@@ -13,6 +13,25 @@ export type PostFormCustomEmojiSegment = {
 };
 
 const CUSTOM_EMOJI_CODE_REGEX = /:([a-zA-Z0-9_+\-]+):/g;
+const ASCII_ALPHANUMERIC_REGEX = /^[a-zA-Z0-9]$/;
+
+function isFollowedByAsciiAlphanumeric(text: string, index: number): boolean {
+	return ASCII_ALPHANUMERIC_REGEX.test(text[index] ?? '');
+}
+
+function pushTextSegment(segments: PostFormCustomEmojiSegment[], value: string): void {
+	if (value === '') return;
+
+	const last = segments.at(-1);
+	if (last?.type === 'text') {
+		last.value += value;
+	} else {
+		segments.push({
+			type: 'text',
+			value,
+		});
+	}
+}
 
 export function tokenizePostFormCustomEmojis(
 	text: string,
@@ -27,33 +46,24 @@ export function tokenizePostFormCustomEmojis(
 		const index = match.index ?? 0;
 
 		if (index > lastIndex) {
-			segments.push({
-				type: 'text',
-				value: text.slice(lastIndex, index),
-			});
+			pushTextSegment(segments, text.slice(lastIndex, index));
 		}
 
-		if (hasCustomEmoji(name)) {
+		if (hasCustomEmoji(name) && !isFollowedByAsciiAlphanumeric(text, index + matchText.length)) {
 			segments.push({
 				type: 'customEmoji',
 				name,
 				value: matchText,
 			});
 		} else {
-			segments.push({
-				type: 'text',
-				value: matchText,
-			});
+			pushTextSegment(segments, matchText);
 		}
 
 		lastIndex = index + matchText.length;
 	}
 
 	if (lastIndex < text.length) {
-		segments.push({
-			type: 'text',
-			value: text.slice(lastIndex),
-		});
+		pushTextSegment(segments, text.slice(lastIndex));
 	}
 
 	if (segments.length === 0) {
