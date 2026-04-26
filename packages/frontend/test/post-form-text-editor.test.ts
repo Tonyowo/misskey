@@ -171,4 +171,49 @@ describe('MkPostFormTextEditor', () => {
 		assert.strictEqual(editor.querySelectorAll('img').length, 2);
 		assert.strictEqual(editor.textContent, '\u200b8\u200b');
 	});
+
+	test('places the caret between rendered unicode emoji from pointer position', async () => {
+		const { default: MkPostFormTextEditor } = await import('@/components/MkPostFormTextEditor.vue');
+		const text = ref('😀😀');
+		const Wrapper = defineComponent({
+			components: {
+				MkPostFormTextEditor,
+			},
+			setup() {
+				return {
+					text,
+				};
+			},
+			template: '<MkPostFormTextEditor v-model="text" />',
+		});
+
+		const view = render(Wrapper);
+		await nextTick();
+
+		const editor = view.getByRole('textbox') as HTMLDivElement;
+		const tokens = editor.querySelectorAll<HTMLElement>('[data-raw]');
+		assert.strictEqual(tokens.length, 2);
+
+		tokens[0].getClientRects = () => [new DOMRect(0, 0, 20, 20)] as unknown as DOMRectList;
+		tokens[1].getClientRects = () => [new DOMRect(20, 0, 20, 20)] as unknown as DOMRectList;
+
+		editor.dispatchEvent(new MouseEvent('pointerdown', {
+			clientX: 20,
+			clientY: 10,
+			button: 0,
+			bubbles: true,
+			cancelable: true,
+		}));
+
+		editor.dispatchEvent(new InputEvent('beforeinput', {
+			inputType: 'insertText',
+			data: '8',
+			bubbles: true,
+			cancelable: true,
+		}));
+		await nextTick();
+		await nextTick();
+
+		assert.strictEqual(text.value, '😀8😀');
+	});
 });

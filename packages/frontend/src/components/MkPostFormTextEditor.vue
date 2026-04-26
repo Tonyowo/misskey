@@ -19,6 +19,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 	@blur="onBlur"
 	@beforeinput="onBeforeInput"
 	@input="onInput"
+	@pointerdown="onPointerDown"
 	@keydown="onKeydown"
 	@keyup="onKeyup"
 	@mouseup="rememberSelection"
@@ -588,6 +589,39 @@ function isSelectionInTokenCaretAnchor() {
 	return isInTokenCaretAnchor(range.startContainer) || isInTokenCaretAnchor(range.endContainer);
 }
 
+function getTokenCaretOffsetFromPointer(ev: PointerEvent) {
+	if (editorEl.value == null) return null;
+
+	const tokenEls = Array.from(editorEl.value.querySelectorAll<HTMLElement>('[data-raw]'));
+	let best: { offset: number; distance: number } | null = null;
+
+	for (const tokenEl of tokenEls) {
+		const raw = tokenEl.dataset.raw;
+		if (raw == null) continue;
+
+		const rects = Array.from(tokenEl.getClientRects());
+		for (const rect of rects) {
+			const verticalTolerance = Math.max(4, rect.height * 0.35);
+			if (ev.clientY < rect.top - verticalTolerance || ev.clientY > rect.bottom + verticalTolerance) continue;
+
+			const start = getPointOffset(tokenEl, 0);
+			const end = start + raw.length;
+			const midpoint = rect.left + (rect.width / 2);
+			const offset = ev.clientX < midpoint ? start : end;
+			const boundary = ev.clientX < midpoint ? rect.left : rect.right;
+			const distance = Math.abs(ev.clientX - boundary);
+			const horizontalTolerance = Math.max(10, rect.width * 0.75);
+
+			if (distance > horizontalTolerance) continue;
+			if (best == null || distance < best.distance) {
+				best = { offset, distance };
+			}
+		}
+	}
+
+	return best?.offset ?? null;
+}
+
 function focus() {
 	editorEl.value?.focus();
 }
@@ -745,6 +779,17 @@ function onInput() {
 	if (getCurrentText() !== renderedText.value) {
 		normalizeFromDom();
 	}
+}
+
+function onPointerDown(ev: PointerEvent) {
+	if (props.disabled || props.readonly || composing.value || ev.button !== 0 || ev.shiftKey) return;
+
+	const offset = getTokenCaretOffsetFromPointer(ev);
+	if (offset == null) return;
+
+	ev.preventDefault();
+	focus();
+	setSelectionRange(offset, offset);
 }
 
 function onBeforeInput(ev: InputEvent) {
