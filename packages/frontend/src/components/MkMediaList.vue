@@ -6,22 +6,40 @@ SPDX-License-Identifier: AGPL-3.0-only
 <template>
 <div :class="$style.root">
 	<XBanner v-for="media in mediaList.filter(media => !previewable(media))" :key="media.id" :media="media"/>
-	<div v-if="mediaList.filter(media => previewable(media)).length > 0" :class="$style.container">
+	<div v-if="previewableMediaList.length > 0" :class="$style.container">
 		<div
 			ref="gallery"
+			:data-media-count="count"
+			:data-visible-media-count="visibleMediaList.length"
+			:data-overflow-count="overflowCount"
+			:data-media-layout="layout"
 			:class="[
 				$style.medias,
-				...(prefer.s.showMediaListByGridInWideArea ? [$style.gridInWideArea] : []),
 				count === 1 ? [$style.n1, {
 					[$style.n116_9]: prefer.s.mediaListWithOneImageAppearance === '16_9',
 					[$style.n11_1]: prefer.s.mediaListWithOneImageAppearance === '1_1',
 					[$style.n12_3]: prefer.s.mediaListWithOneImageAppearance === '2_3',
-				}] : count === 2 ? $style.n2 : count === 3 ? $style.n3 : count === 4 ? $style.n4 : $style.nMany,
+				}] : count === 2 ? $style.n2 : count === 3 ? $style.n3 : count === 4 ? $style.n4 : $style.nGrid,
 			]"
 		>
-			<template v-for="media in mediaList.filter(media => previewable(media))">
-				<XVideo v-if="media.type.startsWith('video')" :key="`video:${media.id}`" :class="$style.media" :video="media"/>
-				<XImage v-else-if="media.type.startsWith('image')" :key="`image:${media.id}`" :class="$style.media" class="image" :data-id="media.id" :image="media" :raw="raw"/>
+			<template v-for="(media, index) in visibleMediaList">
+				<XVideo
+					v-if="media.type.startsWith('video')"
+					:key="`video:${media.id}`"
+					:class="[$style.media, overflowCount > 0 && index === 8 ? $style.overflowTile : null]"
+					:data-overflow-label="overflowCount > 0 && index === 8 ? `+${overflowCount}` : null"
+					:video="media"
+				/>
+				<XImage
+					v-else-if="media.type.startsWith('image')"
+					:key="`image:${media.id}`"
+					:class="[$style.media, overflowCount > 0 && index === 8 ? $style.overflowTile : null]"
+					class="image"
+					:data-id="media.id"
+					:data-overflow-label="overflowCount > 0 && index === 8 ? `+${overflowCount}` : null"
+					:image="media"
+					:raw="raw"
+				/>
 			</template>
 		</div>
 	</div>
@@ -50,7 +68,17 @@ const props = defineProps<{
 const gallery = useTemplateRef('gallery');
 const pswpZIndex = os.claimZIndex('middle');
 window.document.documentElement.style.setProperty('--mk-pswp-root-z-index', pswpZIndex.toString());
-const count = computed(() => props.mediaList.filter(media => previewable(media)).length);
+const previewableMediaList = computed(() => props.mediaList.filter(media => previewable(media)));
+const count = computed(() => previewableMediaList.value.length);
+const visibleMediaList = computed(() => previewableMediaList.value.slice(0, 9));
+const overflowCount = computed(() => Math.max(0, count.value - visibleMediaList.value.length));
+const layout = computed(() => {
+	if (count.value === 1) return 'single';
+	if (count.value === 2) return 'n2';
+	if (count.value === 3) return 'n3';
+	if (count.value === 4) return 'n4';
+	return 'grid';
+});
 let lightbox: PhotoSwipeLightbox | null = null;
 
 let activeEl: HTMLElement | null = null;
@@ -64,9 +92,9 @@ const popstateHandler = (): void => {
 async function calcAspectRatio() {
 	if (!gallery.value) return;
 
-	const img = props.mediaList[0];
+	const img = previewableMediaList.value[0];
 
-	if (props.mediaList.length !== 1 || !(img.properties.width && img.properties.height)) {
+	if (previewableMediaList.value.length !== 1 || !(img.properties.width && img.properties.height)) {
 		gallery.value.style.aspectRatio = '';
 		return;
 	}
@@ -98,7 +126,7 @@ onMounted(() => {
 	if (gallery.value == null) return; // TSを黙らすため
 
 	lightbox = new PhotoSwipeLightbox({
-		dataSource: props.mediaList
+		dataSource: previewableMediaList.value
 			.filter(media => {
 				if (media.type === 'image/svg+xml') return true; // svgのwebpublicはpngなのでtrue
 				return media.type.startsWith('image') && FILE_TYPE_BROWSERSAFE.includes(media.type);
@@ -148,7 +176,7 @@ onMounted(() => {
 		const { element } = itemData;
 
 		const id = element?.dataset.id;
-		const file = props.mediaList.find(media => media.id === id);
+		const file = previewableMediaList.value.find(media => media.id === id);
 		if (!file) return itemData;
 
 		itemData.src = file.url;
@@ -220,7 +248,7 @@ const previewable = (file: Misskey.entities.DriveFile): boolean => {
 };
 
 const openGallery = () => {
-	if (props.mediaList.filter(media => previewable(media)).length > 0) {
+	if (previewableMediaList.value.length > 0) {
 		lightbox?.loadAndOpen(0);
 	}
 };
@@ -278,37 +306,27 @@ defineExpose({
 	}
 
 	&.n2 {
-		aspect-ratio: 16/9;
 		grid-template-columns: 1fr 1fr;
-		grid-template-rows: 1fr;
 	}
 
 	&.n3 {
-		aspect-ratio: 16/9;
-		grid-template-columns: 1fr 0.5fr;
-		grid-template-rows: 1fr 1fr;
-
-		> .media:nth-child(1) {
-			grid-row: 1 / 3;
-		}
-
-		> .media:nth-child(3) {
-			grid-column: 2 / 3;
-			grid-row: 2 / 3;
-		}
+		grid-template-columns: repeat(3, minmax(0, 1fr));
 	}
 
 	&.n4 {
-		aspect-ratio: 16/9;
 		grid-template-columns: 1fr 1fr;
-		grid-template-rows: 1fr 1fr;
 	}
 
-	&.nMany {
-		grid-template-columns: 1fr 1fr;
+	&.nGrid {
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+	}
 
+	&.n2,
+	&.n3,
+	&.n4,
+	&.nGrid {
 		> .media {
-			aspect-ratio: 16/9;
+			aspect-ratio: 1 / 1;
 		}
 	}
 }
@@ -318,17 +336,30 @@ defineExpose({
 	border-radius: 8px;
 }
 
-@container (min-width: 500px) {
-	.medias.gridInWideArea {
-		display: grid;
-		aspect-ratio: auto;
-		grid-template-columns: repeat(4, 1fr);
-		grid-template-rows: auto;
-		grid-gap: 8px;
+.overflowTile {
+	position: relative;
 
-		> .media {
-			aspect-ratio: 1 / 1;
-		}
+	&::before,
+	&::after {
+		position: absolute;
+		inset: 0;
+		z-index: 5;
+		pointer-events: none;
+	}
+
+	&::before {
+		content: "";
+		background: rgba(0, 0, 0, 0.48);
+	}
+
+	&::after {
+		content: attr(data-overflow-label);
+		display: grid;
+		place-items: center;
+		color: #fff;
+		font-weight: 700;
+		font-size: 1.35em;
+		text-shadow: 0 1px 8px rgba(0, 0, 0, 0.45);
 	}
 }
 
