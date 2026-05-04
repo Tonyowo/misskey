@@ -3,8 +3,8 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
-import { shallowRef, ref, watch } from 'vue';
-import MkEmojiPickerDialog from '@/components/MkEmojiPickerDialog.vue';
+import { defineAsyncComponent, ref, watch } from 'vue';
+import type { Ref } from 'vue';
 import { popup } from '@/os.js';
 import { prefer } from '@/preferences.js';
 
@@ -27,9 +27,11 @@ class EmojiPicker {
 		// nop
 	}
 
-	public init() {
+	public async init() {
+		const emojisRef = ref<string[]>([]);
+
 		watch([prefer.r.emojiPaletteForMain, prefer.r.emojiPalettes], () => {
-			this.emojisRef.value = prefer.s.emojiPaletteForMain == null ? prefer.s.emojiPalettes[0].emojis : prefer.s.emojiPalettes.find(palette => palette.id === prefer.s.emojiPaletteForMain)?.emojis ?? [];
+			emojisRef.value = prefer.s.emojiPaletteForMain == null ? prefer.s.emojiPalettes[0].emojis : prefer.s.emojiPalettes.find(palette => palette.id === prefer.s.emojiPaletteForMain)?.emojis ?? [];
 		}, {
 			immediate: true,
 		});
