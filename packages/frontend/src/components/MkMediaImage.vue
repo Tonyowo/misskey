@@ -53,7 +53,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 			</div>
 		</div>
 	</template>
-	<template v-else-if="controls">
+	<template v-else-if="showControls">
 		<div :class="$style.indicators">
 			<div v-if="['image/gif', 'image/apng'].includes(image.type)" :class="$style.indicator">GIF</div>
 			<div v-if="image.comment" :class="$style.indicator">ALT</div>
@@ -85,10 +85,12 @@ const props = withDefaults(defineProps<{
 	cover?: boolean;
 	disableImageLink?: boolean;
 	controls?: boolean;
+	showControls?: boolean;
 }>(), {
 	cover: false,
 	disableImageLink: false,
 	controls: true,
+	showControls: true,
 });
 
 const hide = ref(true);

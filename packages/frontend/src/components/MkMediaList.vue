@@ -38,6 +38,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 					:data-id="media.id"
 					:data-overflow-label="overflowCount > 0 && index === 8 ? `+${overflowCount}` : null"
 					:image="media"
+					:cover="count > 1"
+					:showControls="count === 1"
 					:raw="raw"
 				/>
 			</template>
@@ -306,19 +308,27 @@ defineExpose({
 	}
 
 	&.n2 {
+		grid-gap: 4px;
 		grid-template-columns: 1fr 1fr;
+		max-width: 376px;
 	}
 
 	&.n3 {
+		grid-gap: 4px;
 		grid-template-columns: repeat(3, minmax(0, 1fr));
+		max-width: 568px;
 	}
 
 	&.n4 {
+		grid-gap: 4px;
 		grid-template-columns: 1fr 1fr;
+		max-width: 376px;
 	}
 
 	&.nGrid {
+		grid-gap: 4px;
 		grid-template-columns: repeat(3, minmax(0, 1fr));
+		max-width: 568px;
 	}
 
 	&.n2,
@@ -334,6 +344,14 @@ defineExpose({
 .media {
 	overflow: hidden; // clipにするとバグる
 	border-radius: 8px;
+}
+
+.medias:not(.n1) > .media {
+	border-radius: 12px;
+}
+
+.medias:not(.n1) > .media :global(video) {
+	object-fit: cover;
 }
 
 .overflowTile {
