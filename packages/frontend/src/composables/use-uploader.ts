@@ -74,7 +74,7 @@ function replaceFileExtension(filename: string, nextExtension: string) {
 export type UploaderItem = {
 	id: string;
 	name: string;
-	uploadName?: string;
+	suffix: string;
 	progress: { max: number; value: number } | null;
 	thumbnail: string | null;
 	preprocessing: boolean;
@@ -95,6 +95,10 @@ export type UploaderItem = {
 	abort?: (() => void) | null;
 	abortPreprocess?: (() => void) | null;
 };
+
+export function getUploadName(item: UploaderItem): string {
+	return item.name + (item.name.endsWith(item.suffix) ? '' : item.suffix);
+}
 
 function getCompressionSettings(level: 0 | 1 | 2 | 3) {
 	if (level === 1) {
@@ -522,7 +526,7 @@ export function useUploader(options: {
 		item.uploading = true;
 
 		const { filePromise, abort } = uploadFile(item.preprocessedFile ?? item.file, {
-			name: item.uploadName ?? item.name,
+			name: getUploadName(item),
 			folderId: options.folderId === undefined ? prefer.s.uploadFolder : options.folderId,
 			isSensitive: item.isSensitive ?? false,
 			caption: item.caption ?? null,
