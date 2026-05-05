@@ -31,19 +31,15 @@ export const packedNoteSchema = {
 			type: 'string',
 			optional: false, nullable: true,
 		},
-		replyLockedText: {
-			type: 'string',
-			optional: true, nullable: true,
-		},
 		cw: {
 			type: 'string',
 			optional: true, nullable: true,
 		},
-		cwReplyRequired: {
+		hasReplyVisibleContent: {
 			type: 'boolean',
 			optional: true, nullable: false,
 		},
-		canRevealCw: {
+		canRevealReplyVisibleContent: {
 			type: 'boolean',
 			optional: true, nullable: false,
 		},

@@ -15,13 +15,10 @@ SPDX-License-Identifier: AGPL-3.0-only
 			<MkNoteHeader :class="$style.header" :note="note" :mini="true"/>
 			<div>
 				<p v-if="hasCw" :class="$style.cw">
-					<Mfm v-if="note.cw != ''" style="margin-right: 8px;" :text="note.cw" :author="note.user" :nyaize="'respect'"/>
-					<MkCwButton v-if="!isCwReplyLocked" v-model="showContent" :text="note.text" :files="note.files" :poll="note.poll"/>
-					<div v-else style="margin-top: 4px; opacity: 0.8; font-size: 0.9em;">
-						<i class="ti ti-lock" style="margin-right: 4px;"></i>{{ i18n.ts.replyToSeeCw }}
-					</div>
+					<Mfm v-if="note.cw != ''" style="margin-right: 8px;" :text="note.cw ?? ''" :author="note.user" :nyaize="'respect'"/>
+					<MkCwButton v-model="showContent" :text="note.text" :files="note.files" :poll="note.poll"/>
 				</p>
-				<div v-show="!hasCw || (!isCwReplyLocked && showContent)">
+				<div v-show="!hasCw || showContent">
 					<MkSubNoteContent :class="$style.text" :note="note"/>
 				</div>
 			</div>
@@ -71,7 +68,6 @@ const props = withDefaults(defineProps<{
 const muted = ref(props.note && $i ? checkWordMute(props.note, $i, $i.mutedWords) : false);
 
 const showContent = ref(false);
-const isCwReplyLocked = computed(() => props.note?.cwReplyRequired === true && props.note?.canRevealCw === false);
 const hasCw = computed(() => props.note?.cw != null);
 const replies = ref<Misskey.entities.Note[]>([]);
 

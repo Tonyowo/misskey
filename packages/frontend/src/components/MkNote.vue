@@ -55,18 +55,15 @@ SPDX-License-Identifier: AGPL-3.0-only
 				<p v-if="hasCw" :class="$style.cw">
 					<Mfm
 						v-if="appearNote.cw != ''"
-						:text="appearNote.cw"
+						:text="appearNote.cw ?? ''"
 						:author="appearNote.user"
 						:nyaize="'respect'"
 						:enableEmojiMenu="true"
 						:enableEmojiMenuReaction="true"
 					/>
-					<MkCwButton v-if="!isCwReplyLocked" v-model="showContent" :text="appearNote.text" :renote="appearNote.renote" :files="appearNote.files" :poll="appearNote.poll" style="margin: 4px 0;"/>
-					<div v-else style="margin: 4px 0; opacity: 0.8; font-size: 0.9em;">
-						<i class="ti ti-lock" style="margin-right: 4px;"></i>{{ i18n.ts.replyToSeeCw }}
-					</div>
+					<MkCwButton v-model="showContent" :text="appearNote.text" :renote="appearNote.renote" :files="appearNote.files" :poll="appearNote.poll" style="margin: 4px 0;"/>
 				</p>
-				<div v-show="!hasCw || (!isCwReplyLocked && showContent)" :class="[{ [$style.contentCollapsed]: collapsed }]">
+				<div v-show="!hasCw || showContent" :class="[{ [$style.contentCollapsed]: collapsed }]">
 					<div :class="$style.text">
 						<span v-if="appearNote.isHidden" style="opacity: 0.5">({{ i18n.ts.private }})</span>
 						<MkA v-if="appearNote.replyId" :class="$style.replyIcon" :to="`/notes/${appearNote.replyId}`"><i class="ti ti-arrow-back-up"></i></MkA>
@@ -317,7 +314,6 @@ const translation = ref<Misskey.entities.NotesTranslateResponse | null>(null);
 const translating = ref(false);
 const showTicker = (prefer.s.instanceTicker === 'always') || (prefer.s.instanceTicker === 'remote' && appearNote.user.instance);
 const canRenote = computed(() => ['public', 'home'].includes(appearNote.visibility) || (appearNote.visibility === 'followers' && appearNote.userId === $i?.id));
-const isCwReplyLocked = computed(() => appearNote.cwReplyRequired === true && appearNote.canRevealCw === false);
 const hasCw = computed(() => appearNote.cw != null);
 const collapsed = ref(!hasCw.value && isLong.value);
 const renoteCollapsed = ref(
@@ -406,7 +402,7 @@ const keymap = {
 	'v|enter': () => {
 		if (renoteCollapsed.value) {
 			renoteCollapsed.value = false;
-		} else if (hasCw.value && !isCwReplyLocked.value) {
+		} else if (hasCw.value) {
 			showContent.value = !showContent.value;
 		} else if (isLong.value) {
 			collapsed.value = !collapsed.value;
@@ -680,7 +676,7 @@ async function showRenoteMenu() {
 	) {
 		renoteDetailsMenu.push({
 			type: 'link',
-			text: i18n.ts.viewRenotedChannel,
+			text: String(i18n.ts.viewRenotedChannel),
 			icon: 'ti ti-device-tv',
 			to: `/channels/${props.note.channelId}`,
 		});

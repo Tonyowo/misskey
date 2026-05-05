@@ -11,7 +11,7 @@ import { Inject, Injectable, OnApplicationShutdown } from '@nestjs/common';
 import { extractMentions } from '@/misc/extract-mentions.js';
 import { extractCustomEmojisFromMfm } from '@/misc/extract-custom-emojis-from-mfm.js';
 import { extractHashtags } from '@/misc/extract-hashtags.js';
-import type { IMentionedRemoteUsers } from '@/models/Note.js';
+import type { IMentionedRemoteUsers, IReplyVisibleContent } from '@/models/Note.js';
 import { MiNote } from '@/models/Note.js';
 import type { BlockingsRepository, ChannelFollowingsRepository, ChannelsRepository, DriveFilesRepository, FollowingsRepository, InstancesRepository, MiFollowing, MiMeta, MutingsRepository, NotesRepository, NoteThreadMutingsRepository, UserListMembershipsRepository, UserProfilesRepository, UsersRepository } from '@/models/_.js';
 import type { MiDriveFile } from '@/models/DriveFile.js';
@@ -57,6 +57,7 @@ import { IdentifiableError } from '@/misc/identifiable-error.js';
 import { CollapsedQueue } from '@/misc/collapsed-queue.js';
 import { CacheService } from '@/core/CacheService.js';
 import { isQuote, isRenote } from '@/misc/is-renote.js';
+import { extractReplyVisibleContents } from '@/misc/reply-visible-content.js';
 
 type NotificationType = 'reply' | 'renote' | 'quote' | 'mention';
 
@@ -170,7 +171,7 @@ type Option = {
 	createdAt?: Date | null;
 	name?: string | null;
 	text?: string | null;
-	replyLockedText?: string | null;
+	replyVisibleContents?: IReplyVisibleContent[] | null;
 	reply?: MiNote | null;
 	renote?: MiNote | null;
 	files?: MiDriveFile[] | null;
@@ -178,7 +179,6 @@ type Option = {
 	localOnly?: boolean | null;
 	reactionAcceptance?: MiNote['reactionAcceptance'];
 	cw?: string | null;
-	cwReplyRequired?: boolean;
 	visibility?: string;
 	visibleUsers?: MinimumUser[] | null;
 	channel?: MiChannel | null;
@@ -286,9 +286,8 @@ export class NoteCreateService implements OnApplicationShutdown {
 		renoteId: MiNote['id'] | null;
 		fileIds: MiDriveFile['id'][];
 		text: string | null;
-		replyLockedText: string | null;
+		replyVisibleContents?: IReplyVisibleContent[] | null;
 		cw: string | null;
-		cwReplyRequired: boolean;
 		visibility: string;
 		visibleUserIds: MiUser['id'][];
 		channelId: MiChannel['id'] | null;
@@ -422,11 +421,10 @@ export class NoteCreateService implements OnApplicationShutdown {
 			files: files,
 			poll: data.poll,
 			text: data.text,
-			replyLockedText: data.replyLockedText,
+			replyVisibleContents: data.replyVisibleContents,
 			reply,
 			renote,
 			cw: data.cw,
-			cwReplyRequired: data.cwReplyRequired,
 			localOnly: data.localOnly,
 			reactionAcceptance: data.reactionAcceptance,
 			visibility: data.visibility,
@@ -465,9 +463,6 @@ export class NoteCreateService implements OnApplicationShutdown {
 		if (data.createdAt == null) data.createdAt = new Date();
 		if (data.visibility == null) data.visibility = 'public';
 		if (data.localOnly == null) data.localOnly = false;
-		if (data.reply != null || data.renote != null) data.cwReplyRequired = false;
-		if (!data.cwReplyRequired) data.replyLockedText = null;
-		if (data.cwReplyRequired) data.localOnly = true;
 		if (data.channel != null) data.visibility = 'public';
 		if (data.channel != null) data.visibleUsers = [];
 		if (data.channel != null) data.localOnly = true;
@@ -485,7 +480,6 @@ export class NoteCreateService implements OnApplicationShutdown {
 			cw: data.cw,
 			text: data.text,
 			pollChoices: data.poll?.choices,
-			others: data.replyLockedText ? [data.replyLockedText] : undefined,
 		}, this.meta.prohibitedWords);
 
 		if (hasProhibitedWords) {
@@ -563,27 +557,14 @@ export class NoteCreateService implements OnApplicationShutdown {
 			data.text = null;
 		}
 
-		if (data.replyLockedText) {
-			if (data.replyLockedText.length > DB_MAX_NOTE_TEXT_LENGTH) {
-				data.replyLockedText = data.replyLockedText.slice(0, DB_MAX_NOTE_TEXT_LENGTH);
-			}
-			data.replyLockedText = data.replyLockedText.trim();
-			if (data.replyLockedText === '') {
-				data.replyLockedText = null;
-			}
-		} else {
-			data.replyLockedText = null;
+		const replyVisibleResult = extractReplyVisibleContents(data.text);
+		data.text = replyVisibleResult.text;
+		data.replyVisibleContents = replyVisibleResult.replyVisibleContents;
+		if (data.replyVisibleContents.length > 0) {
+			data.localOnly = true;
 		}
 
-		if (data.cwReplyRequired && data.replyLockedText != null) {
-			if (data.text != null && data.cw == null) {
-				data.cw = data.text;
-			}
-			data.text = data.replyLockedText;
-			data.replyLockedText = null;
-		}
-
-		if (data.text == null && data.replyLockedText == null && data.poll == null && (data.files == null || data.files.length === 0) && data.renote == null) {
+		if (data.text == null && data.poll == null && (data.files == null || data.files.length === 0) && data.renote == null) {
 			throw new IdentifiableError('314f9c77-6486-4f23-a9df-f2c454f59b44', 'Note has no content');
 		}
 
@@ -594,13 +575,12 @@ export class NoteCreateService implements OnApplicationShutdown {
 		// Parse MFM if needed
 		if (!tags || !emojis || !mentionedUsers) {
 			const tokens = (data.text ? mfm.parse(data.text)! : []);
-			const replyLockedTokens = (data.replyLockedText ? mfm.parse(data.replyLockedText)! : []);
 			const cwTokens = data.cw ? mfm.parse(data.cw)! : [];
 			const choiceTokens = data.poll && data.poll.choices
 				? concat(data.poll.choices.map(choice => mfm.parse(choice)!))
 				: [];
 
-			const combinedTokens = tokens.concat(replyLockedTokens).concat(cwTokens).concat(choiceTokens);
+			const combinedTokens = tokens.concat(cwTokens).concat(choiceTokens);
 
 			tags = data.apHashtags ?? extractHashtags(combinedTokens);
 
@@ -661,10 +641,9 @@ export class NoteCreateService implements OnApplicationShutdown {
 				: null,
 			name: data.name,
 			text: data.text,
-			replyLockedText: data.replyLockedText ?? null,
+			replyVisibleContents: data.replyVisibleContents ?? [],
 			hasPoll: data.poll != null,
 			cw: data.cw ?? null,
-			cwReplyRequired: data.cwReplyRequired ?? false,
 			tags: tags.map(tag => normalizeForSearch(tag)),
 			emojis,
 			userId: user.id,
@@ -960,11 +939,11 @@ export class NoteCreateService implements OnApplicationShutdown {
 
 	@bindThis
 	private isQuote(note: Option & { renote: MiNote }): note is Option & { renote: MiNote } & (
-		{ text: string } | { replyLockedText: string } | { cw: string } | { reply: MiNote } | { poll: IPoll } | { files: MiDriveFile[] }
+		{ text: string } | { replyVisibleContents: IReplyVisibleContent[] } | { cw: string } | { reply: MiNote } | { poll: IPoll } | { files: MiDriveFile[] }
 	) {
 		// NOTE: SYNC WITH misc/is-quote.ts
 		return note.text != null ||
-			note.replyLockedText != null ||
+			(note.replyVisibleContents != null && note.replyVisibleContents.length > 0) ||
 			note.reply != null ||
 			note.cw != null ||
 			note.poll != null ||

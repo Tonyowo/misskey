@@ -8,7 +8,7 @@ import { noteVisibilities, noteReactionAcceptances } from '@/types.js';
 import { id } from './util/id.js';
 import { MiUser } from './User.js';
 import { MiChannel } from './Channel.js';
-import { MiNote } from './Note.js';
+import { MiNote, type IReplyVisibleContent } from './Note.js';
 import type { MiDriveFile } from './DriveFile.js';
 
 @Entity('note_draft')
@@ -59,15 +59,10 @@ export class MiNoteDraft {
 	})
 	public cw: string | null;
 
-	@Column('boolean', {
-		default: false,
+	@Column('jsonb', {
+		default: [],
 	})
-	public cwReplyRequired: boolean;
-
-	@Column('text', {
-		nullable: true,
-	})
-	public replyLockedText: string | null;
+	public replyVisibleContents: IReplyVisibleContent[];
 
 	@Index('IDX_NOTE_DRAFT_USER_ID')
 	@Column({

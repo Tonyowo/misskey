@@ -12,7 +12,7 @@ import { extractHashtags } from '@/misc/extract-hashtags.js';
 import { DB_MAX_NOTE_TEXT_LENGTH } from '@/const.js';
 import { DI } from '@/di-symbols.js';
 import type { MiLocalUser, MiRemoteUser, MiUser } from '@/models/User.js';
-import type { IMentionedRemoteUsers } from '@/models/Note.js';
+import type { IMentionedRemoteUsers, IReplyVisibleContent } from '@/models/Note.js';
 import { MiNote } from '@/models/Note.js';
 import type { IPoll } from '@/models/Poll.js';
 import { MiPoll } from '@/models/Poll.js';
@@ -32,6 +32,7 @@ import { SearchService } from '@/core/SearchService.js';
 import { UtilityService } from '@/core/UtilityService.js';
 import { bindThis } from '@/decorators.js';
 import { IdentifiableError } from '@/misc/identifiable-error.js';
+import { extractReplyVisibleContents } from '@/misc/reply-visible-content.js';
 
 @Injectable()
 export class NoteUpdateService {
@@ -73,9 +74,7 @@ export class NoteUpdateService {
 	public async update(user: MiLocalUser, note: MiNote, data: {
 		fileIds: MiDriveFile['id'][];
 		text: string | null;
-		replyLockedText: string | null;
 		cw: string | null;
-		cwReplyRequired: boolean;
 		reactionAcceptance: MiNote['reactionAcceptance'];
 		poll: IPoll | null;
 		replyId: MiNote['id'] | null;
@@ -115,9 +114,8 @@ export class NoteUpdateService {
 		const normalized = this.normalizeContent(note, data, files.length > 0, currentPoll != null);
 		const hasProhibitedWords = this.checkProhibitedWordsContain({
 			cw: normalized.cw,
-			text: normalized.text,
+			text: data.text,
 			pollChoices: currentPoll?.choices,
-			others: normalized.replyLockedText ? [normalized.replyLockedText] : undefined,
 		});
 		if (hasProhibitedWords) {
 			throw new IdentifiableError('689ee33f-f97c-479a-ac49-1b9f8140af99', 'Note contains prohibited words');
@@ -139,9 +137,8 @@ export class NoteUpdateService {
 		const nextTags = tags.map(tag => normalizeForSearch(tag));
 		const didChange =
 			note.text !== normalized.text ||
-			note.replyLockedText !== normalized.replyLockedText ||
+			JSON.stringify(note.replyVisibleContents ?? []) !== JSON.stringify(normalized.replyVisibleContents) ||
 			note.cw !== normalized.cw ||
-			note.cwReplyRequired !== normalized.cwReplyRequired ||
 			!this.sameIds(note.fileIds, nextFileIds) ||
 			!this.sameIds(note.attachedFileTypes, nextAttachedFileTypes) ||
 			!this.sameIds(note.mentions, nextMentionIds) ||
@@ -163,9 +160,8 @@ export class NoteUpdateService {
 			}, {
 				text: normalized.text,
 				updatedAt,
-				replyLockedText: normalized.replyLockedText,
+				replyVisibleContents: normalized.replyVisibleContents,
 				cw: normalized.cw,
-				cwReplyRequired: normalized.cwReplyRequired,
 				fileIds: nextFileIds,
 				attachedFileTypes: nextAttachedFileTypes,
 				mentions: nextMentionIds,
@@ -239,22 +235,11 @@ export class NoteUpdateService {
 	@bindThis
 	private normalizeContent(note: MiNote, data: {
 		text: string | null;
-		replyLockedText: string | null;
 		cw: string | null;
-		cwReplyRequired: boolean;
 		reactionAcceptance: MiNote['reactionAcceptance'];
 	}, hasFiles: boolean, hasPoll: boolean) {
 		let text = data.text;
-		let replyLockedText = data.replyLockedText;
 		let cw = data.cw;
-		let cwReplyRequired = data.cwReplyRequired;
-
-		if (note.replyId != null || note.renoteId != null) {
-			cwReplyRequired = false;
-		}
-		if (!cwReplyRequired) {
-			replyLockedText = null;
-		}
 
 		if (text) {
 			if (text.length > DB_MAX_NOTE_TEXT_LENGTH) {
@@ -268,35 +253,21 @@ export class NoteUpdateService {
 			text = null;
 		}
 
-		if (replyLockedText) {
-			if (replyLockedText.length > DB_MAX_NOTE_TEXT_LENGTH) {
-				replyLockedText = replyLockedText.slice(0, DB_MAX_NOTE_TEXT_LENGTH);
-			}
-			replyLockedText = replyLockedText.trim();
-			if (replyLockedText === '') {
-				replyLockedText = null;
-			}
-		} else {
-			replyLockedText = null;
+		const replyVisibleResult = extractReplyVisibleContents(text);
+		text = replyVisibleResult.text;
+		const replyVisibleContents = replyVisibleResult.replyVisibleContents;
+		if (replyVisibleContents.length > 0 && !note.localOnly) {
+			throw new IdentifiableError('747719f7-f86f-44df-a321-f5f0b1003cb1', 'Reply-visible content cannot be added to federated notes');
 		}
 
-		if (cwReplyRequired && replyLockedText != null) {
-			if (text != null && cw == null) {
-				cw = text;
-			}
-			text = replyLockedText;
-			replyLockedText = null;
-		}
-
-		if (text == null && replyLockedText == null && !hasPoll && !hasFiles && note.renoteId == null) {
+		if (text == null && !hasPoll && !hasFiles && note.renoteId == null) {
 			throw new IdentifiableError('314f9c77-6486-4f23-a9df-f2c454f59b44', 'Note has no content');
 		}
 
 		return {
 			text,
-			replyLockedText,
+			replyVisibleContents,
 			cw,
-			cwReplyRequired,
 			reactionAcceptance: data.reactionAcceptance,
 		};
 	}
@@ -305,7 +276,7 @@ export class NoteUpdateService {
 	private extractTags(
 		content: {
 			text: string | null;
-			replyLockedText: string | null;
+			replyVisibleContents: IReplyVisibleContent[];
 			cw: string | null;
 		},
 		poll: MiPoll | null,
@@ -320,7 +291,7 @@ export class NoteUpdateService {
 	private extractEmojis(
 		content: {
 			text: string | null;
-			replyLockedText: string | null;
+			replyVisibleContents: IReplyVisibleContent[];
 			cw: string | null;
 		},
 		poll: MiPoll | null,
@@ -337,19 +308,18 @@ export class NoteUpdateService {
 	private parseTokens(
 		content: {
 			text: string | null;
-			replyLockedText: string | null;
+			replyVisibleContents: IReplyVisibleContent[];
 			cw: string | null;
 		},
 		poll: MiPoll | null,
 	) {
 		const tokens = content.text ? mfm.parse(content.text) : [];
-		const replyLockedTokens = content.replyLockedText ? mfm.parse(content.replyLockedText) : [];
 		const cwTokens = content.cw ? mfm.parse(content.cw) : [];
 		const choiceTokens = poll?.choices
 			? poll.choices.flatMap(choice => mfm.parse(choice))
 			: [];
 
-		return tokens.concat(replyLockedTokens).concat(cwTokens).concat(choiceTokens);
+		return tokens.concat(cwTokens).concat(choiceTokens);
 	}
 
 	@bindThis
@@ -357,7 +327,7 @@ export class NoteUpdateService {
 		user: { host: MiUser['host']; id: MiUser['id']; },
 		content: {
 			text: string | null;
-			replyLockedText: string | null;
+			replyVisibleContents: IReplyVisibleContent[];
 			cw: string | null;
 		},
 		note: MiNote,

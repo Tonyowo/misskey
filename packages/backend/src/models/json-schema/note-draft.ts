@@ -21,17 +21,9 @@ export const packedNoteDraftSchema = {
 			type: 'string',
 			optional: false, nullable: true,
 		},
-		replyLockedText: {
-			type: 'string',
-			optional: false, nullable: true,
-		},
 		cw: {
 			type: 'string',
 			optional: false, nullable: true,
-		},
-		cwReplyRequired: {
-			type: 'boolean',
-			optional: false, nullable: false,
 		},
 		userId: {
 			type: 'string',

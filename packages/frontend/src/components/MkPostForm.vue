@@ -31,7 +31,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 					<span :class="$style.headerRightButtonText">{{ targetChannel.name }}</span>
 				</button>
 			</template>
-			<button v-if="visibility !== 'specified'" v-tooltip.top="disableFederationTooltip" class="_button" :class="[$style.headerRightItem, { [$style.danger]: effectiveLocalOnly }]" :disabled="targetChannel != null || isLocalOnlyForcedByCwReply || isEditing" @click="toggleLocalOnly">
+			<button v-if="visibility !== 'specified'" v-tooltip.top="disableFederationTooltip" class="_button" :class="[$style.headerRightItem, { [$style.danger]: effectiveLocalOnly }]" :disabled="targetChannel != null || isLocalOnlyForcedByReplyVisible || isEditing" @click="toggleLocalOnly">
 				<span v-if="!effectiveLocalOnly"><i class="ti ti-rocket"></i></span>
 				<span v-else><i class="ti ti-rocket-off"></i></span>
 			</button>
@@ -75,11 +75,6 @@ SPDX-License-Identifier: AGPL-3.0-only
 		<input ref="cwInputEl" v-model="cw" :class="$style.cw" :placeholder="cwInputPlaceholder" @keydown="onKeydown" @keyup="onKeyup" @compositionend="onCompositionEnd">
 		<div v-if="maxCwTextLength - cwTextLength < 20" :class="['_acrylic', $style.cwTextCount, { [$style.cwTextOver]: cwTextLength > maxCwTextLength }]">{{ maxCwTextLength - cwTextLength }}</div>
 	</div>
-	<div v-if="useCw && canUseCwReplyRequired" :class="$style.cwReplyRequired">
-		<MkSwitch :class="$style.cwReplyRequiredSwitch" :modelValue="cwReplyRequired" :disabled="isEditing" @update:modelValue="onCwReplyRequiredChange">
-			{{ i18n.ts.cwReplyRequired }}
-		</MkSwitch>
-	</div>
 	<div :class="[$style.textOuter, { [$style.withCw]: useCw }]">
 		<div v-if="targetChannel" :class="$style.colorBar" :style="{ background: targetChannel.color }"></div>
 		<MkPostFormTextEditor ref="textEditorEl" v-model="text" :class="$style.text" :disabled="posting || posted" :readonly="textAreaReadOnly" :placeholder="placeholder" data-cy-post-form-text @keydown="onKeydown" @keyup="onKeyup" @paste="onPaste" @compositionupdate="onCompositionUpdate" @compositionend="onCompositionEnd"/>
@@ -109,7 +104,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 		/>
 	</div>
 	<MkPollEditor v-if="poll" v-model="poll" :readonly="isEditing" @destroyed="poll = null"/>
-	<MkNotePreview v-if="showPreview" :class="$style.preview" :text="text" :files="files" :poll="poll ?? undefined" :useCw="useCw" :cw="cw" :cwReplyRequired="effectiveCwReplyRequired" :user="postAccount ?? $i"/>
+	<MkNotePreview v-if="showPreview" :class="$style.preview" :text="text" :files="files" :poll="poll ?? undefined" :useCw="useCw" :cw="cw" :user="postAccount ?? $i"/>
 	<div v-if="showingOptions" style="padding: 8px 16px;">
 	</div>
 	<footer ref="footerEl" :class="$style.footer">
@@ -118,6 +113,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 			<button v-tooltip="i18n.ts.attachFile + ' (' + i18n.ts.fromDrive + ')'" class="_button" :class="$style.footerButton" @click="chooseFileFromDrive"><i class="ti ti-cloud-download"></i></button>
 			<button v-tooltip="i18n.ts.poll" class="_button" :class="[$style.footerButton, { [$style.footerButtonActive]: poll }]" :disabled="isEditing" @click="togglePoll"><i class="ti ti-chart-arrows"></i></button>
 			<button v-tooltip="i18n.ts.useCw" class="_button" :class="[$style.footerButton, { [$style.footerButtonActive]: useCw }]" @click="useCw = !useCw"><i class="ti ti-eye-off"></i></button>
+			<button v-tooltip="String(i18n.ts.replyVisible)" class="_button" :class="[$style.footerButton, { [$style.footerButtonActive]: hasReplyVisibleContentInText }]" @pointerdown.prevent="preserveTextSelection" @click="insertReplyVisible"><i class="ti ti-lock"></i></button>
 			<button v-tooltip="i18n.ts.hashtags" class="_button" :class="[$style.footerButton, { [$style.footerButtonActive]: withHashtags }]" @click="withHashtags = !withHashtags"><i class="ti ti-hash"></i></button>
 			<button v-tooltip="i18n.ts.mention" class="_button" :class="$style.footerButton" @pointerdown.prevent="preserveTextSelection" @click="insertMention"><i class="ti ti-at"></i></button>
 			<button v-if="showAddMfmFunction" v-tooltip="i18n.ts.addMfmFunction" :class="['_button', $style.footerButton]" @pointerdown.prevent="preserveTextSelection" @click="insertMfmFunction"><i class="ti ti-palette"></i></button>
@@ -148,7 +144,6 @@ import XPostFormAttaches from '@/components/MkPostFormAttaches.vue';
 import XTextCounter from '@/components/MkPostForm.TextCounter.vue';
 import MkPollEditor from '@/components/MkPollEditor.vue';
 import MkNoteSimple from '@/components/MkNoteSimple.vue';
-import MkSwitch from '@/components/MkSwitch.vue';
 import { erase, unique } from '@/utility/array.js';
 import { extractMentions } from '@/utility/extract-mentions.js';
 import { formatTimeString } from '@/utility/format-time-string.js';
@@ -216,16 +211,14 @@ const submitButtonEl = useTemplateRef('submitButtonEl');
 const posting = ref(false);
 const posted = ref(false);
 const text = ref(props.initialText ?? '');
-const replyLockedText = ref<string | null>(props.initialNote?.replyLockedText ?? null);
 const files = ref(props.initialFiles ?? []);
 const poll = ref<PollEditorModelValue | null>(null);
-const useCw = ref<boolean>(!!props.initialCw || props.initialNote?.cwReplyRequired === true);
+const useCw = ref<boolean>(!!props.initialCw);
 const showPreview = ref(store.s.showPreview);
 watch(showPreview, () => store.set('showPreview', showPreview.value));
 const showAddMfmFunction = ref(prefer.s.enableQuickAddMfmFunction);
 watch(showAddMfmFunction, () => prefer.commit('enableQuickAddMfmFunction', showAddMfmFunction.value));
 const cw = ref<string | null>(props.initialCw ?? null);
-const cwReplyRequired = ref<boolean>(props.initialNote?.cwReplyRequired ?? false);
 const localOnly = ref(props.initialLocalOnly ?? (prefer.s.rememberNoteVisibility ? store.s.localOnly : prefer.s.defaultNoteLocalOnly));
 const visibility = ref(props.initialVisibility ?? (prefer.s.rememberNoteVisibility ? store.s.visibility : prefer.s.defaultNoteVisibility));
 const visibleUsers = ref<Misskey.entities.UserDetailed[]>([]);
@@ -245,24 +238,17 @@ const justEndedComposition = ref(false);
 const renoteTargetNote: ShallowRef<PostFormProps['renote'] | null> = shallowRef(props.renote);
 const replyTargetNote: ShallowRef<PostFormProps['reply'] | null> = shallowRef(props.reply);
 const targetChannel = shallowRef(props.channel);
-const canUseCwReplyRequired = computed(() => replyTargetNote.value == null && renoteTargetNote.value == null && quoteId.value == null);
-const effectiveCwReplyRequired = computed(() => useCw.value && canUseCwReplyRequired.value && cwReplyRequired.value);
-const isLocalOnlyForcedByCwReply = computed(() => effectiveCwReplyRequired.value);
+const hasReplyVisibleContentInText = computed(() => text.value.includes('$[replyVisible'));
+const isLocalOnlyForcedByReplyVisible = computed(() => hasReplyVisibleContentInText.value && !isEditing.value);
 const effectiveLocalOnly = computed(() => {
 	if (targetChannel.value != null) return true;
-	if (isLocalOnlyForcedByCwReply.value) return true;
+	if (isLocalOnlyForcedByReplyVisible.value) return true;
 	if (visibility.value === 'specified') return false;
 	return localOnly.value;
 });
-const disableFederationTooltip = computed(() => isLocalOnlyForcedByCwReply.value
-	? i18n.ts.cwReplyRequiredLocalOnly
-	: i18n.ts._visibility.disableFederation);
-
-watch(canUseCwReplyRequired, (canUse) => {
-	if (!canUse && cwReplyRequired.value) {
-		cwReplyRequired.value = false;
-	}
-}, { immediate: true });
+const disableFederationTooltip = computed(() => isLocalOnlyForcedByReplyVisible.value
+	? String(i18n.ts.replyVisibleLocalOnly)
+	: String(i18n.ts._visibility.disableFederation));
 
 const serverDraftId = ref<string | null>(null);
 const postFormActions = getPluginHandlers('post_form_action');
@@ -463,10 +449,8 @@ if (prefer.s.keepCw && replyTargetNote.value && replyTargetNote.value.cw) {
 
 function watchForDraft() {
 	watch(text, () => saveDraft());
-	watch(replyLockedText, () => saveDraft());
 	watch(useCw, () => saveDraft());
 	watch(cw, () => saveDraft());
-	watch(cwReplyRequired, () => saveDraft());
 	watch(poll, () => saveDraft());
 	watch(files, () => saveDraft(), { deep: true });
 	watch(visibility, () => saveDraft());
@@ -512,38 +496,6 @@ function togglePoll() {
 			expiresAt: null,
 			expiredAfter: null,
 		};
-	}
-}
-
-function migrateLegacyReplyLockedTextToCwModel() {
-	const legacyReplyLockedText = (replyLockedText.value ?? '').trim();
-	if (legacyReplyLockedText === '') {
-		replyLockedText.value = null;
-		return;
-	}
-
-	const currentText = text.value.trim();
-	const currentCw = (cw.value ?? '').trim();
-
-	if (currentText !== '' && currentCw !== '') {
-		text.value = replyLockedText.value ?? '';
-	} else if (currentText !== '' && currentCw === '') {
-		cw.value = text.value;
-		text.value = replyLockedText.value ?? '';
-	} else if (currentText === '') {
-		text.value = replyLockedText.value ?? '';
-	}
-
-	replyLockedText.value = null;
-}
-
-function onCwReplyRequiredChange(value: boolean) {
-	if (value === cwReplyRequired.value) return;
-
-	cwReplyRequired.value = value;
-
-	if (value) {
-		migrateLegacyReplyLockedTextToCwModel();
 	}
 }
 
@@ -870,7 +822,6 @@ function removeVisibleUser(id: string) {
 
 function clear() {
 	text.value = '';
-	replyLockedText.value = null;
 	cw.value = null;
 	files.value = [];
 	poll.value = null;
@@ -1021,10 +972,8 @@ type StoredDrafts = {
 		updatedAt: string;
 		data: {
 			text: string;
-			replyLockedText: string | null;
 			useCw: boolean;
 			cw: string | null;
-			cwReplyRequired: boolean;
 			visibility: 'public' | 'home' | 'followers' | 'specified';
 			localOnly: boolean;
 			files: Misskey.entities.DriveFile[];
@@ -1046,10 +995,8 @@ function saveDraft() {
 		updatedAt: new Date().toISOString(),
 		data: {
 			text: text.value,
-			replyLockedText: null,
 			useCw: useCw.value,
 			cw: cw.value,
-			cwReplyRequired: effectiveCwReplyRequired.value,
 			visibility: visibility.value,
 			localOnly: effectiveLocalOnly.value,
 			files: files.value,
@@ -1078,9 +1025,7 @@ async function saveServerDraft(options: {
 	return await os.apiWithDialog(serverDraftId.value == null ? 'notes/drafts/create' : 'notes/drafts/update', {
 		...(serverDraftId.value == null ? {} : { draftId: serverDraftId.value }),
 		text: text.value,
-		replyLockedText: null,
 		cw: useCw.value ? cw.value || null : null,
-		cwReplyRequired: effectiveCwReplyRequired.value,
 		visibility: visibility.value,
 		localOnly: effectiveLocalOnly.value,
 		hashtag: hashtags.value,
@@ -1144,6 +1089,14 @@ async function post(ev?: PointerEvent) {
 
 	if (props.mock) return;
 
+	if (isEditing.value && hasReplyVisibleContentInText.value && !localOnly.value) {
+		os.alert({
+			type: 'error',
+			text: String(i18n.ts.replyVisibleLocalOnly),
+		});
+		return;
+	}
+
 	if (visibility.value === 'public' && (
 		(useCw.value && cw.value != null && cw.value.trim() !== '' && isAnnoying(cw.value)) || // CWが迷惑になる場合
 		((!useCw.value || cw.value == null || cw.value.trim() === '') && text.value != null && text.value.trim() !== '' && isAnnoying(text.value)) // CWが無い かつ 本文が迷惑になる場合
@@ -1182,14 +1135,12 @@ async function post(ev?: PointerEvent) {
 
 	let postData = {
 		text: text.value === '' ? null : text.value,
-		replyLockedText: null,
 		fileIds: files.value.length > 0 ? files.value.map(f => f.id) : undefined,
 		replyId: replyTargetNote.value ? replyTargetNote.value.id : undefined,
 		renoteId: renoteTargetNote.value ? renoteTargetNote.value.id : quoteId.value ? quoteId.value : undefined,
 		channelId: targetChannel.value ? targetChannel.value.id : undefined,
 		poll: poll.value,
 		cw: useCw.value ? cw.value || null : null,
-		cwReplyRequired: effectiveCwReplyRequired.value,
 		localOnly: effectiveLocalOnly.value,
 		visibility: visibility.value,
 		visibleUserIds: visibility.value === 'specified' ? visibleUsers.value.map(u => u.id) : undefined,
@@ -1355,6 +1306,31 @@ function insertMention() {
 	});
 }
 
+function insertReplyVisible() {
+	if (textEditorEl.value == null) return;
+
+	const selection = getTextSelectionRange();
+	const pos = Math.min(selection.start, selection.end);
+	const posEnd = Math.max(selection.start, selection.end);
+	const selectedText = text.value.substring(pos, posEnd);
+
+	if (selectedText === '') {
+		const insert = '$[replyVisible ]';
+		text.value = `${text.value.substring(0, pos)}${insert}${text.value.substring(posEnd)}`;
+		nextTick(() => {
+			textEditorEl.value?.focus();
+			textEditorEl.value?.setSelectionRange(pos + '$[replyVisible '.length, pos + '$[replyVisible '.length);
+		});
+	} else {
+		const insert = `$[replyVisible ${selectedText}]`;
+		text.value = `${text.value.substring(0, pos)}${insert}${text.value.substring(posEnd)}`;
+		nextTick(() => {
+			textEditorEl.value?.focus();
+			textEditorEl.value?.setSelectionRange(pos + insert.length, pos + insert.length);
+		});
+	}
+}
+
 async function insertEmoji(ev: PointerEvent) {
 	textAreaReadOnly.value = true;
 	const target = ev.currentTarget ?? ev.target;
@@ -1447,11 +1423,8 @@ async function openAccountMenu(ev: PointerEvent) {
 		}, {
 			restore: async (draft: Misskey.entities.NoteDraft) => {
 				text.value = draft.text ?? '';
-				replyLockedText.value = draft.replyLockedText ?? null;
-				useCw.value = draft.cw != null || draft.cwReplyRequired === true;
+				useCw.value = draft.cw != null;
 				cw.value = draft.cw ?? null;
-				cwReplyRequired.value = draft.cwReplyRequired ?? false;
-				if (cwReplyRequired.value) migrateLegacyReplyLockedTextToCwModel();
 				visibility.value = draft.visibility;
 				localOnly.value = draft.localOnly ?? false;
 				files.value = draft.files ?? [];
@@ -1614,11 +1587,8 @@ onMounted(() => {
 			const draft = JSON.parse(miLocalStorage.getItem('drafts') ?? '{}')[draftKey.value] as StoredDrafts[string] | undefined;
 			if (draft != null) {
 				text.value = draft.data.text;
-				replyLockedText.value = draft.data.replyLockedText ?? null;
-				useCw.value = draft.data.useCw || draft.data.cwReplyRequired === true;
+				useCw.value = draft.data.useCw;
 				cw.value = draft.data.cw;
-				cwReplyRequired.value = draft.data.cwReplyRequired ?? false;
-				if (cwReplyRequired.value) migrateLegacyReplyLockedTextToCwModel();
 				visibility.value = draft.data.visibility;
 				localOnly.value = draft.data.localOnly;
 				files.value = (draft.data.files || []).filter(draftFile => draftFile);
@@ -1640,11 +1610,8 @@ onMounted(() => {
 		if (props.initialNote) {
 			const init = props.initialNote;
 			text.value = init.text ? init.text : '';
-			replyLockedText.value = init.replyLockedText ?? null;
-			useCw.value = init.cw != null || init.cwReplyRequired === true;
+			useCw.value = init.cw != null;
 			cw.value = init.cw ?? null;
-			cwReplyRequired.value = init.cwReplyRequired ?? false;
-			if (cwReplyRequired.value) migrateLegacyReplyLockedTextToCwModel();
 			visibility.value = init.visibility;
 			localOnly.value = init.localOnly ?? false;
 			files.value = init.files ?? [];
@@ -1928,14 +1895,6 @@ html[data-color-scheme=light] .preview {
 	position: relative;
 }
 
-.cwReplyRequired {
-	padding: 10px 24px 4px;
-}
-
-.cwReplyRequiredSwitch {
-	align-items: flex-start;
-}
-
 .cw {
 	z-index: 1;
 	padding-bottom: 8px;
@@ -2068,10 +2027,6 @@ html[data-color-scheme=light] .preview {
 	.hashtags,
 	.text {
 		padding: 0 16px;
-	}
-
-	.cwReplyRequired {
-		padding: 10px 16px 4px;
 	}
 
 	.text {

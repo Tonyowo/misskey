@@ -53,7 +53,7 @@ export const getNoteSummary = (note?: Misskey.entities.Note | Misskey.entities.N
 	if (note.cw != null) {
 		summary += note.cw;
 	} else {
-		summary += note.text ? note.text : note.cw ? note.cw : note.replyLockedText ? note.replyLockedText : '';
+		summary += note.text ? note.text : note.cw ? note.cw : '';
 	}
 
 	// ファイルが添付されているとき

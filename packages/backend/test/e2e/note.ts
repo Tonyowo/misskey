@@ -141,16 +141,16 @@ describe('Note', () => {
 		), false);
 	});
 
-	test('返信可視CWは返信前に隠れ、返信後に見える', async () => {
+	test('局所返信可視は返信前に隠れ、返信後に見える', async () => {
 		const res = await api('notes/create', {
-			text: 'secret body',
+			text: 'public $[replyVisible secret body] tail',
 			cw: 'spoiler',
-			cwReplyRequired: true,
 		}, alice);
 
 		assert.strictEqual(res.status, 200);
-		assert.strictEqual(res.body.createdNote.cwReplyRequired, true);
-		assert.strictEqual(res.body.createdNote.canRevealCw, true);
+		assert.strictEqual(res.body.createdNote.hasReplyVisibleContent, true);
+		assert.strictEqual(res.body.createdNote.canRevealReplyVisibleContent, true);
+		assert.strictEqual(res.body.createdNote.text, 'public $[replyVisible.revealed=true secret body] tail');
 
 		const noteId = res.body.createdNote.id;
 		const hiddenForBob = await api('notes/show', {
@@ -159,10 +159,9 @@ describe('Note', () => {
 
 		assert.strictEqual(hiddenForBob.status, 200);
 		assert.strictEqual(hiddenForBob.body.cw, 'spoiler');
-		assert.strictEqual(hiddenForBob.body.text, null);
-		assert.strictEqual(hiddenForBob.body.replyLockedText, undefined);
-		assert.strictEqual(hiddenForBob.body.cwReplyRequired, true);
-		assert.strictEqual(hiddenForBob.body.canRevealCw, false);
+		assert.strictEqual(hiddenForBob.body.text, 'public $[replyVisible.index=0 reply visible] tail');
+		assert.strictEqual(hiddenForBob.body.hasReplyVisibleContent, true);
+		assert.strictEqual(hiddenForBob.body.canRevealReplyVisibleContent, false);
 
 		const replyRes = await api('notes/create', {
 			text: 'I replied',
@@ -176,17 +175,14 @@ describe('Note', () => {
 		}, bob);
 
 		assert.strictEqual(visibleForBob.status, 200);
-		assert.strictEqual(visibleForBob.body.text, 'secret body');
-		assert.strictEqual(visibleForBob.body.replyLockedText, undefined);
-		assert.strictEqual(visibleForBob.body.cwReplyRequired, true);
-		assert.strictEqual(visibleForBob.body.canRevealCw, true);
+		assert.strictEqual(visibleForBob.body.text, 'public $[replyVisible.revealed=true secret body] tail');
+		assert.strictEqual(visibleForBob.body.hasReplyVisibleContent, true);
+		assert.strictEqual(visibleForBob.body.canRevealReplyVisibleContent, true);
 	});
 
-	test('返信可視CWは自動的にローカルのみにされる', async () => {
+	test('局所返信可視は自動的にローカルのみにされる', async () => {
 		const res = await api('notes/create', {
-			text: 'secret body',
-			cw: 'spoiler',
-			cwReplyRequired: true,
+			text: 'public $[replyVisible secret body]',
 			localOnly: false,
 		}, alice);
 
@@ -195,52 +191,7 @@ describe('Note', () => {
 
 		const stored = await Notes.findOneByOrFail({ id: res.body.createdNote.id });
 		assert.strictEqual(stored.localOnly, true);
-	});
-
-	test('返信では返信可視CWは無効化される', async () => {
-		const base = await post(bob, {
-			text: 'base note',
-		});
-
-		const res = await api('notes/create', {
-			text: 'reply body',
-			cw: 'reply spoiler',
-			cwReplyRequired: true,
-			localOnly: false,
-			replyId: base.id,
-		}, alice);
-
-		assert.strictEqual(res.status, 200);
-		assert.strictEqual(res.body.createdNote.replyId, base.id);
-		assert.strictEqual(res.body.createdNote.cwReplyRequired, undefined);
-		assert.strictEqual(res.body.createdNote.localOnly, false);
-
-		const stored = await Notes.findOneByOrFail({ id: res.body.createdNote.id });
-		assert.strictEqual(stored.cwReplyRequired, false);
-		assert.strictEqual(stored.localOnly, false);
-	});
-
-	test('引用では返信可視CWは無効化される', async () => {
-		const base = await post(bob, {
-			text: 'base quote target',
-		});
-
-		const res = await api('notes/create', {
-			text: 'quote body',
-			cw: 'quote spoiler',
-			cwReplyRequired: true,
-			localOnly: false,
-			renoteId: base.id,
-		}, alice);
-
-		assert.strictEqual(res.status, 200);
-		assert.strictEqual(res.body.createdNote.renoteId, base.id);
-		assert.strictEqual(res.body.createdNote.cwReplyRequired, undefined);
-		assert.strictEqual(res.body.createdNote.localOnly, false);
-
-		const stored = await Notes.findOneByOrFail({ id: res.body.createdNote.id });
-		assert.strictEqual(stored.cwReplyRequired, false);
-		assert.strictEqual(stored.localOnly, false);
+		assert.deepStrictEqual(stored.replyVisibleContents, [{ text: 'secret body' }]);
 	});
 
 	test('renoteできる', async () => {
@@ -1132,9 +1083,7 @@ describe('Note', () => {
 			const updateRes = await api('notes/update', {
 				noteId: mainNoteRes.body.createdNote.id,
 				text: 'after edit',
-				replyLockedText: null,
 				cw: null,
-				cwReplyRequired: false,
 				localOnly: false,
 				reactionAcceptance: null,
 				replyId: null,

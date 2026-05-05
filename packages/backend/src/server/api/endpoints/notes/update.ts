@@ -107,14 +107,7 @@ export const paramDef = {
 		visibleUserIds: { type: 'array', uniqueItems: true, items: {
 			type: 'string', format: 'misskey:id',
 		} },
-		replyLockedText: {
-			type: 'string',
-			minLength: 1,
-			maxLength: MAX_NOTE_TEXT_LENGTH,
-			nullable: true,
-		},
 		cw: { type: 'string', nullable: true, minLength: 1, maxLength: 100 },
-		cwReplyRequired: { type: 'boolean', default: false },
 		localOnly: { type: 'boolean', default: false },
 		reactionAcceptance: { type: 'string', nullable: true, enum: [null, 'likeOnly', 'likeOnlyForRemote', 'nonSensitiveOnly', 'nonSensitiveOnlyForLocalLikeOnlyForRemote'], default: null },
 		replyId: { type: 'string', format: 'misskey:id', nullable: true },
@@ -170,9 +163,6 @@ export const paramDef = {
 			mediaIds: {
 				type: 'null',
 			},
-			replyLockedText: {
-				type: 'null',
-			},
 			poll: {
 				type: 'null',
 			},
@@ -223,12 +213,10 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 							expiresAt: ps.poll.expiredAfter ? new Date(Date.now() + ps.poll.expiredAfter) : ps.poll.expiresAt ? new Date(ps.poll.expiresAt) : null,
 						} : null,
 						text: ps.text ?? null,
-						replyLockedText: ps.replyLockedText ?? null,
 						replyId: ps.replyId ?? null,
 						renoteId: ps.renoteId ?? null,
 						channelId: ps.channelId ?? null,
 						cw: ps.cw ?? null,
-						cwReplyRequired: ps.cwReplyRequired,
 						localOnly: ps.localOnly,
 						reactionAcceptance: ps.reactionAcceptance,
 						visibility: ps.visibility,

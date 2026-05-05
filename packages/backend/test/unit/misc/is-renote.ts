@@ -15,10 +15,9 @@ const base: MiNote = {
 	renote: null,
 	threadId: null,
 	text: null,
-	replyLockedText: null,
 	name: null,
 	cw: null,
-	cwReplyRequired: false,
+	replyVisibleContents: [],
 	userId: 'some-user-id',
 	user: null,
 	localOnly: false,
@@ -69,6 +68,12 @@ describe('misc:is-renote', () => {
 
 	test('note with renoteId and cw should be Quote', () => {
 		const note: MiNote = { ...base, renoteId: 'some-renote-id', cw: 'some-cw' };
+		expect(isRenote(note)).toBe(true);
+		expect(isQuote(note as any)).toBe(true);
+	});
+
+	test('note with renoteId and reply-visible contents should be Quote', () => {
+		const note: MiNote = { ...base, renoteId: 'some-renote-id', replyVisibleContents: [{ text: 'some-text' }] };
 		expect(isRenote(note)).toBe(true);
 		expect(isQuote(note as any)).toBe(true);
 	});

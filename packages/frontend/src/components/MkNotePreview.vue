@@ -13,12 +13,9 @@ SPDX-License-Identifier: AGPL-3.0-only
 		<div>
 			<p v-if="hasCw" :class="$style.cw">
 				<Mfm v-if="cw != null && cw != ''" :text="cw" :author="user" :nyaize="'respect'" :i="user" style="margin-right: 8px;"/>
-				<div v-if="showReplyLockedContentInPreview" :class="$style.replyRequiredBadge">
-					<i class="ti ti-lock"></i>{{ i18n.ts.cwReplyRequired }}
-				</div>
-				<MkCwButton v-else v-model="showContent" :text="text.trim()" :files="files" :poll="poll" style="margin: 4px 0;"/>
+				<MkCwButton v-model="showContent" :text="text.trim()" :files="files" :poll="poll" style="margin: 4px 0;"/>
 			</p>
-			<div v-show="!hasCw || showReplyLockedContentInPreview || showContent">
+			<div v-show="!hasCw || showContent">
 				<Mfm :text="text.trim()" :author="user" :nyaize="'respect'" :i="user"/>
 			</div>
 		</div>
@@ -31,23 +28,19 @@ import { computed, ref } from 'vue';
 import * as Misskey from 'misskey-js';
 import type { PollEditorModelValue } from '@/components/MkPollEditor.vue';
 import MkCwButton from '@/components/MkCwButton.vue';
-import { i18n } from '@/i18n.js';
 
 const showContent = ref(false);
 
 const props = defineProps<{
 	text: string;
-	replyLockedText?: string | null;
 	files: Misskey.entities.DriveFile[];
 	poll?: PollEditorModelValue;
 	useCw: boolean;
 	cw: string | null;
-	cwReplyRequired?: boolean;
 	user: Misskey.entities.User;
 }>();
 
 const hasCw = computed(() => props.useCw);
-const showReplyLockedContentInPreview = computed(() => props.cwReplyRequired === true);
 </script>
 
 <style lang="scss" module>
@@ -80,15 +73,6 @@ const showReplyLockedContentInPreview = computed(() => props.cwReplyRequired ===
 	margin: 0;
 	padding: 0;
 	overflow-wrap: break-word;
-}
-
-.replyRequiredBadge {
-	display: inline-flex;
-	align-items: center;
-	gap: 6px;
-	margin: 4px 0 0;
-	font-size: 0.9em;
-	color: var(--MI_THEME-warn);
 }
 
 .header {

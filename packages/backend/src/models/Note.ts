@@ -10,6 +10,10 @@ import { MiUser } from './User.js';
 import { MiChannel } from './Channel.js';
 import type { MiDriveFile } from './DriveFile.js';
 
+export type IReplyVisibleContent = {
+	text: string;
+};
+
 // Note: When you create a new index for existing column of this table,
 // it might be better to index concurrently under isConcurrentIndexMigrationEnabled flag
 // by editing generated migration file since this table is very large,
@@ -83,15 +87,10 @@ export class MiNote {
 	})
 	public cw: string | null;
 
-	@Column('boolean', {
-		default: false,
+	@Column('jsonb', {
+		default: [],
 	})
-	public cwReplyRequired: boolean;
-
-	@Column('text', {
-		nullable: true,
-	})
-	public replyLockedText: string | null;
+	public replyVisibleContents: IReplyVisibleContent[];
 
 	@Column({
 		...id(),

@@ -16,6 +16,7 @@ import { bindThis } from '@/decorators.js';
 import { DebounceLoader } from '@/misc/loader.js';
 import { IdService } from '@/core/IdService.js';
 import { shouldHideNoteByTime } from '@/misc/should-hide-note-by-time.js';
+import { renderReplyVisibleContents } from '@/misc/reply-visible-content.js';
 import { ReactionsBufferingService } from '@/core/ReactionsBufferingService.js';
 import { CacheService } from '@/core/CacheService.js';
 import type { OnModuleInit } from '@nestjs/common';
@@ -30,7 +31,7 @@ function isPureRenote(note: MiNote): note is MiNote & { renoteId: MiNote['id']; 
 		note.renote != null &&
 		note.reply == null &&
 		note.text == null &&
-		note.replyLockedText == null &&
+		(note.replyVisibleContents == null || note.replyVisibleContents.length === 0) &&
 		note.cw == null &&
 		(note.fileIds == null || note.fileIds.length === 0) &&
 		!note.hasPoll
@@ -185,29 +186,28 @@ export class NoteEntityService implements OnModuleInit {
 		packedNote.fileIds = [];
 		packedNote.files = [];
 		packedNote.text = null;
-		packedNote.replyLockedText = undefined;
 		packedNote.poll = undefined;
 		packedNote.cw = null;
-		packedNote.cwReplyRequired = undefined;
-		packedNote.canRevealCw = undefined;
+		packedNote.hasReplyVisibleContent = undefined;
+		packedNote.canRevealReplyVisibleContent = undefined;
 		packedNote.isHidden = true;
 		// TODO: hiddenReason みたいなのを提供しても良さそう
 	}
 
 	@bindThis
-	private async canRevealCw(
-		note: Pick<MiNote, 'id' | 'userId' | 'cwReplyRequired'>,
+	private async canRevealReplyVisibleContent(
+		note: Pick<MiNote, 'id' | 'userId' | 'replyVisibleContents'>,
 		meId: MiUser['id'] | null,
 		_hint_?: {
-			cwRevealedNoteIds: Set<MiNote['id']>;
+			replyVisibleRevealedNoteIds: Set<MiNote['id']>;
 		},
 	): Promise<boolean> {
-		if (!note.cwReplyRequired) return true;
+		if (note.replyVisibleContents.length === 0) return true;
 		if (meId == null) return false;
 		if (meId === note.userId) return true;
 
-		if (_hint_?.cwRevealedNoteIds) {
-			return _hint_.cwRevealedNoteIds.has(note.id);
+		if (_hint_?.replyVisibleRevealedNoteIds) {
+			return _hint_.replyVisibleRevealedNoteIds.has(note.id);
 		}
 
 		return await this.notesRepository.exists({
@@ -216,16 +216,6 @@ export class NoteEntityService implements OnModuleInit {
 				replyId: note.id,
 			},
 		});
-	}
-
-	@bindThis
-	private hideReplyRequiredCwContent(packedNote: Packed<'Note'>): void {
-		packedNote.text = null;
-		packedNote.replyLockedText = undefined;
-		packedNote.fileIds = [];
-		packedNote.files = [];
-		packedNote.poll = undefined;
-		packedNote.renote = undefined;
 	}
 
 	@bindThis
@@ -390,7 +380,7 @@ export class NoteEntityService implements OnModuleInit {
 				myReactions: Map<MiNote['id'], string | null>;
 				packedFiles: Map<MiNote['fileIds'][number], Packed<'DriveFile'> | null>;
 				packedUsers: Map<MiUser['id'], Packed<'UserLite'>>;
-				cwRevealedNoteIds: Set<MiNote['id']>;
+				replyVisibleRevealedNoteIds: Set<MiNote['id']>;
 			};
 		},
 	): Promise<Packed<'Note'>> {
@@ -414,9 +404,9 @@ export class NoteEntityService implements OnModuleInit {
 		const reactionAndUserPairCache = note.reactionAndUserPairCache.concat(bufferedReactions.pairs.map(x => x.join('/')));
 
 		let text = note.text;
-		if (note.cwReplyRequired && text == null && note.replyLockedText != null) {
-			text = note.replyLockedText;
-		}
+		const hasReplyVisibleContent = note.replyVisibleContents.length > 0;
+		const canRevealReplyVisibleContent = hasReplyVisibleContent ? await this.canRevealReplyVisibleContent(note, meId, options?._hint_) : undefined;
+		text = renderReplyVisibleContents(text, note.replyVisibleContents, canRevealReplyVisibleContent ?? false);
 
 		if (note.name && (note.url ?? note.uri)) {
 			text = `【${note.name}】\n${(text ?? '').trim()}\n\n${note.url ?? note.uri}`;
@@ -441,10 +431,9 @@ export class NoteEntityService implements OnModuleInit {
 			userId: note.userId,
 			user: packedUsers?.get(note.userId) ?? this.userEntityService.pack(note.user ?? note.userId, me),
 			text: text,
-			replyLockedText: note.replyLockedText ?? undefined,
 			cw: note.cw,
-			cwReplyRequired: note.cwReplyRequired || undefined,
-			canRevealCw: note.cwReplyRequired ? this.canRevealCw(note, meId, options?._hint_) : undefined,
+			hasReplyVisibleContent: hasReplyVisibleContent || undefined,
+			canRevealReplyVisibleContent,
 			visibility: note.visibility,
 			localOnly: note.localOnly,
 			reactionAcceptance: note.reactionAcceptance,
@@ -512,10 +501,6 @@ export class NoteEntityService implements OnModuleInit {
 			this.hideNote(packed);
 		}
 
-		if (!opts.skipHide && packed.cwReplyRequired && packed.canRevealCw === false) {
-			this.hideReplyRequiredCwContent(packed);
-		}
-
 		return packed;
 	}
 
@@ -533,15 +518,15 @@ export class NoteEntityService implements OnModuleInit {
 		const bufferedReactions = this.meta.enableReactionsBuffering ? await this.reactionsBufferingService.getMany([...getAppearNoteIds(notes)]) : null;
 
 		const meId = me ? me.id : null;
-		const cwRevealedNoteIds = new Set<MiNote['id']>();
+		const replyVisibleRevealedNoteIds = new Set<MiNote['id']>();
 
 		if (meId) {
 			const idsToCheck = new Set<MiNote['id']>();
 
 			for (const note of notes) {
-				if (note.cwReplyRequired) idsToCheck.add(note.id);
-				if (note.reply?.cwReplyRequired) idsToCheck.add(note.reply.id);
-				if (note.renote?.cwReplyRequired) idsToCheck.add(note.renote.id);
+				if (note.replyVisibleContents.length > 0) idsToCheck.add(note.id);
+				if (note.reply && note.reply.replyVisibleContents.length > 0) idsToCheck.add(note.reply.id);
+				if (note.renote && note.renote.replyVisibleContents.length > 0) idsToCheck.add(note.renote.id);
 			}
 
 			if (idsToCheck.size > 0) {
@@ -557,7 +542,7 @@ export class NoteEntityService implements OnModuleInit {
 
 				for (const repliedNote of repliedNotes) {
 					if (repliedNote.replyId != null) {
-						cwRevealedNoteIds.add(repliedNote.replyId);
+						replyVisibleRevealedNoteIds.add(repliedNote.replyId);
 					}
 				}
 			}
@@ -637,7 +622,7 @@ export class NoteEntityService implements OnModuleInit {
 				myReactions: myReactionsMap,
 				packedFiles,
 				packedUsers,
-				cwRevealedNoteIds,
+				replyVisibleRevealedNoteIds,
 			},
 		})));
 	}

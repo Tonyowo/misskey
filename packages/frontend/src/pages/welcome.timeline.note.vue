@@ -7,12 +7,9 @@ SPDX-License-Identifier: AGPL-3.0-only
 <div :key="note.id" :class="$style.note">
 	<div class="_panel _gaps_s" :class="$style.content">
 		<div v-if="hasCw" :class="$style.richcontent">
-			<div><Mfm :text="note.cw" :author="note.user"/></div>
-			<MkCwButton v-if="note.canRevealCw !== false" v-model="showContent" :text="note.text" :renote="note.renote" :files="note.files" :poll="note.poll" style="margin: 4px 0;"/>
-			<div v-else style="margin-top: 4px; opacity: 0.8; font-size: 0.9em;">
-				<i class="ti ti-lock" style="margin-right: 4px;"></i>{{ i18n.ts.replyToSeeCw }}
-			</div>
-			<div v-if="note.canRevealCw !== false && showContent">
+			<div><Mfm :text="note.cw ?? ''" :author="note.user"/></div>
+			<MkCwButton v-model="showContent" :text="note.text" :renote="note.renote" :files="note.files" :poll="note.poll" style="margin: 4px 0;"/>
+			<div v-if="showContent">
 				<MkA v-if="note.replyId" class="reply" :to="`/notes/${note.replyId}`"><i class="ti ti-arrow-back-up"></i></MkA>
 				<Mfm v-if="note.text" :text="note.text" :author="note.user"/>
 				<MkA v-if="note.renoteId" class="rp" :to="`/notes/${note.renoteId}`">RN: ...</MkA>
@@ -23,7 +20,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 			<Mfm v-if="note.text" :text="note.text" :author="note.user"/>
 			<MkA v-if="note.renoteId" class="rp" :to="`/notes/${note.renoteId}`">RN: ...</MkA>
 		</div>
-		<div v-if="note.files && note.files.length > 0 && (!hasCw || (note.canRevealCw !== false && showContent))" :class="$style.richcontent">
+		<div v-if="note.files && note.files.length > 0 && (!hasCw || showContent)" :class="$style.richcontent">
 			<MkMediaList :mediaList="note.files.slice(0, 4)"/>
 		</div>
 		<div v-if="note.reactionCount > 0" :class="$style.reactions">
@@ -40,7 +37,6 @@ import MkReactionsViewer from '@/components/MkReactionsViewer.vue';
 import MkMediaList from '@/components/MkMediaList.vue';
 import MkPoll from '@/components/MkPoll.vue';
 import MkCwButton from '@/components/MkCwButton.vue';
-import { i18n } from '@/i18n.js';
 
 const props = defineProps<{
 	note: Misskey.entities.Note;

@@ -220,6 +220,19 @@ export default function (props: MfmProps, { emit }: { emit: SetupContext<MfmEven
 					case 'sparkle': {
 						return genEl(token.children, scale);
 					}
+					case 'replyVisible': {
+						if (token.props.args.revealed === 'true') {
+							return h('span', {
+								style: 'white-space: pre-wrap;',
+							}, genEl(token.children, scale));
+						}
+						return h('span', {
+							style: 'display: inline-flex; align-items: center; gap: 0.35em; padding: 0.2em 0.6em; border-radius: 999px; background: var(--MI_THEME-buttonBg); color: var(--MI_THEME-fg); font-size: 0.9em;',
+						}, [
+							h('i', { class: 'ti ti-lock' }),
+							'Reply to view',
+						]);
+					}
 					case 'rotate': {
 						const degrees = safeParseFloat(token.props.args.deg) ?? 90;
 						style = `transform: rotate(${degrees}deg); transform-origin: center center;`;

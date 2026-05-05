@@ -124,12 +124,6 @@ export const meta = {
 			id: '4de0363a-3046-481b-9b0f-feff3e211025',
 		},
 
-		replyLockedTextRequired: {
-			message: 'Reply locked content is required.',
-			code: 'REPLY_LOCKED_TEXT_REQUIRED',
-			id: '6b660c9c-4bd8-4ab4-b913-db43ff8f91fd',
-		},
-
 		noContent: {
 			message: 'Note content is required.',
 			code: 'NO_CONTENT',
@@ -145,14 +139,7 @@ export const paramDef = {
 		visibleUserIds: { type: 'array', uniqueItems: true, items: {
 			type: 'string', format: 'misskey:id',
 		} },
-		replyLockedText: {
-			type: 'string',
-			minLength: 1,
-			maxLength: MAX_NOTE_TEXT_LENGTH,
-			nullable: true,
-		},
 		cw: { type: 'string', nullable: true, minLength: 1, maxLength: 100 },
-		cwReplyRequired: { type: 'boolean', default: false },
 		localOnly: { type: 'boolean', default: false },
 		reactionAcceptance: { type: 'string', nullable: true, enum: [null, 'likeOnly', 'likeOnlyForRemote', 'nonSensitiveOnly', 'nonSensitiveOnlyForLocalLikeOnlyForRemote'], default: null },
 		noExtractMentions: { type: 'boolean', default: false },
@@ -214,9 +201,6 @@ export const paramDef = {
 			mediaIds: {
 				type: 'null',
 			},
-			replyLockedText: {
-				type: 'null',
-			},
 			poll: {
 				type: 'null',
 			},
@@ -252,11 +236,9 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 						expiresAt: ps.poll.expiredAfter ? new Date(Date.now() + ps.poll.expiredAfter) : ps.poll.expiresAt ? new Date(ps.poll.expiresAt) : null,
 					} : null,
 					text: ps.text ?? null,
-					replyLockedText: ps.replyLockedText ?? null,
 					replyId: ps.replyId ?? null,
 					renoteId: ps.renoteId ?? null,
 					cw: ps.cw ?? null,
-					cwReplyRequired: ps.cwReplyRequired ?? false,
 					localOnly: ps.localOnly,
 					reactionAcceptance: ps.reactionAcceptance,
 					visibility: ps.visibility,
@@ -307,8 +289,6 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 						throw new ApiError(meta.errors.cannotCreateAlreadyExpiredPoll);
 					} else if (err.id === 'bfa3905b-25f5-4894-b430-da331a490e4b') {
 						throw new ApiError(meta.errors.noSuchChannel);
-					} else if (err.id === '49870a66-f7d8-4a58-a45a-7b85c9dfdbe4') {
-						throw new ApiError(meta.errors.replyLockedTextRequired);
 					} else if (err.id === '314f9c77-6486-4f23-a9df-f2c454f59b44') {
 						throw new ApiError(meta.errors.noContent);
 					}

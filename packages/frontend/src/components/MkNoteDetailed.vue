@@ -80,18 +80,15 @@ SPDX-License-Identifier: AGPL-3.0-only
 				<div v-if="hasCw" :class="$style.cw">
 					<Mfm
 						v-if="appearNote.cw != ''"
-						:text="appearNote.cw"
+						:text="appearNote.cw ?? ''"
 						:author="appearNote.user"
 						:nyaize="'respect'"
 						:enableEmojiMenu="true"
 						:enableEmojiMenuReaction="true"
 					/>
-					<MkCwButton v-if="!isCwReplyLocked" v-model="showContent" :text="appearNote.text" :renote="appearNote.renote" :files="appearNote.files" :poll="appearNote.poll"/>
-					<div v-else style="margin-top: 4px; opacity: 0.8; font-size: 0.9em;">
-						<i class="ti ti-lock" style="margin-right: 4px;"></i>{{ i18n.ts.replyToSeeCw }}
-					</div>
+					<MkCwButton v-model="showContent" :text="appearNote.text" :renote="appearNote.renote" :files="appearNote.files" :poll="appearNote.poll"/>
 				</div>
-				<div v-show="!hasCw || (!isCwReplyLocked && showContent)">
+				<div v-show="!hasCw || showContent">
 					<span v-if="appearNote.isHidden" style="opacity: 0.5">({{ i18n.ts.private }})</span>
 					<MkA v-if="appearNote.replyId" :class="$style.noteReplyTarget" :to="`/notes/${appearNote.replyId}`"><i class="ti ti-arrow-back-up"></i></MkA>
 					<Mfm
@@ -340,7 +337,6 @@ const showTicker = (prefer.s.instanceTicker === 'always') || (prefer.s.instanceT
 const conversation = ref<Misskey.entities.Note[]>([]);
 const replies = ref<Misskey.entities.Note[]>([]);
 const canRenote = computed(() => ['public', 'home'].includes(appearNote.visibility) || appearNote.userId === $i?.id);
-const isCwReplyLocked = computed(() => appearNote.cwReplyRequired === true && appearNote.canRevealCw === false);
 const hasCw = computed(() => appearNote.cw != null);
 const appearNoteIsEdited = computed(() => appearNote.updatedAt != null && appearNote.updatedAt !== appearNote.createdAt);
 
@@ -380,7 +376,7 @@ const keymap = {
 		galleryEl.value?.openGallery();
 	},
 	'v|enter': () => {
-		if (hasCw.value && !isCwReplyLocked.value) {
+		if (hasCw.value) {
 			showContent.value = !showContent.value;
 		}
 	},
@@ -624,7 +620,7 @@ async function showRenoteMenu() {
 	) {
 		menu.push({
 			type: 'link',
-			text: i18n.ts.viewRenotedChannel,
+			text: String(i18n.ts.viewRenotedChannel),
 			icon: 'ti ti-device-tv',
 			to: `/channels/${props.note.channelId}`,
 		});

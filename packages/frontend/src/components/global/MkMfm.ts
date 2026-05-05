@@ -21,6 +21,7 @@ import MkGoogle from '@/components/MkGoogle.vue';
 import MkSparkle from '@/components/MkSparkle.vue';
 import MkA from '@/components/global/MkA.vue';
 import { prefer } from '@/preferences.js';
+import { i18n } from '@/i18n.js';
 
 function safeParseFloat(str: unknown): number | null {
 	if (typeof str !== 'string' || str === '') return null;
@@ -128,6 +129,23 @@ export default function (props: MfmProps, { emit }: { emit: SetupContext<MfmEven
 				// TODO: CSSを文字列で組み立てていくと token.props.args.~~~ 経由でCSSインジェクションできるのでよしなにやる
 				let style: string | undefined;
 				switch (token.props.name) {
+					case 'replyVisible': {
+						if (token.props.args.revealed === 'true') {
+							return h('span', {
+								class: 'mfm-reply-visible',
+							}, genEl(token.children, scale));
+						}
+
+						return h('span', {
+							class: 'mfm-reply-visible-locked',
+							style: 'display: inline-flex; align-items: center; gap: 0.35em; padding: 0.15em 0.55em; border-radius: 999px; background: var(--MI_THEME-buttonBg); color: var(--MI_THEME-fgTransparentWeak); font-size: 0.9em; vertical-align: baseline;',
+						}, [
+							h('i', {
+								class: 'ti ti-lock',
+							}),
+							String(i18n.ts.replyToSeeReplyVisible),
+						]);
+					}
 					case 'tada': {
 						const speed = validTime(token.props.args.speed) ?? '1s';
 						const delay = validTime(token.props.args.delay) ?? '0s';
