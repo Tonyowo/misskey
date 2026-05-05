@@ -62,6 +62,8 @@ type PostFormReplyVisibleSegment = {
 	type: 'replyVisible';
 	value: string;
 	content: string;
+	start: number;
+	end: number;
 };
 
 type PostFormEditorSegment = PostFormCustomEmojiSegment | PostFormReplyVisibleSegment;
@@ -84,6 +86,7 @@ const emit = defineEmits<{
 	(ev: 'paste', value: ClipboardEvent): void;
 	(ev: 'compositionupdate', value: CompositionEvent): void;
 	(ev: 'compositionend', value: CompositionEvent): void;
+	(ev: 'replyVisibleEdit', value: { start: number; end: number; content: string }): void;
 }>();
 
 const attrs = useAttrs();
@@ -158,6 +161,8 @@ function getSegments(): PostFormEditorSegment[] {
 			type: 'replyVisible',
 			value: matchText,
 			content,
+			start: index,
+			end: index + matchText.length,
 		});
 		lastIndex = index + matchText.length;
 	}
@@ -335,12 +340,37 @@ function createReplyVisibleNode(segment: PostFormReplyVisibleSegment): HTMLSpanE
 	span.dataset.raw = segment.value;
 	span.contentEditable = 'false';
 	span.title = segment.content;
+	span.tabIndex = 0;
+	span.role = 'button';
+	span.addEventListener('pointerdown', ev => {
+		ev.preventDefault();
+		ev.stopPropagation();
+	});
+	span.addEventListener('click', ev => {
+		ev.preventDefault();
+		ev.stopPropagation();
+		emit('replyVisibleEdit', {
+			start: segment.start,
+			end: segment.end,
+			content: segment.content,
+		});
+	});
+	span.addEventListener('keydown', ev => {
+		if (ev.key !== 'Enter' && ev.key !== ' ') return;
+		ev.preventDefault();
+		ev.stopPropagation();
+		emit('replyVisibleEdit', {
+			start: segment.start,
+			end: segment.end,
+			content: segment.content,
+		});
+	});
 
 	const icon = window.document.createElement('i');
 	icon.className = 'ti ti-lock';
 
 	const label = window.document.createElement('span');
-	label.textContent = String(i18n.ts.replyVisible);
+	label.textContent = String(i18n.ts.replyToSeeReplyVisible);
 
 	span.append(icon, label);
 	return span;
@@ -1075,9 +1105,16 @@ defineExpose({
 	font-size: 0.92em;
 	line-height: 1.55;
 	vertical-align: baseline;
-	pointer-events: none;
+	cursor: pointer;
+	pointer-events: auto;
 	user-select: text;
 	-webkit-user-select: text;
+
+	&:hover,
+	&:focus-visible {
+		background: color(from var(--MI_THEME-accent) srgb r g b / 0.18);
+		outline: none;
+	}
 }
 
 .tokenCaretAnchor {

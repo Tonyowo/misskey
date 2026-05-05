@@ -12,6 +12,7 @@ export type Keys = (
 	'latestDonationInfoShownAt' |
 	'neverShowDonationInfo' |
 	'neverShowLocalOnlyInfo' |
+	'neverShowReplyVisibleLocalOnlyInfo' |
 	'modifiedVersionMustProminentlyOfferInAgplV3Section13Read' |
 	'lastUsed' |
 	'lang' |

@@ -77,7 +77,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 	</div>
 	<div :class="[$style.textOuter, { [$style.withCw]: useCw }]">
 		<div v-if="targetChannel" :class="$style.colorBar" :style="{ background: targetChannel.color }"></div>
-		<MkPostFormTextEditor ref="textEditorEl" v-model="text" :class="$style.text" :disabled="posting || posted" :readonly="textAreaReadOnly" :placeholder="placeholder" data-cy-post-form-text @keydown="onKeydown" @keyup="onKeyup" @paste="onPaste" @compositionupdate="onCompositionUpdate" @compositionend="onCompositionEnd"/>
+		<MkPostFormTextEditor ref="textEditorEl" v-model="text" :class="$style.text" :disabled="posting || posted" :readonly="textAreaReadOnly" :placeholder="placeholder" data-cy-post-form-text @keydown="onKeydown" @keyup="onKeyup" @paste="onPaste" @compositionupdate="onCompositionUpdate" @compositionend="onCompositionEnd" @replyVisibleEdit="editReplyVisible"/>
 		<div v-if="maxTextLength - textLength < 100" :class="['_acrylic', $style.textCount, { [$style.textOver]: textLength > maxTextLength }]">{{ maxTextLength - textLength }}</div>
 	</div>
 	<input v-show="withHashtags" ref="hashtagsInputEl" v-model="hashtags" :class="$style.hashtags" :placeholder="i18n.ts.hashtags" list="hashtags">
@@ -154,6 +154,7 @@ import { chooseDriveFile } from '@/utility/drive.js';
 import { store } from '@/store.js';
 import MkInfo from '@/components/MkInfo.vue';
 import MkPostFormTextEditor from '@/components/MkPostFormTextEditor.vue';
+import MkPostFormReplyVisibleDialog from '@/components/MkPostFormReplyVisibleDialog.vue';
 import { i18n } from '@/i18n.js';
 import { instance } from '@/instance.js';
 import { ensureSignin, notesCount, incNotesCount } from '@/i.js';
@@ -1310,6 +1311,31 @@ function sanitizeReplyVisibleContent(value: string) {
 	return value.trim().replaceAll(']', '］');
 }
 
+async function showReplyVisibleLocalOnlyTip() {
+	const key = 'neverShowReplyVisibleLocalOnlyInfo';
+	if (miLocalStorage.getItem(key) === 'true') return;
+
+	await os.alert({
+		type: 'info',
+		title: String(i18n.ts.replyVisible),
+		text: String(i18n.ts.replyVisibleLocalOnly),
+	});
+	miLocalStorage.setItem(key, 'true');
+}
+
+function openReplyVisibleDialog(defaultValue: string): Promise<{ canceled: true } | { canceled: false; result: string }> {
+	return new Promise(resolve => {
+		const { dispose } = os.popup(MkPostFormReplyVisibleDialog, {
+			defaultValue,
+		}, {
+			done: result => {
+				resolve(result);
+			},
+			closed: () => dispose(),
+		});
+	});
+}
+
 async function insertReplyVisible() {
 	if (textEditorEl.value == null) return;
 
@@ -1317,17 +1343,12 @@ async function insertReplyVisible() {
 	const pos = Math.min(selection.start, selection.end);
 	const posEnd = Math.max(selection.start, selection.end);
 	const selectedText = text.value.substring(pos, posEnd);
-	const { canceled, result } = await os.inputText({
-		title: String(i18n.ts.replyVisible),
-		text: String(i18n.ts.replyVisibleDialogText),
-		placeholder: String(i18n.ts.replyVisiblePlaceholder),
-		default: selectedText,
-		minLength: 1,
-	});
+	await showReplyVisibleLocalOnlyTip();
+	const dialogResult = await openReplyVisibleDialog(selectedText);
 
-	if (canceled) return;
+	if (dialogResult.canceled) return;
 
-	const content = sanitizeReplyVisibleContent(result);
+	const content = sanitizeReplyVisibleContent(dialogResult.result);
 	if (content === '') {
 		return;
 	}
@@ -1337,6 +1358,25 @@ async function insertReplyVisible() {
 	nextTick(() => {
 		textEditorEl.value?.focus();
 		textEditorEl.value?.setSelectionRange(pos + insert.length, pos + insert.length);
+	});
+}
+
+async function editReplyVisible(payload: { start: number; end: number; content: string }) {
+	if (textEditorEl.value == null) return;
+
+	const dialogResult = await openReplyVisibleDialog(payload.content);
+	if (dialogResult.canceled) return;
+
+	const content = sanitizeReplyVisibleContent(dialogResult.result);
+	if (content === '') {
+		return;
+	}
+
+	const insert = `$[replyVisible ${content}]`;
+	text.value = `${text.value.substring(0, payload.start)}${insert}${text.value.substring(payload.end)}`;
+	nextTick(() => {
+		textEditorEl.value?.focus();
+		textEditorEl.value?.setSelectionRange(payload.start + insert.length, payload.start + insert.length);
 	});
 }
 

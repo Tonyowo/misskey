@@ -2613,11 +2613,11 @@ export interface Locale extends ILocale {
      */
     "useCw": string;
     /**
-     * 返信可視
+     * 返信すると表示
      */
     "replyVisible": string;
     /**
-     * 返信可視の内容はローカルのみ
+     * 返信すると表示される内容を含むノートはローカルのみに投稿されます。
      */
     "replyVisibleLocalOnly": string;
     /**
@@ -2625,7 +2625,7 @@ export interface Locale extends ILocale {
      */
     "replyToSeeReplyVisible": string;
     /**
-     * 返信後にだけ表示する内容を入力してください。
+     * 返信後にだけ表示する内容を入力してください。改行、リンク、絵文字、簡単なMFMを使用できます。
      */
     "replyVisibleDialogText": string;
     /**
