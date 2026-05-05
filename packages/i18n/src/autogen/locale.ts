@@ -2625,6 +2625,14 @@ export interface Locale extends ILocale {
      */
     "replyToSeeReplyVisible": string;
     /**
+     * 返信後にだけ表示する内容を入力してください。
+     */
+    "replyVisibleDialogText": string;
+    /**
+     * 返信後に表示する内容
+     */
+    "replyVisiblePlaceholder": string;
+    /**
      * プレイヤーを開く
      */
     "enablePlayer": string;

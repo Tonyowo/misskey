@@ -42,7 +42,8 @@ import type { AutocompleteTarget } from '@/utility/autocomplete.js';
 import { customEmojis, customEmojisMap } from '@/custom-emojis.js';
 import { getProxiedImageUrl, getStaticImageUrl } from '@/utility/media-proxy.js';
 import { prefer } from '@/preferences.js';
-import { tokenizePostFormCustomEmojis } from '@/utility/post-form-custom-emojis.js';
+import { type PostFormCustomEmojiSegment, tokenizePostFormCustomEmojis } from '@/utility/post-form-custom-emojis.js';
+import { i18n } from '@/i18n.js';
 
 defineOptions({
 	inheritAttrs: false,
@@ -56,6 +57,14 @@ type SelectionRange = {
 type ApplyTextUpdateOptions = {
 	skipNextInputNormalization?: boolean;
 };
+
+type PostFormReplyVisibleSegment = {
+	type: 'replyVisible';
+	value: string;
+	content: string;
+};
+
+type PostFormEditorSegment = PostFormCustomEmojiSegment | PostFormReplyVisibleSegment;
 
 const props = withDefaults(defineProps<{
 	modelValue: string;
@@ -87,6 +96,7 @@ const lastSelectionRange = ref<SelectionRange>({ start: renderedText.value.lengt
 let skipInputNormalizationUntilRender = false;
 let pendingPointerCaret: { pointerId: number; offset: number; x: number; y: number } | null = null;
 const TOKEN_CARET_ANCHOR = '\u200b';
+const REPLY_VISIBLE_REGEX = /\$\[replyVisible(?:\.[^\s\]]+)*\s+([^\]]+)\]/g;
 const fluentEmojiFallbackCache = new Set<string>();
 
 function stripCaretAnchors(value: string) {
@@ -128,17 +138,42 @@ function getDomOffsetForRawTextOffset(value: string, rawOffset: number) {
 	return value.length;
 }
 
-function getSegments() {
-	return tokenizePostFormCustomEmojis(renderedText.value, (name) => customEmojisMap.has(name));
+function pushTextSegments(segments: PostFormEditorSegment[], value: string) {
+	if (value === '') return;
+	segments.push(...tokenizePostFormCustomEmojis(value, (name) => customEmojisMap.has(name)));
+}
+
+function getSegments(): PostFormEditorSegment[] {
+	const segments: PostFormEditorSegment[] = [];
+	let lastIndex = 0;
+
+	for (const match of renderedText.value.matchAll(REPLY_VISIBLE_REGEX)) {
+		const matchText = match[0];
+		const content = match[1]?.trim();
+		const index = match.index ?? 0;
+		if (content == null || content === '') continue;
+
+		pushTextSegments(segments, renderedText.value.slice(lastIndex, index));
+		segments.push({
+			type: 'replyVisible',
+			value: matchText,
+			content,
+		});
+		lastIndex = index + matchText.length;
+	}
+
+	pushTextSegments(segments, renderedText.value.slice(lastIndex));
+
+	return segments.length === 0 ? [{ type: 'text', value: renderedText.value }] : segments;
 }
 
 function getTokenBoundaries() {
-	const boundaries: Array<{ start: number; end: number; type: 'customEmoji' | 'unicodeEmoji' }> = [];
+	const boundaries: Array<{ start: number; end: number; type: 'customEmoji' | 'replyVisible' | 'unicodeEmoji' }> = [];
 	let cursor = 0;
 
 	for (const segment of getSegments()) {
 		const length = segment.value.length;
-		if (segment.type === 'customEmoji') {
+		if (segment.type === 'customEmoji' || segment.type === 'replyVisible') {
 			boundaries.push({
 				start: cursor,
 				end: cursor + length,
@@ -294,6 +329,23 @@ function createUnicodeEmojiNode(raw: string): HTMLSpanElement {
 	return span;
 }
 
+function createReplyVisibleNode(segment: PostFormReplyVisibleSegment): HTMLSpanElement {
+	const span = window.document.createElement('span');
+	span.className = cssModule.replyVisible;
+	span.dataset.raw = segment.value;
+	span.contentEditable = 'false';
+	span.title = segment.content;
+
+	const icon = window.document.createElement('i');
+	icon.className = 'ti ti-lock';
+
+	const label = window.document.createElement('span');
+	label.textContent = String(i18n.ts.replyVisible);
+
+	span.append(icon, label);
+	return span;
+}
+
 function createTokenCaretAnchorNode() {
 	const span = window.document.createElement('span');
 	span.className = cssModule.tokenCaretAnchor;
@@ -353,6 +405,12 @@ function renderEditorContent(selection: SelectionRange | null = focused.value ? 
 	for (const segment of getSegments()) {
 		if (segment.type === 'text') {
 			appendTextWithUnicodeEmojis(fragment, segment.value);
+			continue;
+		}
+
+		if (segment.type === 'replyVisible') {
+			fragment.append(createReplyVisibleNode(segment));
+			fragment.append(createTokenCaretAnchorNode());
 			continue;
 		}
 
@@ -1000,6 +1058,26 @@ defineExpose({
 .unicodeEmojiImage {
 	height: 1.25em;
 	vertical-align: -0.25em;
+}
+
+.replyVisible {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.35em;
+	max-width: min(220px, 70%);
+	margin: 0 0.1em;
+	padding: 0.12em 0.55em;
+	border: 1px solid color(from var(--MI_THEME-accent) srgb r g b / 0.35);
+	border-radius: 999px;
+	background: color(from var(--MI_THEME-accent) srgb r g b / 0.12);
+	color: var(--MI_THEME-accent);
+	font-weight: 700;
+	font-size: 0.92em;
+	line-height: 1.55;
+	vertical-align: baseline;
+	pointer-events: none;
+	user-select: text;
+	-webkit-user-select: text;
 }
 
 .tokenCaretAnchor {

@@ -1306,29 +1306,38 @@ function insertMention() {
 	});
 }
 
-function insertReplyVisible() {
+function sanitizeReplyVisibleContent(value: string) {
+	return value.trim().replaceAll(']', '］');
+}
+
+async function insertReplyVisible() {
 	if (textEditorEl.value == null) return;
 
 	const selection = getTextSelectionRange();
 	const pos = Math.min(selection.start, selection.end);
 	const posEnd = Math.max(selection.start, selection.end);
 	const selectedText = text.value.substring(pos, posEnd);
+	const { canceled, result } = await os.inputText({
+		title: String(i18n.ts.replyVisible),
+		text: String(i18n.ts.replyVisibleDialogText),
+		placeholder: String(i18n.ts.replyVisiblePlaceholder),
+		default: selectedText,
+		minLength: 1,
+	});
 
-	if (selectedText === '') {
-		const insert = '$[replyVisible ]';
-		text.value = `${text.value.substring(0, pos)}${insert}${text.value.substring(posEnd)}`;
-		nextTick(() => {
-			textEditorEl.value?.focus();
-			textEditorEl.value?.setSelectionRange(pos + '$[replyVisible '.length, pos + '$[replyVisible '.length);
-		});
-	} else {
-		const insert = `$[replyVisible ${selectedText}]`;
-		text.value = `${text.value.substring(0, pos)}${insert}${text.value.substring(posEnd)}`;
-		nextTick(() => {
-			textEditorEl.value?.focus();
-			textEditorEl.value?.setSelectionRange(pos + insert.length, pos + insert.length);
-		});
+	if (canceled) return;
+
+	const content = sanitizeReplyVisibleContent(result);
+	if (content === '') {
+		return;
 	}
+
+	const insert = `$[replyVisible ${content}]`;
+	text.value = `${text.value.substring(0, pos)}${insert}${text.value.substring(posEnd)}`;
+	nextTick(() => {
+		textEditorEl.value?.focus();
+		textEditorEl.value?.setSelectionRange(pos + insert.length, pos + insert.length);
+	});
 }
 
 async function insertEmoji(ev: PointerEvent) {
