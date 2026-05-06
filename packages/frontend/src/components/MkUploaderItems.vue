@@ -80,7 +80,6 @@ SPDX-License-Identifier: AGPL-3.0-only
 <script lang="ts" setup>
 import { ref } from 'vue';
 import { isLink } from '@@/js/is-link.js';
-import { getUploadName } from '@/composables/use-uploader.js';
 import type { UploaderItem } from '@/composables/use-uploader.js';
 import { useLongPressGridSort } from '@/composables/use-long-press-grid-sort.js';
 import MkDraggable from '@/components/MkDraggable.vue';
@@ -93,11 +92,6 @@ const props = withDefaults(defineProps<{
 }>(), {
 	showAddButton: false,
 });
-
-const displayItems = computed(() => props.items.map(item => ({
-	item,
-	nameParts: getUploadNameParts(item),
-})));
 
 const emit = defineEmits<{
 	(ev: 'update:items', items: UploaderItem[]): void;
