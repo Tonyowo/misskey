@@ -38,8 +38,6 @@ export type ChatHomeInvalidationPayload = {
 };
 
 type Events = {
-	themeChanging: () => void;
-	themeChanged: () => void;
 	clientNotification: (notification: Misskey.entities.Notification) => void;
 	notePosted: (note: Misskey.entities.Note) => void;
 	noteUpdated: (note: Misskey.entities.Note) => void;

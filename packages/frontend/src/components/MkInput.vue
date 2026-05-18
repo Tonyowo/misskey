@@ -54,7 +54,7 @@ type ModelValueType<T extends SupportedTypes> =
 
 <script lang="ts" setup generic="T extends SupportedTypes = 'text'">
 import { onMounted, onUnmounted, nextTick, ref, useTemplateRef, watch, computed, toRefs } from 'vue';
-import { debounce } from 'throttle-debounce';
+import { throttle, debounce } from 'throttle-debounce';
 import { useInterval } from '@@/js/use-interval.js';
 import type { InputHTMLAttributes } from 'vue';
 import type { SuggestionType } from '@/utility/autocomplete.js';
@@ -83,7 +83,8 @@ const props = defineProps<{
 	min?: number;
 	max?: number;
 	inline?: boolean;
-	debounce?: boolean;
+	debounce?: boolean | number;
+	throttle?: boolean | number;
 	manualSave?: boolean;
 	small?: boolean;
 	large?: boolean;
@@ -137,7 +138,8 @@ const updated = () => {
 	}
 };
 
-const debouncedUpdated = debounce(1000, updated);
+const throttledUpdated = throttle(typeof props.throttle === 'number' ? props.throttle : 1000, updated);
+const debouncedUpdated = debounce(typeof props.debounce === 'number' ? props.debounce : 1000, updated);
 
 watch(modelValue, newValue => {
 	v.value = newValue;
@@ -145,7 +147,9 @@ watch(modelValue, newValue => {
 
 watch(v, () => {
 	if (!props.manualSave) {
-		if (props.debounce) {
+		if (props.throttle === true || typeof props.throttle === 'number') {
+			throttledUpdated();
+		} else if (props.debounce === true || typeof props.debounce === 'number') {
 			debouncedUpdated();
 		} else {
 			updated();
