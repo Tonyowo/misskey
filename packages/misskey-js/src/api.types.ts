@@ -5,6 +5,8 @@ import {
 	AdminRolesCreateResponse,
 	EmptyRequest,
 	EmptyResponse,
+	I2faKeyDoneResponse,
+	I2faRegisterKeyRequest,
 	NotesCreateRequest,
 	UsersShowRequest,
 } from './autogen/entities.js';
