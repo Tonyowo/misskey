@@ -12,9 +12,11 @@ import { directives } from '@/directives/index.js';
 import MkMediaImage from '@/components/MkMediaImage.vue';
 import MkMediaList from '@/components/MkMediaList.vue';
 
+type LightboxFilter = (...args: unknown[]) => unknown;
+
 const { lightboxInstances } = vi.hoisted(() => {
 	return {
-		lightboxInstances: [] as { options: { dataSource?: unknown[] } }[],
+		lightboxInstances: [] as { options: { dataSource?: unknown[] }; filters: Record<string, LightboxFilter[]> }[],
 	};
 });
 
@@ -22,13 +24,16 @@ vi.mock('photoswipe/lightbox', () => {
 	return {
 		default: class PhotoSwipeLightbox {
 			public options: { dataSource?: unknown[] };
+			public filters: Record<string, LightboxFilter[]> = {};
 
 			constructor(options: { dataSource?: unknown[] }) {
 				this.options = options;
 				lightboxInstances.push(this);
 			}
 
-			public addFilter() {
+			public addFilter(name: string, fn: LightboxFilter) {
+				this.filters[name] ??= [];
+				this.filters[name].push(fn);
 				return undefined;
 			}
 
@@ -228,10 +233,25 @@ describe('MkMediaList', () => {
 		const view = renderMediaList(18);
 		const element = gallery(view);
 		const overflowTile = view.container.querySelector<HTMLElement>('[data-overflow-label]');
+		const lightbox = lightboxInstances[0];
+		const numItemsFilter = lightbox.filters.numItems?.[0];
+		const itemDataFilter = lightbox.filters.itemData?.[0];
 
 		assert.strictEqual(element.dataset.overflowCount, '9');
 		assert.strictEqual(overflowTile?.dataset.overflowLabel, '+9');
 		assert.strictEqual(lightboxInstances.length, 1);
-		assert.strictEqual(lightboxInstances[0].options.dataSource?.length, 18);
+		assert.strictEqual(lightbox.options.dataSource?.length, 18);
+		assert.ok(numItemsFilter);
+		assert.ok(itemDataFilter);
+		assert.strictEqual(numItemsFilter(9, { gallery: element }), 18);
+		assert.deepStrictEqual(itemDataFilter({}, 10), {
+			src: 'https://example.test/image-10.png',
+			w: 800,
+			h: 600,
+			alt: 'example-10.png',
+			comment: 'example-10.png',
+			msrc: 'https://example.test/thumb-10.png',
+			thumbCropped: true,
+		});
 	});
 });

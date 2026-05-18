@@ -53,6 +53,7 @@ import { computed, onMounted, onUnmounted, useTemplateRef } from 'vue';
 import * as Misskey from 'misskey-js';
 import PhotoSwipeLightbox from 'photoswipe/lightbox';
 import PhotoSwipe from 'photoswipe';
+import type { DataSource, SlideData } from 'photoswipe';
 import 'photoswipe/style.css';
 import { FILE_TYPE_BROWSERSAFE } from '@@/js/const.js';
 import XBanner from '@/components/MkMediaBanner.vue';
@@ -71,6 +72,7 @@ const gallery = useTemplateRef('gallery');
 const pswpZIndex = os.claimZIndex('middle');
 window.document.documentElement.style.setProperty('--mk-pswp-root-z-index', pswpZIndex.toString());
 const previewableMediaList = computed(() => props.mediaList.filter(media => previewable(media)));
+const lightboxMediaList = computed(() => previewableMediaList.value.filter(media => lightboxable(media)));
 const count = computed(() => previewableMediaList.value.length);
 const visibleMediaList = computed(() => previewableMediaList.value.slice(0, 9));
 const overflowCount = computed(() => Math.max(0, count.value - visibleMediaList.value.length));
@@ -128,26 +130,7 @@ onMounted(() => {
 	if (gallery.value == null) return; // TSを黙らすため
 
 	lightbox = new PhotoSwipeLightbox({
-		dataSource: previewableMediaList.value
-			.filter(media => {
-				if (media.type === 'image/svg+xml') return true; // svgのwebpublicはpngなのでtrue
-				return media.type.startsWith('image') && FILE_TYPE_BROWSERSAFE.includes(media.type);
-			})
-			.map(media => {
-				const item = {
-					src: media.url,
-					w: media.properties.width,
-					h: media.properties.height,
-					// eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
-					alt: media.comment || media.name,
-					// eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
-					comment: media.comment || media.name,
-				};
-				if (media.properties.orientation != null && media.properties.orientation >= 5) {
-					[item.w, item.h] = [item.h, item.w];
-				}
-				return item;
-			}),
+		dataSource: lightboxMediaList.value.map(media => toPhotoSwipeItem(media)),
 		gallery: gallery.value,
 		mainClass: 'pswp',
 		children: '.image',
@@ -173,28 +156,29 @@ onMounted(() => {
 		pswpModule: PhotoSwipe,
 	});
 
-	lightbox.addFilter('itemData', (itemData) => {
+	lightbox.addFilter('numItems', (numItems: number, dataSource: DataSource | undefined) => {
+		if (dataSource != null && !Array.isArray(dataSource) && dataSource.gallery === gallery.value) {
+			return lightboxMediaList.value.length;
+		}
+
+		return numItems;
+	});
+
+	lightbox.addFilter('itemData', (itemData: SlideData, index: number) => {
 		// element is children
 		const { element } = itemData;
-
 		const id = element?.dataset.id;
-		const file = previewableMediaList.value.find(media => media.id === id);
+		const file = id != null
+			? lightboxMediaList.value.find(media => media.id === id)
+			: lightboxMediaList.value[index];
 		if (!file) return itemData;
 
-		itemData.src = file.url;
-		itemData.w = Number(file.properties.width);
-		itemData.h = Number(file.properties.height);
-		if (file.properties.orientation != null && file.properties.orientation >= 5) {
-			[itemData.w, itemData.h] = [itemData.h, itemData.w];
-		}
-		itemData.msrc = file.thumbnailUrl ?? undefined;
-		// eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
-		itemData.alt = file.comment || file.name;
-		// eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
-		itemData.comment = file.comment || file.name;
-		itemData.thumbCropped = true;
-
-		return itemData;
+		return {
+			...itemData,
+			...toPhotoSwipeItem(file),
+			msrc: file.thumbnailUrl ?? undefined,
+			thumbCropped: true,
+		};
 	});
 
 	lightbox.on('uiRegister', () => {
@@ -247,6 +231,27 @@ const previewable = (file: Misskey.entities.DriveFile): boolean => {
 	if (file.type === 'image/svg+xml') return true; // svgのwebpublic/thumbnailはpngなのでtrue
 	// FILE_TYPE_BROWSERSAFEに適合しないものはブラウザで表示するのに不適切
 	return (file.type.startsWith('video') || file.type.startsWith('image')) && FILE_TYPE_BROWSERSAFE.includes(file.type);
+};
+
+const lightboxable = (file: Misskey.entities.DriveFile): boolean => {
+	if (file.type === 'image/svg+xml') return true; // svgのwebpublicはpngなのでtrue
+	return file.type.startsWith('image') && FILE_TYPE_BROWSERSAFE.includes(file.type);
+};
+
+const toPhotoSwipeItem = (file: Misskey.entities.DriveFile): SlideData => {
+	const item: SlideData = {
+		src: file.url,
+		w: file.properties.width,
+		h: file.properties.height,
+		// eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
+		alt: file.comment || file.name,
+		// eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
+		comment: file.comment || file.name,
+	};
+	if (file.properties.orientation != null && file.properties.orientation >= 5) {
+		[item.w, item.h] = [item.h, item.w];
+	}
+	return item;
 };
 
 const openGallery = () => {
