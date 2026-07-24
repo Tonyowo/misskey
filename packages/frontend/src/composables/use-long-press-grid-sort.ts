@@ -57,7 +57,7 @@ export function useLongPressGridSort<T extends SortableItem>(options: {
 		touchDropTargetItemId.value = null;
 		touchDragOffsetX.value = 0;
 		touchDragOffsetY.value = 0;
-		document.body.style.userSelect = previousBodyUserSelect;
+		window.document.body.style.userSelect = previousBodyUserSelect;
 	}
 
 	function startTouchDrag(itemId: string) {
@@ -67,8 +67,8 @@ export function useLongPressGridSort<T extends SortableItem>(options: {
 		touchDropTargetItemId.value = null;
 		touchDragOffsetX.value = 0;
 		touchDragOffsetY.value = 0;
-		previousBodyUserSelect = document.body.style.userSelect;
-		document.body.style.userSelect = 'none';
+		previousBodyUserSelect = window.document.body.style.userSelect;
+		window.document.body.style.userSelect = 'none';
 	}
 
 	function moveItem(items: T[], sourceId: string, targetId: string): T[] {
@@ -113,7 +113,7 @@ export function useLongPressGridSort<T extends SortableItem>(options: {
 			return null;
 		}
 
-		for (const element of document.elementsFromPoint(clientX, clientY)) {
+		for (const element of window.document.elementsFromPoint(clientX, clientY)) {
 			if (!(element instanceof HTMLElement) || !rootEl.contains(element)) continue;
 
 			const targetEl = element.closest<HTMLElement>('[data-grid-sort-id]');

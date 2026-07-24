@@ -138,6 +138,7 @@ describe('menu and uploader regressions', () => {
 		const item: UploaderItem = {
 			id: 'item-1',
 			name: 'hello.jpg',
+			uploadName: 'hello.jpg',
 			suffix: '.jpg',
 			progress: null,
 			thumbnail: 'blob:http://example.test/preview',

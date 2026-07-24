@@ -80,11 +80,13 @@ import type {
 	AdminQueueInboxDelayedResponse,
 	AdminQueueJobsRequest,
 	AdminQueueJobsResponse,
+	AdminQueuePauseRequest,
 	AdminQueuePromoteJobsRequest,
 	AdminQueueQueueStatsRequest,
 	AdminQueueQueueStatsResponse,
 	AdminQueueQueuesResponse,
 	AdminQueueRemoveJobRequest,
+	AdminQueueResumeRequest,
 	AdminQueueRetryJobRequest,
 	AdminQueueShowJobRequest,
 	AdminQueueShowJobResponse,
@@ -147,6 +149,7 @@ import type {
 	AntennasListResponse,
 	AntennasNotesRequest,
 	AntennasNotesResponse,
+	AntennasRemoveNoteRequest,
 	AntennasShowRequest,
 	AntennasShowResponse,
 	AntennasUpdateRequest,
@@ -246,6 +249,8 @@ import type {
 	ChatRoomsCreateRequest,
 	ChatRoomsCreateResponse,
 	ChatRoomsDeleteRequest,
+	ChatRoomsDiscoverRequest,
+	ChatRoomsDiscoverResponse,
 	ChatRoomsInvitationsCreateRequest,
 	ChatRoomsInvitationsCreateResponse,
 	ChatRoomsInvitationsIgnoreRequest,
@@ -272,6 +277,8 @@ import type {
 	ChatRoomsMembersMuteRequest,
 	ChatRoomsMembersUnbanRequest,
 	ChatRoomsMembersUnmuteRequest,
+	ChatRoomsMentionableUsersRequest,
+	ChatRoomsMentionableUsersResponse,
 	ChatRoomsMuteRequest,
 	ChatRoomsOwnedRequest,
 	ChatRoomsOwnedResponse,
@@ -299,6 +306,7 @@ import type {
 	ChatRoomsUpdateAnnouncementResponse,
 	ChatRoomsUpdateSettingsRequest,
 	ChatRoomsUpdateSettingsResponse,
+	ChatSummaryResponse,
 	ClipsAddNoteRequest,
 	ClipsCreateRequest,
 	ClipsCreateResponse,
@@ -761,10 +769,12 @@ export type Endpoints = {
 	'admin/queue/deliver-delayed': { req: EmptyRequest; res: AdminQueueDeliverDelayedResponse };
 	'admin/queue/inbox-delayed': { req: EmptyRequest; res: AdminQueueInboxDelayedResponse };
 	'admin/queue/jobs': { req: AdminQueueJobsRequest; res: AdminQueueJobsResponse };
+	'admin/queue/pause': { req: AdminQueuePauseRequest; res: EmptyResponse };
 	'admin/queue/promote-jobs': { req: AdminQueuePromoteJobsRequest; res: EmptyResponse };
 	'admin/queue/queue-stats': { req: AdminQueueQueueStatsRequest; res: AdminQueueQueueStatsResponse };
 	'admin/queue/queues': { req: EmptyRequest; res: AdminQueueQueuesResponse };
 	'admin/queue/remove-job': { req: AdminQueueRemoveJobRequest; res: EmptyResponse };
+	'admin/queue/resume': { req: AdminQueueResumeRequest; res: EmptyResponse };
 	'admin/queue/retry-job': { req: AdminQueueRetryJobRequest; res: EmptyResponse };
 	'admin/queue/show-job': { req: AdminQueueShowJobRequest; res: AdminQueueShowJobResponse };
 	'admin/queue/show-job-logs': { req: AdminQueueShowJobLogsRequest; res: AdminQueueShowJobLogsResponse };
@@ -808,6 +818,7 @@ export type Endpoints = {
 	'antennas/delete': { req: AntennasDeleteRequest; res: EmptyResponse };
 	'antennas/list': { req: EmptyRequest; res: AntennasListResponse };
 	'antennas/notes': { req: AntennasNotesRequest; res: AntennasNotesResponse };
+	'antennas/remove-note': { req: AntennasRemoveNoteRequest; res: EmptyResponse };
 	'antennas/show': { req: AntennasShowRequest; res: AntennasShowResponse };
 	'antennas/update': { req: AntennasUpdateRequest; res: AntennasUpdateResponse };
 	'ap/get': { req: ApGetRequest; res: ApGetResponse };
@@ -867,6 +878,7 @@ export type Endpoints = {
 	'chat/rooms/bans/list': { req: ChatRoomsBansListRequest; res: ChatRoomsBansListResponse };
 	'chat/rooms/create': { req: ChatRoomsCreateRequest; res: ChatRoomsCreateResponse };
 	'chat/rooms/delete': { req: ChatRoomsDeleteRequest; res: EmptyResponse };
+	'chat/rooms/discover': { req: ChatRoomsDiscoverRequest; res: ChatRoomsDiscoverResponse };
 	'chat/rooms/invitations/create': { req: ChatRoomsInvitationsCreateRequest; res: ChatRoomsInvitationsCreateResponse };
 	'chat/rooms/invitations/ignore': { req: ChatRoomsInvitationsIgnoreRequest; res: EmptyResponse };
 	'chat/rooms/invitations/inbox': { req: ChatRoomsInvitationsInboxRequest; res: ChatRoomsInvitationsInboxResponse };
@@ -885,6 +897,7 @@ export type Endpoints = {
 	'chat/rooms/members/mute': { req: ChatRoomsMembersMuteRequest; res: EmptyResponse };
 	'chat/rooms/members/unban': { req: ChatRoomsMembersUnbanRequest; res: EmptyResponse };
 	'chat/rooms/members/unmute': { req: ChatRoomsMembersUnmuteRequest; res: EmptyResponse };
+	'chat/rooms/mentionable-users': { req: ChatRoomsMentionableUsersRequest; res: ChatRoomsMentionableUsersResponse };
 	'chat/rooms/mute': { req: ChatRoomsMuteRequest; res: EmptyResponse };
 	'chat/rooms/owned': { req: ChatRoomsOwnedRequest; res: ChatRoomsOwnedResponse };
 	'chat/rooms/pin-message': { req: ChatRoomsPinMessageRequest; res: ChatRoomsPinMessageResponse };
@@ -900,6 +913,7 @@ export type Endpoints = {
 	'chat/rooms/update': { req: ChatRoomsUpdateRequest; res: ChatRoomsUpdateResponse };
 	'chat/rooms/update-announcement': { req: ChatRoomsUpdateAnnouncementRequest; res: ChatRoomsUpdateAnnouncementResponse };
 	'chat/rooms/update-settings': { req: ChatRoomsUpdateSettingsRequest; res: ChatRoomsUpdateSettingsResponse };
+	'chat/summary': { req: EmptyRequest; res: ChatSummaryResponse };
 	'clips/add-note': { req: ClipsAddNoteRequest; res: EmptyResponse };
 	'clips/create': { req: ClipsCreateRequest; res: ClipsCreateResponse };
 	'clips/delete': { req: ClipsDeleteRequest; res: EmptyResponse };

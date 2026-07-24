@@ -4,7 +4,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 -->
 
 <template>
-<div ref="rootEl" v-show="props.modelValue.length !== 0" :class="$style.root">
+	<div v-show="props.modelValue.length !== 0" ref="rootEl" :class="$style.root">
 	<MkDraggable
 		:modelValue="props.modelValue"
 		:class="$style.files"

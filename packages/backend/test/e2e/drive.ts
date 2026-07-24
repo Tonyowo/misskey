@@ -42,7 +42,7 @@ describe('Drive', () => {
 		const file = await catcher;
 
 		assert.strictEqual(res.status, 204);
-		assert.strictEqual(file.name, '192.jpg');
+		assert.match(file.name, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.jpg$/);
 		assert.strictEqual(file.type, 'image/jpeg');
 	});
 

@@ -3,9 +3,6 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
-/// <reference lib="esnext" />
-/// <reference lib="webworker" />
-
 import { render } from 'buraha';
 
 const canvas = new OffscreenCanvas(64, 64);
@@ -21,5 +18,5 @@ onmessage = (event) => {
 
 	render(event.data.hash, canvas);
 	const bitmap = canvas.transferToImageBitmap();
-	self.postMessage({ id: event.data.id, bitmap }, [bitmap]);
+	self.postMessage({ id: event.data.id, bitmap }, { transfer: [bitmap] });
 };

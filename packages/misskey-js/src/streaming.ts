@@ -1,10 +1,20 @@
 import { EventEmitter } from 'eventemitter3';
-import _ReconnectingWebSocket, { Options } from 'reconnecting-websocket';
+import _ReconnectingWebSocket, { type Options } from 'reconnecting-websocket';
 import type { BroadcastEvents, Channels } from './streaming.types.js';
 
-// コンストラクタとクラスそのものの定義が上手く解決出来ないため再定義
-const ReconnectingWebSocketConstructor = _ReconnectingWebSocket as unknown as typeof _ReconnectingWebSocket.default;
-type ReconnectingWebSocket = _ReconnectingWebSocket.default;
+type ReconnectingWebSocket = {
+	binaryType: BinaryType;
+	addEventListener(type: 'open' | 'close', listener: () => void): void;
+	addEventListener(type: 'message', listener: (message: { data: string; }) => void): void;
+	send(data: string): void;
+	close(): void;
+};
+
+const ReconnectingWebSocketConstructor = _ReconnectingWebSocket as unknown as new (
+	url: string,
+	protocols?: string | string[],
+	options?: Options,
+) => ReconnectingWebSocket;
 
 export function urlQuery(obj: Record<string, string | number | boolean | undefined>): string {
 	const params = Object.entries(obj)

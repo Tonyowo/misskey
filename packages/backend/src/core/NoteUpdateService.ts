@@ -239,7 +239,7 @@ export class NoteUpdateService {
 		reactionAcceptance: MiNote['reactionAcceptance'];
 	}, hasFiles: boolean, hasPoll: boolean) {
 		let text = data.text;
-		let cw = data.cw;
+		const cw = data.cw;
 
 		if (text) {
 			if (text.length > DB_MAX_NOTE_TEXT_LENGTH) {

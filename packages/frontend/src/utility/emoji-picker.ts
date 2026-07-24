@@ -3,8 +3,9 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
-import { defineAsyncComponent, ref, watch } from 'vue';
+import { ref, watch } from 'vue';
 import type { Ref } from 'vue';
+import MkEmojiPickerDialog from '@/components/MkEmojiPickerDialog.vue';
 import { popup } from '@/os.js';
 import { prefer } from '@/preferences.js';
 
@@ -20,6 +21,7 @@ class EmojiPicker {
 	private anchorElement: Ref<HTMLElement | null> = ref(null);
 	private preferType: Ref<EmojiPickerStyle | null> = ref(null);
 	private manualShowing = ref(false);
+	private emojisRef = ref<string[]>([]);
 	private onChosen?: (emoji: string) => void;
 	private onClosed?: () => void;
 
@@ -27,19 +29,17 @@ class EmojiPicker {
 		// nop
 	}
 
-	public async init() {
-		const emojisRef = ref<string[]>([]);
-
-		watch([prefer.r.emojiPaletteForMain, prefer.r.emojiPalettes], () => {
-			emojisRef.value = prefer.s.emojiPaletteForMain == null ? prefer.s.emojiPalettes[0].emojis : prefer.s.emojiPalettes.find(palette => palette.id === prefer.s.emojiPaletteForMain)?.emojis ?? [];
+	public init() {
+		watch([prefer.r.emojiPaletteForMain, prefer.r.emojiPalettes], ([newId, newPalettes]) => {
+			this.emojisRef.value = newId == null ? newPalettes[0].emojis : newPalettes.find(palette => palette.id === newId)?.emojis ?? [];
 		}, {
 			immediate: true,
 		});
 
-		await popup(defineAsyncComponent(() => import('@/components/MkEmojiPickerDialog.vue')), {
+		popup(MkEmojiPickerDialog, {
 			anchorElement: this.anchorElement,
 			preferType: this.preferType,
-			pinnedEmojis: emojisRef,
+			pinnedEmojis: this.emojisRef,
 			asReactionPicker: false,
 			manualShowing: this.manualShowing,
 			choseAndClose: false,

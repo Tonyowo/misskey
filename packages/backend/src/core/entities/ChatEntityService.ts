@@ -96,7 +96,7 @@ export class ChatEntityService {
 		for (const record of message.reactions) {
 			const [userId, reaction] = record.split('/');
 			reactions.push({
-				user: packedUsers?.get(userId) ?? await this.userEntityService.pack(userId).catch(() => null),
+				user: packedUsers?.get(userId) ?? (await this.userEntityService.pack(userId).catch(() => null)),
 				reaction,
 			});
 		}
@@ -107,13 +107,13 @@ export class ChatEntityService {
 			type: message.type,
 			text: message.text,
 			fromUserId: message.fromUserId,
-			fromUser: packedUsers?.get(message.fromUserId) ?? await this.userEntityService.pack(message.fromUser ?? message.fromUserId, me),
+			fromUser: packedUsers?.get(message.fromUserId) ?? (await this.userEntityService.pack(message.fromUser ?? message.fromUserId, me)),
 			toUserId: message.toUserId,
-			toUser: message.toUserId ? (packedUsers?.get(message.toUserId) ?? await this.userEntityService.pack(message.toUser ?? message.toUserId, me)) : undefined,
+			toUser: message.toUserId ? (packedUsers?.get(message.toUserId) ?? (await this.userEntityService.pack(message.toUser ?? message.toUserId, me))) : undefined,
 			toRoomId: message.toRoomId,
-			toRoom: message.toRoomId ? (packedRooms?.get(message.toRoomId) ?? await this.packRoom(message.toRoom ?? message.toRoomId, me)) : undefined,
+			toRoom: message.toRoomId ? (packedRooms?.get(message.toRoomId) ?? (await this.packRoom(message.toRoom ?? message.toRoomId, me))) : undefined,
 			fileId: message.fileId,
-			file: message.fileId ? (packedFiles?.get(message.fileId) ?? await this.driveFileEntityService.pack(message.file ?? message.fileId)) : null,
+			file: message.fileId ? (packedFiles?.get(message.fileId) ?? (await this.driveFileEntityService.pack(message.file ?? message.fileId))) : null,
 			mentions: message.mentions,
 			mentionAll: message.mentionAll,
 			reactions: reactions.filter((r): r is { user: Packed<'UserLite'>; reaction: string; } => r.user != null),
@@ -199,7 +199,7 @@ export class ChatEntityService {
 			fromUserId: message.fromUserId,
 			toUserId: message.toUserId!,
 			fileId: message.fileId,
-			file: message.fileId ? (packedFiles?.get(message.fileId) ?? await this.driveFileEntityService.pack(message.file ?? message.fileId)) : null,
+			file: message.fileId ? (packedFiles?.get(message.fileId) ?? (await this.driveFileEntityService.pack(message.file ?? message.fileId))) : null,
 			mentions: message.mentions,
 			mentionAll: message.mentionAll,
 			reactions,
@@ -242,7 +242,7 @@ export class ChatEntityService {
 		for (const record of message.reactions) {
 			const [userId, reaction] = record.split('/');
 			reactions.push({
-				user: packedUsers?.get(userId) ?? await this.userEntityService.pack(userId).catch(() => null),
+				user: packedUsers?.get(userId) ?? (await this.userEntityService.pack(userId).catch(() => null)),
 				reaction,
 			});
 		}
@@ -253,10 +253,10 @@ export class ChatEntityService {
 			type: message.type,
 			text: message.text,
 			fromUserId: message.fromUserId,
-			fromUser: packedUsers?.get(message.fromUserId) ?? await this.userEntityService.pack(message.fromUser ?? message.fromUserId),
+			fromUser: packedUsers?.get(message.fromUserId) ?? (await this.userEntityService.pack(message.fromUser ?? message.fromUserId)),
 			toRoomId: message.toRoomId!,
 			fileId: message.fileId,
-			file: message.fileId ? (packedFiles?.get(message.fileId) ?? await this.driveFileEntityService.pack(message.file ?? message.fileId)) : null,
+			file: message.fileId ? (packedFiles?.get(message.fileId) ?? (await this.driveFileEntityService.pack(message.file ?? message.fileId))) : null,
 			mentions: message.mentions,
 			mentionAll: message.mentionAll,
 			reactions: reactions.filter((r): r is { user: Packed<'UserLite'>; reaction: string; } => r.user != null),
@@ -318,14 +318,14 @@ export class ChatEntityService {
 			? (options?._hint_?.avatarFiles?.get(room.avatarFileId) ?? await this.driveFilesRepository.findOneBy({ id: room.avatarFileId }))
 			: null;
 
-		const membership = me && me.id !== room.ownerId ? (options?._hint_?.myMemberships?.get(room.id) ?? await this.chatRoomMembershipsRepository.findOneBy({ roomId: room.id, userId: me.id })) : null;
-		const invitation = me && me.id !== room.ownerId ? (options?._hint_?.myInvitations?.get(room.id) ?? await this.chatRoomInvitationsRepository.findOne({
+		const membership = me && me.id !== room.ownerId ? (options?._hint_?.myMemberships?.get(room.id) ?? (await this.chatRoomMembershipsRepository.findOneBy({ roomId: room.id, userId: me.id }))) : null;
+		const invitation = me && me.id !== room.ownerId ? (options?._hint_?.myInvitations?.get(room.id) ?? (await this.chatRoomInvitationsRepository.findOne({
 			where: [
 				{ roomId: room.id, userId: me.id, ignored: false, revokedAt: IsNull(), expiresAt: IsNull() },
 				{ roomId: room.id, userId: me.id, ignored: false, revokedAt: IsNull(), expiresAt: MoreThan(now) },
 			],
-		})) : null;
-		const joinRequest = me && me.id !== room.ownerId ? (options?._hint_?.myJoinRequests?.get(room.id) ?? await this.chatRoomJoinRequestsRepository.findOneBy({ roomId: room.id, userId: me.id })) : null;
+		}))) : null;
+		const joinRequest = me && me.id !== room.ownerId ? (options?._hint_?.myJoinRequests?.get(room.id) ?? (await this.chatRoomJoinRequestsRepository.findOneBy({ roomId: room.id, userId: me.id }))) : null;
 		const myRole = room.ownerId === me?.id ? 'owner' : membership?.role ?? null;
 		const isJoined = room.ownerId === me?.id || membership != null;
 		const adminPermissions = myRole === 'owner' ? [...chatRoomAdminPermissions] : room.adminPermissions;
@@ -339,7 +339,7 @@ export class ChatEntityService {
 		const canManageMembers = canManageAdmins || canManageJoinRequests || canKickMembers || canBanMembers || canMuteMembers;
 		const canInvite = myRole === 'owner' || (myRole === 'admin' && adminPermissions.includes('invite')) || (myRole === 'member' && room.memberCanInvite);
 		const memberCount = options?._hint_?.memberCounts?.get(room.id) ?? (1 + await this.chatRoomMembershipsRepository.countBy({ roomId: room.id }));
-		const pendingRequestCount = canManageJoinRequests ? (options?._hint_?.pendingRequestCounts?.get(room.id) ?? await this.chatRoomJoinRequestsRepository.countBy({ roomId: room.id })) : 0;
+		const pendingRequestCount = canManageJoinRequests ? (options?._hint_?.pendingRequestCounts?.get(room.id) ?? (await this.chatRoomJoinRequestsRepository.countBy({ roomId: room.id }))) : 0;
 		const isSpeakMuted = this.isActiveSpeakMuted(membership);
 
 		return {
@@ -349,7 +349,7 @@ export class ChatEntityService {
 			description: room.description,
 			announcement: isJoined ? room.announcement : '',
 			ownerId: room.ownerId,
-			owner: options?._hint_?.packedOwners.get(room.ownerId) ?? await this.userEntityService.pack(room.owner ?? room.ownerId, me),
+			owner: options?._hint_?.packedOwners.get(room.ownerId) ?? (await this.userEntityService.pack(room.owner ?? room.ownerId, me)),
 			joinPolicy: room.joinPolicy,
 			discoverability: room.discoverability,
 			avatarFileId: room.avatarFileId,
@@ -391,12 +391,12 @@ export class ChatEntityService {
 		const _rooms = rooms.filter((room): room is MiChatRoom => typeof room !== 'string');
 		if (_rooms.length !== rooms.length) {
 			_rooms.push(
-				...await this.chatRoomsRepository.find({
+				...(await this.chatRoomsRepository.find({
 					where: {
 						id: In(rooms.filter((room): room is string => typeof room === 'string')),
 					},
-					relations: ['owner'],
-				}),
+					relations: { owner: true },
+				})),
 			);
 		}
 
@@ -475,9 +475,9 @@ export class ChatEntityService {
 			id: invitation.id,
 			createdAt: this.idService.parse(invitation.id).date.toISOString(),
 			roomId: invitation.roomId,
-			room: options?._hint_?.packedRooms.get(invitation.roomId) ?? await this.packRoom(invitation.room ?? invitation.roomId, me),
+			room: options?._hint_?.packedRooms.get(invitation.roomId) ?? (await this.packRoom(invitation.room ?? invitation.roomId, me)),
 			userId: invitation.userId,
-			user: options?._hint_?.packedUsers.get(invitation.userId) ?? await this.userEntityService.pack(invitation.user ?? invitation.userId, me),
+			user: options?._hint_?.packedUsers.get(invitation.userId) ?? (await this.userEntityService.pack(invitation.user ?? invitation.userId, me)),
 			createdById: invitation.createdById,
 			expiresAt: invitation.expiresAt ? invitation.expiresAt.toISOString() : null,
 			revokedAt: invitation.revokedAt ? invitation.revokedAt.toISOString() : null,
@@ -596,9 +596,9 @@ export class ChatEntityService {
 			id: membership.id,
 			createdAt: this.idService.parse(membership.id).date.toISOString(),
 			userId: membership.userId,
-			user: options?.populateUser ? (options._hint_?.packedUsers.get(membership.userId) ?? await this.userEntityService.pack(membership.user ?? membership.userId, me)) : undefined,
+			user: options?.populateUser ? (options._hint_?.packedUsers.get(membership.userId) ?? (await this.userEntityService.pack(membership.user ?? membership.userId, me))) : undefined,
 			roomId: membership.roomId,
-			room: options?.populateRoom ? (options._hint_?.packedRooms.get(membership.roomId) ?? await this.packRoom(membership.room ?? membership.roomId, me)) : undefined,
+			room: options?.populateRoom ? (options._hint_?.packedRooms.get(membership.roomId) ?? (await this.packRoom(membership.room ?? membership.roomId, me))) : undefined,
 			role: membership.role,
 			isSpeakMuted: this.isActiveSpeakMuted(membership),
 			speakMutedUntil: this.isActiveSpeakMuted(membership) && membership.speakMutedUntil != null ? membership.speakMutedUntil.toISOString() : null,

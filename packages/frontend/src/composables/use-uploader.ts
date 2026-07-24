@@ -74,6 +74,7 @@ function replaceFileExtension(filename: string, nextExtension: string) {
 export type UploaderItem = {
 	id: string;
 	name: string;
+	uploadName: string;
 	suffix: string;
 	progress: { max: number; value: number } | null;
 	thumbnail: string | null;
@@ -154,6 +155,7 @@ export function useUploader(options: {
 			id,
 			name: filename,
 			uploadName: shouldKeepOriginalFilename ? filename : id + extension,
+			suffix: '',
 			progress: null,
 			thumbnail: THUMBNAIL_SUPPORTED_TYPES.includes(file.type) ? window.URL.createObjectURL(file) : null,
 			preprocessing: false,
@@ -779,12 +781,17 @@ export function useUploader(options: {
 		item.preprocessedFile = markRaw(preprocessedFile);
 	}
 
-	function dispose() {
+	function reset() {
 		for (const item of items.value) {
 			if (item.thumbnail != null) URL.revokeObjectURL(item.thumbnail);
 		}
 
 		abortAll();
+		items.value = [];
+	}
+
+	function dispose() {
+		reset();
 	}
 
 	onUnmounted(() => {
@@ -796,6 +803,7 @@ export function useUploader(options: {
 		addFiles,
 		removeItem,
 		abortAll,
+		reset,
 		dispose,
 		upload,
 		getMenu,

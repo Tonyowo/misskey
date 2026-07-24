@@ -55,6 +55,8 @@ export function chatMessage(room = false, id = 'somechatmessageid', text = 'Hell
 		fromUserId: fromUser.id,
 		fromUser,
 		text,
+		mentions: [],
+		mentionAll: false,
 		isRead: false,
 		reactions: [],
 		...room ? {
@@ -241,6 +243,7 @@ export function note(id = 'somenoteid'): entities.Note {
 	return {
 		id,
 		createdAt: '2016-12-28T22:49:51.000Z',
+		updatedAt: null,
 		deletedAt: null,
 		text: 'some note',
 		cw: null,

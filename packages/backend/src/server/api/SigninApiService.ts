@@ -73,10 +73,10 @@ export class SigninApiService {
 					email: identifier,
 					emailVerified: true,
 				},
-				relations: ['user'],
+				relations: { user: true },
 			});
 
-			if (profile?.user?.host == null) {
+			if (profile?.user != null && profile.user.host == null) {
 				return profile.user as MiLocalUser;
 			}
 

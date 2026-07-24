@@ -42,6 +42,7 @@ const emit = defineEmits<{
 const exampleNote = reactive<Misskey.entities.Note>({
 	id: '0000000000',
 	createdAt: '2019-04-14T17:30:49.181Z',
+	updatedAt: null,
 	userId: '0000000001',
 	user: {
 		id: '0000000001',

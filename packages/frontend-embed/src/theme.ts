@@ -10,6 +10,8 @@ import darkTheme from '@@/themes/_dark.json5';
 import { compile } from '@@/js/theme.js';
 import type { Theme } from '@@/js/theme.js';
 
+export type { Theme } from '@@/js/theme.js';
+
 let timeout: number | null = null;
 
 export function assertIsTheme(theme: Record<string, unknown>): theme is Theme {

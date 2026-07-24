@@ -39,10 +39,11 @@ import { nextTick, onMounted, ref, useAttrs, useCssModule, useTemplateRef, watch
 import { parse as parseTwemoji } from '@twemoji/parser';
 import { char2fluentEmojiFilePath, char2twemojiFilePath } from '@@/js/emoji-base.js';
 import type { AutocompleteTarget } from '@/utility/autocomplete.js';
+import type { PostFormCustomEmojiSegment } from '@/utility/post-form-custom-emojis.js';
 import { customEmojis, customEmojisMap } from '@/custom-emojis.js';
 import { getProxiedImageUrl, getStaticImageUrl } from '@/utility/media-proxy.js';
 import { prefer } from '@/preferences.js';
-import { type PostFormCustomEmojiSegment, tokenizePostFormCustomEmojis } from '@/utility/post-form-custom-emojis.js';
+import { tokenizePostFormCustomEmojis } from '@/utility/post-form-custom-emojis.js';
 import { i18n } from '@/i18n.js';
 
 defineOptions({

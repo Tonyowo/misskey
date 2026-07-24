@@ -4,12 +4,14 @@
  */
 
 import * as Misskey from 'misskey-js';
+import type {
+	ChatCollectionScope,
+	ChatHomeInvalidationPayload,
+	ChatRoomCollectionsInvalidatedPayload,
+	ChatRoomUpdatedPayload,
+} from '@/events.js';
 import {
 	globalEvents,
-	type ChatCollectionScope,
-	type ChatHomeInvalidationPayload,
-	type ChatRoomCollectionsInvalidatedPayload,
-	type ChatRoomUpdatedPayload,
 } from '@/events.js';
 
 type WithId = {

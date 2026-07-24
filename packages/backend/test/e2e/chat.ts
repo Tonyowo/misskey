@@ -4,6 +4,7 @@
  */
 
 import * as assert from 'node:assert';
+import { beforeAll, beforeEach, describe, test } from 'vitest';
 import { api, failedApiCall, signup, successfulApiCall } from '../utils.js';
 import type * as Misskey from 'misskey-js';
 
@@ -26,7 +27,35 @@ describe('chat', () => {
 		alice = await signup();
 		bob = await signup();
 		charlie = await signup();
+
+		await successfulApiCall({
+			endpoint: 'following/create',
+			parameters: {
+				userId: alice.id,
+			},
+			user: bob,
+		});
+
+		await successfulApiCall({
+			endpoint: 'following/create',
+			parameters: {
+				userId: bob.id,
+			},
+			user: alice,
+		});
 	}, 1000 * 60 * 2);
+
+	beforeEach(async () => {
+		await Promise.all([alice, bob, charlie].map(async user => {
+			await successfulApiCall({
+				endpoint: 'chat/read-all',
+				parameters: {},
+				user,
+			}, {
+				status: 204,
+			});
+		}));
+	});
 
 	test('summary, history, and read-all stay in sync for direct and group chats', async () => {
 		await successfulApiCall({
@@ -412,13 +441,16 @@ describe('chat', () => {
 			status: 204,
 		});
 
-		const roomAfterKick = await successfulApiCall({
-			endpoint: 'chat/rooms/show',
+		const roomsAfterKick = await successfulApiCall({
+			endpoint: 'chat/rooms/discover' as never,
 			parameters: {
-				roomId: room.id,
-			},
+				query: roomName,
+				limit: 10,
+			} as never,
 			user: bob,
 		});
+		const roomAfterKick = (roomsAfterKick as any[]).find(item => item.id === room.id);
+		assert.ok(roomAfterKick);
 		assert.strictEqual(roomAfterKick.isJoined, false);
 	});
 });

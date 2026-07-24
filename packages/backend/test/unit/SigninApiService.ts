@@ -5,11 +5,11 @@
 
 import { IncomingHttpHeaders } from 'node:http';
 import bcrypt from 'bcryptjs';
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, jest, test } from '@jest/globals';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test, vi } from 'vitest';
+import { mockDeep } from 'vitest-mock-extended';
 import { Test, TestingModule } from '@nestjs/testing';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import type { HttpHeader } from 'fastify/types/utils.js';
-import { MockMetadata, ModuleMocker } from 'jest-mock';
 import { GlobalModule } from '@/GlobalModule.js';
 import { CoreModule } from '@/core/CoreModule.js';
 import { IdService } from '@/core/IdService.js';
@@ -19,8 +19,6 @@ import { MiUserProfile, UserProfilesRepository, UsersRepository } from '@/models
 import { SigninApiService } from '@/server/api/SigninApiService.js';
 import { RateLimiterService } from '@/server/api/RateLimiterService.js';
 import { SigninService } from '@/server/api/SigninService.js';
-
-const moduleMocker = new ModuleMocker(global);
 
 class FakeLimiter {
 	public async limit() {
@@ -65,7 +63,7 @@ describe('SigninApiService', () => {
 	let usersRepository: UsersRepository;
 	let userProfilesRepository: UserProfilesRepository;
 	let idService: IdService;
-	let signinServiceMock: { signin: ReturnType<typeof jest.fn> };
+	let signinServiceMock: { signin: ReturnType<typeof vi.fn> };
 
 	async function createUser(data: Partial<MiUser> = {}) {
 		const user = await usersRepository.save({
@@ -83,7 +81,7 @@ describe('SigninApiService', () => {
 
 	beforeAll(async () => {
 		signinServiceMock = {
-			signin: jest.fn((_request, _reply, user: MiUser) => ({
+			signin: vi.fn((_request: FastifyRequest, _reply: FastifyReply, user: MiUser) => ({
 				finished: true,
 				id: user.id,
 				i: `${user.id}-token`,
@@ -99,9 +97,7 @@ describe('SigninApiService', () => {
 			],
 		}).useMocker((token) => {
 			if (typeof token === 'function') {
-				const mockMetadata = moduleMocker.getMetadata(token) as MockMetadata<any, any>;
-				const Mock = moduleMocker.generateFromMetadata(mockMetadata);
-				return new Mock();
+				return mockDeep<typeof token>();
 			}
 		}).compile();
 

@@ -1,11 +1,14 @@
 import { portToPid } from 'pid-port';
 import fkill from 'fkill';
 import Fastify from 'fastify';
+import type { FastifyInstance } from 'fastify';
 import { NestFactory } from '@nestjs/core';
+import { DataSource } from 'typeorm';
 import { MainModule } from '@/MainModule.js';
 import { ServerService } from '@/server/ServerService.js';
 import { loadConfig } from '@/config.js';
 import { NestLogger } from '@/NestLogger.js';
+import { entities } from '@/postgres.js';
 import { INestApplicationContext } from '@nestjs/common';
 
 const config = loadConfig();
@@ -15,12 +18,14 @@ process.env.NODE_ENV = 'test';
 
 let app: INestApplicationContext;
 let serverService: ServerService;
+let controller: FastifyInstance;
 
 /**
  * テスト用のサーバインスタンスを起動する
  */
 export async function setup() {
 	await killTestServer();
+	await resetTestDb();
 
 	console.log('starting application...');
 
@@ -44,7 +49,25 @@ export async function setup() {
 export async function teardown() {
 	await serverService.dispose();
 	await app.close();
+	await controller.close();
 	await killTestServer();
+}
+
+async function resetTestDb() {
+	const db = new DataSource({
+		type: 'postgres',
+		host: config.db.host,
+		port: config.db.port,
+		username: config.db.user,
+		password: config.db.pass,
+		database: config.db.db,
+		synchronize: true,
+		dropSchema: true,
+		entities,
+	});
+
+	await db.initialize();
+	await db.destroy();
 }
 
 /**
@@ -67,9 +90,9 @@ async function killTestServer() {
  * @param port
  */
 async function startControllerEndpoints(port = config.port + 1000) {
-	const fastify = Fastify();
+	controller = Fastify();
 
-	fastify.post<{ Body: { key?: string, value?: string } }>('/env', async (req, res) => {
+	controller.post<{ Body: { key?: string, value?: string } }>('/env', async (req, res) => {
 		console.log(req.body);
 		const key = req.body['key'];
 		if (!key) {
@@ -82,13 +105,14 @@ async function startControllerEndpoints(port = config.port + 1000) {
 		res.code(200).send({ success: true });
 	});
 
-	fastify.post<{ Body: { key?: string, value?: string } }>('/env-reset', async (req, res) => {
+	controller.post('/env-reset', async (req, res) => {
 		process.env = JSON.parse(originEnv);
 
 		await serverService.dispose();
 		await app.close();
 
 		await killTestServer();
+		await resetTestDb();
 
 		console.log('starting application...');
 
@@ -101,5 +125,5 @@ async function startControllerEndpoints(port = config.port + 1000) {
 		res.code(200).send({ success: true });
 	});
 
-	await fastify.listen({ port: port, host: 'localhost' });
+	await controller.listen({ port: port, host: 'localhost' });
 }

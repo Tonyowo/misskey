@@ -3,7 +3,8 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
-import { Inject, Injectable } from '@nestjs/common';
+import { setTimeout } from 'node:timers/promises';
+import { Inject, Injectable, type OnApplicationShutdown } from '@nestjs/common';
 import * as mfm from 'mfm-js';
 import * as Redis from 'ioredis';
 import { Brackets, EntityManager, In, IsNull, MoreThan } from 'typeorm';
@@ -42,7 +43,7 @@ const ROOM_INVITE_LINK_CODE_LENGTH = 12;
 const MAX_REACTIONS_PER_MESSAGE = 100;
 const ROOM_MENTION_ALL_COOLDOWN_MS = 1000 * 60 * 10;
 const isCustomEmojiRegexp = /^:([\w+-]+)(?:@\.)?:$/;
-const mentionAllRegexp = /(^|[\s　])@(all|everyone|全体成员)(?=$|[\s　.,!?，。！？:：;；])/i;
+const mentionAllRegexp = /(^|[\s\u3000])@(all|everyone|全体成员)(?=$|[\s\u3000.,!?，。！？:：;；])/i;
 
 // TODO: ReactionServiceのやつと共通化
 function normalizeEmojiString(x: string) {
@@ -59,7 +60,9 @@ function normalizeEmojiString(x: string) {
 }
 
 @Injectable()
-export class ChatService {
+export class ChatService implements OnApplicationShutdown {
+	#shutdownController = new AbortController();
+
 	constructor(
 		@Inject(DI.config)
 		private config: Config,
@@ -267,7 +270,7 @@ export class ChatService {
 
 		// 3秒経っても既読にならなかったらイベント発行
 		if (this.userEntityService.isLocalUser(toUser)) {
-			setTimeout(async () => {
+			setTimeout(3000, undefined, { signal: this.#shutdownController.signal }).then(async () => {
 				const marker = await this.redisClient.get(this.getUserUnreadMarkerKey(toUser.id, fromUser.id));
 
 				if (marker == null) return; // 既読
@@ -275,7 +278,7 @@ export class ChatService {
 				const packedMessageForTo = await this.chatEntityService.packMessageDetailed(inserted, toUser);
 				this.globalEventService.publishMainStream(toUser.id, 'newChatMessage', packedMessageForTo);
 				this.pushNotificationService.pushNotification(toUser.id, 'newChatMessage', packedMessageForTo);
-			}, 3000);
+			}, () => { /* aborted, ignore it */ });
 		}
 
 		return packedMessage;
@@ -329,7 +332,7 @@ export class ChatService {
 			isSpeakMuted: boolean;
 		}[] = (await this.chatRoomMembershipsRepository.find({
 			where: { roomId: toRoom.id },
-			relations: ['user'],
+			relations: { user: true },
 		})).map(m => ({
 			userId: m.userId,
 			user: m.user,
@@ -402,7 +405,7 @@ export class ChatService {
 		redisPipeline.exec();
 
 		// 3秒経っても既読にならなかったらイベント発行
-		setTimeout(async () => {
+		setTimeout(3000, undefined, { signal: this.#shutdownController.signal }).then(async () => {
 			const redisPipeline = this.redisClient.pipeline();
 			for (const membership of membershipsOtherThanMe) {
 				redisPipeline.get(this.getRoomUnreadMarkerKey(membership.userId, toRoom.id));
@@ -421,7 +424,7 @@ export class ChatService {
 				this.globalEventService.publishMainStream(membershipsOtherThanMe[i].userId, 'newChatMessage', packedMessageForTo);
 				this.pushNotificationService.pushNotification(membershipsOtherThanMe[i].userId, 'newChatMessage', packedMessageForTo);
 			}
-		}, 3000);
+		}, () => { /* aborted, ignore it */ });
 
 		return packedMessage;
 	}
@@ -822,6 +825,27 @@ export class ChatService {
 	}
 
 	@bindThis
+	public async hasPermissionToViewRoomInfo(meId: MiUser['id'], room: MiChatRoom) {
+		if (room.ownerId === meId) {
+			return true;
+		}
+
+		if (await this.isRoomMember(room, meId)) {
+			return true;
+		}
+
+		if (await this.chatRoomInvitationsRepository.findOneBy({ roomId: room.id, userId: meId })) {
+			return true;
+		}
+
+		if (await this.roleService.isModerator({ id: meId })) {
+			return true;
+		}
+
+		return false;
+	}
+
+	@bindThis
 	public async hasPermissionToDeleteRoom(meId: MiUser['id'], room: MiChatRoom) {
 		if (room.ownerId === meId) {
 			return true;
@@ -873,7 +897,10 @@ export class ChatService {
 
 	@bindThis
 	public async findRoomById(roomId: MiChatRoom['id']) {
-		return this.chatRoomsRepository.findOne({ where: { id: roomId }, relations: ['owner'] });
+		return this.chatRoomsRepository.findOne({
+			where: { id: roomId },
+			relations: { owner: true },
+		});
 	}
 
 	@bindThis
@@ -1646,7 +1673,7 @@ export class ChatService {
 	public async searchRoomMentionableUsers(room: MiChatRoom, query: string | null | undefined, limit: number) {
 		const memberships = await this.chatRoomMembershipsRepository.find({
 			where: { roomId: room.id },
-			relations: ['user'],
+			relations: { user: true },
 		});
 		const users = [
 			room.owner,
@@ -2001,7 +2028,7 @@ export class ChatService {
 		const room = message.toRoomId ? await this.chatRoomsRepository.findOneByOrFail({ id: message.toRoomId }) : null;
 
 		if (room) {
-			if (!await this.isRoomMember(room, userId)) {
+			if (!(await this.isRoomMember(room, userId))) {
 				throw new Error('cannot react to others message');
 			}
 		}
@@ -2088,5 +2115,10 @@ export class ChatService {
 		const memberships = await query.take(limit).getMany();
 
 		return memberships;
+	}
+
+	@bindThis
+	public onApplicationShutdown(signal?: string): void {
+		this.#shutdownController.abort();
 	}
 }

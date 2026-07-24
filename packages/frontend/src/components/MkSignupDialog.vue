@@ -8,7 +8,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 	ref="dialog"
 	:width="500"
 	:height="600"
-	close-button-position="right"
+		closeButtonPosition="right"
 	@close="onClose"
 	@closed="emit('closed')"
 >
