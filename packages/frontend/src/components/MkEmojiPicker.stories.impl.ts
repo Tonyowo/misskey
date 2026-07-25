@@ -4,10 +4,10 @@
  */
 
 import { action } from 'storybook/actions';
-import { expect, userEvent, waitFor, within } from '@storybook/test';
+import { expect, userEvent, within } from '@storybook/test';
+import MkEmojiPicker from './MkEmojiPicker.vue';
 import type { StoryObj } from '@storybook/vue3';
 import { i18n } from '@/i18n.js';
-import MkEmojiPicker from './MkEmojiPicker.vue';
 export const Default = {
 	render(args) {
 		return {
@@ -36,29 +36,58 @@ export const Default = {
 	},
 	async play({ canvasElement }) {
 		const canvas = within(canvasElement);
-		let faceCategory = canvas.queryByRole('button', { name: /face/i });
-		let guard = 0;
-		while (faceCategory == null && guard < 8) {
-			const nextButton = canvas.queryByRole('button', { name: i18n.ts.next });
-			if (nextButton == null) break;
-			await waitFor(() => userEvent.click(nextButton));
-			faceCategory = canvas.queryByRole('button', { name: /face/i });
-			guard += 1;
-		}
-		await expect(faceCategory).toBeInTheDocument();
-		if (faceCategory == null) throw new Error(); // NOTE: not called
-		await waitFor(() => userEvent.click(faceCategory));
+		const search = canvas.getByRole('searchbox', { name: i18n.ts._emojiPicker.searchPlaceholder });
+		await userEvent.type(search, 'grinning face');
 		const grinning = canvasElement.querySelector('[data-emoji="😀"]');
 		await expect(grinning).toBeInTheDocument();
 		if (grinning == null) throw new Error(); // NOTE: not called
-		await waitFor(() => userEvent.click(grinning));
+		await userEvent.keyboard('{ArrowDown}{Escape}');
+		await expect(search).toHaveValue('');
+		await userEvent.type(search, 'grinning face{Enter}');
+		await userEvent.type(search, '{Escape}');
 		const recentUsedSection = canvas.getByText(new RegExp(i18n.ts.recentUsed)).closest('section');
 		await expect(recentUsedSection).toBeInTheDocument();
 		if (recentUsedSection == null) throw new Error(); // NOTE: not called
 		await expect(within(recentUsedSection).getByAltText('😀')).toBeInTheDocument();
 		await expect(within(recentUsedSection).queryByAltText('😬')).toEqual(null);
+		const tabs = canvas.getAllByRole('tab');
+		await expect(tabs.filter(tab => tab.tabIndex === 0)).toHaveLength(1);
 	},
 	parameters: {
 		layout: 'centered',
 	},
+} satisfies StoryObj<typeof MkEmojiPicker>;
+
+export const NoPinnedEmojis = {
+	...Default,
+	args: {
+		showPinned: false,
+	},
+	play: undefined,
+} satisfies StoryObj<typeof MkEmojiPicker>;
+
+export const NoSearchResults = {
+	...Default,
+	async play({ canvasElement }) {
+		const canvas = within(canvasElement);
+		const search = canvas.getByRole('searchbox', { name: i18n.ts._emojiPicker.searchPlaceholder });
+		await userEvent.type(search, '__missing_emoji__');
+		await expect(canvas.getByText(i18n.ts._emojiPicker.noSearchResults)).toBeInTheDocument();
+	},
+} satisfies StoryObj<typeof MkEmojiPicker>;
+
+export const Drawer = {
+	...Default,
+	args: {
+		asDrawer: true,
+	},
+	play: undefined,
+} satisfies StoryObj<typeof MkEmojiPicker>;
+
+export const Window = {
+	...Default,
+	args: {
+		asWindow: true,
+	},
+	play: undefined,
 } satisfies StoryObj<typeof MkEmojiPicker>;

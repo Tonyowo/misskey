@@ -1555,6 +1555,27 @@ _emojiPalette:
   paletteForMain: "メインで使用するパレット"
   paletteForReaction: "リアクションで使用するパレット"
 
+_emojiPicker:
+  searchPlaceholder: "絵文字を検索"
+  searchResultCount: "{count}件"
+  noSearchResults: "一致する絵文字はありません"
+  frequentlyUsed: "よく使う絵文字"
+  noFrequentlyUsedEmojis: "絵文字を使うと、ここに表示されます"
+  categoryNavigation: "絵文字カテゴリ"
+  openCategoryMenu: "カテゴリ一覧を開く"
+  previousCategories: "前のカテゴリ"
+  thisCategory: "このカテゴリ"
+  categories:
+    face: "顔"
+    people: "人"
+    animalsAndNature: "動物と自然"
+    foodAndDrink: "食べ物と飲み物"
+    activity: "アクティビティ"
+    travelAndPlaces: "旅行と場所"
+    objects: "物"
+    symbols: "記号"
+    flags: "旗"
+
 _settings:
   driveBanner: "ドライブの管理と設定、使用量の確認、ファイルをアップロードする際の設定を行えます。"
   pluginBanner: "プラグインを利用するとクライアントの機能を拡張することができます。プラグインのインストール、個別の設定と管理が行えます。"

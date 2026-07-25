@@ -9,8 +9,11 @@ SPDX-License-Identifier: AGPL-3.0-only
 	:class="[$style.root, { [$style.normal]: normal, [$style.noStyle]: noStyle }]"
 	src="/client-assets/unknown.png"
 	:title="alt"
+	:loading="loading"
 	draggable="false"
 	style="-webkit-user-drag: none;"
+	@load="emit('load')"
+	@error="emit('error')"
 	@click="onClick"
 />
 <img
@@ -18,8 +21,11 @@ SPDX-License-Identifier: AGPL-3.0-only
 	:class="[$style.root, { [$style.normal]: normal, [$style.noStyle]: noStyle }]"
 	src="/client-assets/dummy.png"
 	:title="alt"
+	:loading="loading"
 	draggable="false"
 	style="-webkit-user-drag: none;"
+	@load="emit('load')"
+	@error="emit('error')"
 />
 <span v-else-if="errored">:{{ customEmojiName }}:</span>
 <img
@@ -29,15 +35,16 @@ SPDX-License-Identifier: AGPL-3.0-only
 	:alt="alt"
 	:title="alt"
 	decoding="async"
+	:loading="loading"
 	draggable="false"
-	@error="errored = true"
-	@load="errored = false"
+	@error="onImageError"
+	@load="onImageLoad"
 	@click="onClick"
 />
 </template>
 
 <script lang="ts" setup>
-import { computed, defineAsyncComponent, inject, ref } from 'vue';
+import { computed, inject, ref } from 'vue';
 import type { MenuItem } from '@/types/menu.js';
 import { getProxiedImageUrl, getStaticImageUrl } from '@/utility/media-proxy.js';
 import { customEmojisMap } from '@/custom-emojis.js';
@@ -63,6 +70,12 @@ const props = defineProps<{
 	menuReaction?: boolean;
 	fallbackToImage?: boolean;
 	ignoreMuted?: boolean;
+	loading?: 'eager' | 'lazy';
+}>();
+
+const emit = defineEmits<{
+	(ev: 'load'): void;
+	(ev: 'error'): void;
 }>();
 
 const react = inject(DI.mfmEmojiReactCallback);
@@ -102,6 +115,16 @@ const url = computed(() => {
 
 const alt = computed(() => `:${customEmojiName.value}:`);
 const errored = ref(url.value == null);
+
+function onImageLoad() {
+	errored.value = false;
+	emit('load');
+}
+
+function onImageError() {
+	errored.value = true;
+	if (!props.fallbackToImage) emit('error');
+}
 
 function onClick(ev: PointerEvent) {
 	if (props.menu) {

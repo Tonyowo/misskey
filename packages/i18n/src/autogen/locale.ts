@@ -6188,6 +6188,82 @@ export interface Locale extends ILocale {
          */
         "paletteForReaction": string;
     };
+    "_emojiPicker": {
+        /**
+         * 絵文字を検索
+         */
+        "searchPlaceholder": string;
+        /**
+         * {count}件
+         */
+        "searchResultCount": ParameterizedString<"count">;
+        /**
+         * 一致する絵文字はありません
+         */
+        "noSearchResults": string;
+        /**
+         * よく使う絵文字
+         */
+        "frequentlyUsed": string;
+        /**
+         * 絵文字を使うと、ここに表示されます
+         */
+        "noFrequentlyUsedEmojis": string;
+        /**
+         * 絵文字カテゴリ
+         */
+        "categoryNavigation": string;
+        /**
+         * カテゴリ一覧を開く
+         */
+        "openCategoryMenu": string;
+        /**
+         * 前のカテゴリ
+         */
+        "previousCategories": string;
+        /**
+         * このカテゴリ
+         */
+        "thisCategory": string;
+        "categories": {
+            /**
+             * 顔
+             */
+            "face": string;
+            /**
+             * 人
+             */
+            "people": string;
+            /**
+             * 動物と自然
+             */
+            "animalsAndNature": string;
+            /**
+             * 食べ物と飲み物
+             */
+            "foodAndDrink": string;
+            /**
+             * アクティビティ
+             */
+            "activity": string;
+            /**
+             * 旅行と場所
+             */
+            "travelAndPlaces": string;
+            /**
+             * 物
+             */
+            "objects": string;
+            /**
+             * 記号
+             */
+            "symbols": string;
+            /**
+             * 旗
+             */
+            "flags": string;
+        };
+    };
     "_settings": {
         /**
          * ドライブの管理と設定、使用量の確認、ファイルをアップロードする際の設定を行えます。

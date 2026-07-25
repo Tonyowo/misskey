@@ -4,8 +4,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 -->
 
 <template>
-<img v-if="shouldMute" :class="$style.root" src="/client-assets/unknown.png" :alt="props.emoji" decoding="async" @pointerenter="computeTitle" @click="onClick"/>
-<img v-else-if="!useOsNativeEmojis" :class="$style.root" :src="url" :alt="props.emoji" decoding="async" @error="onError" @pointerenter="computeTitle" @click="onClick"/>
+<img v-if="shouldMute" :class="$style.root" src="/client-assets/unknown.png" :alt="props.emoji" decoding="async" :loading="loading" @load="emit('load')" @error="emit('error')" @pointerenter="computeTitle" @click="onClick"/>
+<img v-else-if="!useOsNativeEmojis" :class="$style.root" :src="url" :alt="props.emoji" decoding="async" :loading="loading" @load="emit('load')" @error="onError" @pointerenter="computeTitle" @click="onClick"/>
 <span v-else :alt="props.emoji" @pointerenter="computeTitle" @click="onClick">{{ colorizedNativeEmoji }}</span>
 </template>
 
@@ -19,7 +19,7 @@ import { copyToClipboard } from '@/utility/copy-to-clipboard.js';
 import { i18n } from '@/i18n.js';
 import { prefer } from '@/preferences.js';
 import { DI } from '@/di.js';
-import { mute as muteEmoji, unmute as unmuteEmoji, checkMuted as checkMutedEmoji } from '@/utility/emoji-mute.js';
+import { mute as muteEmoji, unmute as unmuteEmoji } from '@/utility/emoji-mute.js';
 import { addToEmojiPalette } from '@/utility/emoji-palette.js';
 
 const props = defineProps<{
@@ -27,6 +27,12 @@ const props = defineProps<{
 	menu?: boolean;
 	menuReaction?: boolean;
 	ignoreMuted?: boolean;
+	loading?: 'eager' | 'lazy';
+}>();
+
+const emit = defineEmits<{
+	(ev: 'load'): void;
+	(ev: 'error'): void;
 }>();
 
 const react = inject(DI.mfmEmojiReactCallback, null);
@@ -37,12 +43,16 @@ const primaryUrl = computed(() => prefer.s.emojiStyle === 'twemoji' ? char2twemo
 const fallbackUrl = computed(() => prefer.s.emojiStyle === 'fluentEmoji' ? char2twemojiFilePath(props.emoji) : null);
 const url = computed(() => (errored.value && fallbackUrl.value) ? fallbackUrl.value : primaryUrl.value);
 const colorizedNativeEmoji = computed(() => colorizeEmoji(props.emoji));
-const isMuted = checkMutedEmoji(props.emoji);
+const isMuted = computed(() => prefer.r.mutingEmojis.value.includes(props.emoji));
 const shouldMute = computed(() => isMuted.value && !props.ignoreMuted);
 
 watch(() => [props.emoji, prefer.s.emojiStyle], () => {
 	errored.value = false;
 });
+
+watch(useOsNativeEmojis, (value) => {
+	if (value) emit('load');
+}, { immediate: true, flush: 'post' });
 
 // Searching from an array with 2000 items for every emoji felt like too energy-consuming, so I decided to do it lazily on pointerenter
 function computeTitle(event: PointerEvent): void {
@@ -52,6 +62,8 @@ function computeTitle(event: PointerEvent): void {
 function onError() {
 	if (fallbackUrl.value != null && url.value !== fallbackUrl.value) {
 		errored.value = true;
+	} else {
+		emit('error');
 	}
 }
 
