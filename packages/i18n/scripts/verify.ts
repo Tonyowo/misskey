@@ -3,8 +3,6 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
-let valid = true;
-
 interface LocaleRecord {
 	[key: string]: string | LocaleRecord;
 }
@@ -18,7 +16,7 @@ interface ErrorData {
 function writeError(type: string, lang: string, tree: string, data: ErrorData): void {
 	process.stderr.write(JSON.stringify({ type, lang, tree, data }));
 	process.stderr.write('\n');
-	valid = false;
+	process.exitCode = 1;
 }
 
 function verify(expected: LocaleRecord, actual: LocaleRecord, lang: string, trace?: string): void {
@@ -53,9 +51,27 @@ function verify(expected: LocaleRecord, actual: LocaleRecord, lang: string, trac
 	}
 }
 
+function verifyOverrides(expected: LocaleRecord, actual: LocaleRecord, lang: string, trace?: string): void {
+	for (const [key, expectedValue] of Object.entries(expected)) {
+		const tree = trace ? `${trace}.${key}` : key;
+		const actualValue = actual[key];
+
+		if (typeof expectedValue === 'object') {
+			if (typeof actualValue !== 'object') {
+				writeError('override_mismatch', lang, tree, { expected: 'object', actual: typeof actualValue });
+				continue;
+			}
+			verifyOverrides(expectedValue, actualValue, lang, tree);
+		} else if (actualValue !== expectedValue) {
+			writeError('override_mismatch', lang, tree, { expected: expectedValue, actual: typeof actualValue === 'string' ? actualValue : typeof actualValue });
+		}
+	}
+}
+
 // index.tsはtsのまま動かすことを想定していない（ビルド成果物を外部に公開する）.
 // よってビルド後のものを検証する
-const locales = await import('../built/index.js');
+const { default: locales } = await import('../built/index.js');
+const { customLocaleOverrides } = await import('../built/custom-locale-overrides.js');
 const { 'ja-JP': original, ...verifiees } = locales as unknown as Record<string, LocaleRecord>;
 
 for (const lang in verifiees) {
@@ -65,6 +81,6 @@ for (const lang in verifiees) {
 	verify(original, verifiees[lang], lang);
 }
 
-if (!valid) {
-	process.exit(1);
+for (const [lang, overrides] of Object.entries(customLocaleOverrides)) {
+	verifyOverrides(overrides, locales[lang], lang);
 }

@@ -10,6 +10,7 @@
 import * as fs from 'node:fs';
 import * as yaml from 'js-yaml';
 import { languages, primaries } from './const.js';
+import { customLocaleOverrides } from './custom-locale-overrides.js';
 import type { Locale } from './autogen/locale.js';
 import type { ILocale, ParameterizedString } from './types.js';
 
@@ -67,6 +68,10 @@ function build(): Record<Language, Locale> {
 	}, {} as Locales);
 
 	removeEmpty(locales);
+
+	for (const [lang, overrides] of Object.entries(customLocaleOverrides)) {
+		locales[lang as Language] = merge(locales[lang as Language], overrides);
+	}
 
 	return Object.entries(locales).reduce<Record<Language, Locale>>((a, [k, v]) => {
 		const lang = k.split('-')[0];
