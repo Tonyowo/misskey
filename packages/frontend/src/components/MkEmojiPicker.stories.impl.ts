@@ -50,20 +50,14 @@ export const Default = {
 		if (recentUsedSection == null) throw new Error(); // NOTE: not called
 		await expect(within(recentUsedSection).getByAltText('😀')).toBeInTheDocument();
 		await expect(within(recentUsedSection).queryByAltText('😬')).toEqual(null);
+		await expect(canvas.queryByRole('tab', { name: i18n.ts.pinned })).not.toBeInTheDocument();
+		await expect(canvas.queryByRole('button', { name: i18n.ts._emojiPicker.openCategoryMenu })).not.toBeInTheDocument();
 		const tabs = canvas.getAllByRole('tab');
 		await expect(tabs.filter(tab => tab.tabIndex === 0)).toHaveLength(1);
 	},
 	parameters: {
 		layout: 'centered',
 	},
-} satisfies StoryObj<typeof MkEmojiPicker>;
-
-export const NoPinnedEmojis = {
-	...Default,
-	args: {
-		showPinned: false,
-	},
-	play: undefined,
 } satisfies StoryObj<typeof MkEmojiPicker>;
 
 export const NoSearchResults = {

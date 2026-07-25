@@ -6,7 +6,6 @@
 import { describe, expect, test } from 'vitest';
 import {
 	buildCustomEmojiCategoryIndex,
-	buildEmojiPickerCategoryTree,
 	getEmojiPickerVirtualRange,
 	searchEmojiPickerEntries,
 } from '@/utility/emoji-picker-data.js';
@@ -31,39 +30,6 @@ describe('emoji picker category data', () => {
 		expect(index.get('')?.map(emoji => emoji.name)).toEqual(['b', 'c']);
 	});
 
-	test('preserves nested paths and duplicate leaf labels', () => {
-		const tree = buildEmojiPickerCategoryTree([
-			'animals/cats',
-			'stickers/cats',
-			'animals/dogs',
-			'faces / happy',
-		]);
-
-		expect(tree).toMatchObject([
-			{
-				label: 'animals',
-				path: 'animals',
-				children: [
-					{ label: 'cats', path: 'animals/cats', isCategory: true },
-					{ label: 'dogs', path: 'animals/dogs', isCategory: true },
-				],
-			},
-			{
-				label: 'stickers',
-				path: 'stickers',
-				children: [
-					{ label: 'cats', path: 'stickers/cats', isCategory: true },
-				],
-			},
-			{
-				label: 'faces',
-				path: 'faces',
-				children: [
-					{ label: 'happy', path: 'faces/happy', category: 'faces / happy', isCategory: true },
-				],
-			},
-		]);
-	});
 });
 
 describe('emoji picker search', () => {

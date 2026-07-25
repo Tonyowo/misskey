@@ -13,14 +13,6 @@ export type EmojiPickerSearchEntry = {
 	keywords: readonly string[];
 };
 
-export type EmojiPickerCategoryTreeNode = {
-	label: string;
-	path: string;
-	isCategory: boolean;
-	category: string | null;
-	children: EmojiPickerCategoryTreeNode[];
-};
-
 export type EmojiPickerVirtualRange = {
 	startIndex: number;
 	endIndex: number;
@@ -76,40 +68,6 @@ export function buildCustomEmojiCategoryIndex<T extends CategorizedEmoji>(emojis
 	}
 
 	return categories;
-}
-
-export function buildEmojiPickerCategoryTree(categories: readonly string[]): EmojiPickerCategoryTreeNode[] {
-	const root: EmojiPickerCategoryTreeNode[] = [];
-
-	for (const category of categories) {
-		if (category === '') continue;
-
-		const parts = category.split('/').map(part => part.trim()).filter(Boolean);
-		let children = root;
-		let path = '';
-
-		for (const part of parts) {
-			path = path === '' ? part : `${path}/${part}`;
-			let node = children.find(child => child.label === part);
-			if (node == null) {
-				node = {
-					label: part,
-					path,
-					isCategory: false,
-					category: null,
-					children: [],
-				};
-				children.push(node);
-			}
-			if (path === parts.join('/')) {
-				node.isCategory = true;
-				node.category = category;
-			}
-			children = node.children;
-		}
-	}
-
-	return root;
 }
 
 export function searchEmojiPickerEntries(
