@@ -172,3 +172,5 @@
 回退先停新版本并核对数据库备份。新 migration 的 down 已在隔离库验证，但会删除编辑历史，不能直接把它当作无损回退；需要根据备份恢复数据库和旧构建。不要修改任何已合并 migration。
 
 合并提交前的检查已通过变更文件 lint 与 SPDX（补齐既有 custom 长按排序文件的头部）。此时脚本的 merge-base 仍为旧共同基线，非日文上游导入被报告为 locale 差异；人工直接比较 master 只有 ja-JP.yml。合并提交后再以 master 执行脚本验证真正自主修改集合。
+
+最终提交后检查：Lint PASS、SPDX PASS、Locale safety PASS。合并提交为 `4867b6c00d34a052ef06cdbe9f6d23e636e9bc4d`，父提交分别为原 custom 与本计划 master。交付通过本地 custom 的 fast-forward 完成，保留独立工作分支便于审查。任务浏览器与专用测试服务已停止。
