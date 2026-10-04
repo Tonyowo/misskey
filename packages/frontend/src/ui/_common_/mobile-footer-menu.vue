@@ -4,7 +4,13 @@ SPDX-License-Identifier: AGPL-3.0-only
 -->
 
 <template>
-<div ref="rootEl" :class="$style.root">
+<div v-if="communityNavigation" ref="rootEl" :class="$style.root">
+	<button v-for="item in primaryItems" :key="item.key" type="button" class="_button" :class="$style.item" :aria-label="item.label" @click="item.action">
+		<div :class="$style.itemInner"><i :class="[$style.itemIcon, item.icon]"></i><i v-if="item.key === 'messages' && ($i?.hasUnreadNotification || $i?.hasUnreadChatMessages)" :class="$style.itemIndicator" class="_indicatorCircle"></i></div>
+		<span :class="$style.itemLabel">{{ item.label }}</span>
+	</button>
+</div>
+<div v-else ref="legacyRootEl" :class="$style.root">
 	<button :class="$style.item" class="_button" @click="drawerMenuShowing = true">
 		<div :class="$style.itemInner">
 			<i :class="$style.itemIcon" class="ti ti-menu-2"></i><span v-if="menuIndicated" :class="$style.itemIndicator" class="_blink"><i class="_indicatorCircle"></i></span>
@@ -45,12 +51,24 @@ import { computed, ref, useTemplateRef, watch } from 'vue';
 import { $i } from '@/i.js';
 import * as os from '@/os.js';
 import { mainRouter } from '@/router.js';
+import { prefer } from '@/preferences.js';
+import { i18n } from '@/i18n.js';
 import { navbarItemDef } from '@/navbar.js';
 
 const drawerMenuShowing = defineModel<boolean>('drawerMenuShowing');
 const widgetsShowing = defineModel<boolean>('widgetsShowing');
 
-const rootEl = useTemplateRef('rootEl');
+const communityNavigation = computed(() => prefer.s.menu.includes('messages'));
+const primaryItems = [
+	{ key: 'home', label: i18n.ts._community.home, icon: 'ti ti-home', action: () => mainRouter.push('/') },
+	{ key: 'discover', label: i18n.ts._community.discover, icon: 'ti ti-compass', action: () => mainRouter.push('/explore') },
+	{ key: 'publish', label: i18n.ts._community.publish, icon: 'ti ti-pencil', action: () => { os.post(); } },
+	{ key: 'messages', label: i18n.ts._community.messages, icon: 'ti ti-messages', action: () => mainRouter.push('/my/messages') },
+	{ key: 'profile', label: i18n.ts._community.myProfile, icon: 'ti ti-user', action: () => mainRouter.pushByPath($i ? `/@${$i.username}` : '/settings') },
+];
+const primaryRoot = useTemplateRef('rootEl');
+const legacyRoot = useTemplateRef('legacyRootEl');
+const rootEl = computed(() => primaryRoot.value ?? legacyRoot.value);
 
 const menuIndicated = computed(() => {
 	for (const def in navbarItemDef) {
@@ -133,6 +151,12 @@ watch(rootEl, () => {
 	&:active {
 		background: var(--MI_THEME-panelHighlight);
 	}
+}
+
+.itemLabel {
+	display: block;
+	font-size: 0.75rem;
+	margin-top: 3px;
 }
 
 .itemIcon {

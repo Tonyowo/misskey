@@ -6,7 +6,7 @@
 import ms from 'ms';
 import { Inject, Injectable } from '@nestjs/common';
 import { MAX_NOTE_TEXT_LENGTH } from '@/const.js';
-import type { UsersRepository } from '@/models/_.js';
+import type { UsersRepository, PollsRepository } from '@/models/_.js';
 import { DI } from '@/di-symbols.js';
 import { Endpoint } from '@/server/api/endpoint-base.js';
 import { NoteEntityService } from '@/core/entities/NoteEntityService.js';
@@ -14,6 +14,7 @@ import { NoteUpdateService } from '@/core/NoteUpdateService.js';
 import { GetterService } from '@/server/api/GetterService.js';
 import { IdentifiableError } from '@/misc/identifiable-error.js';
 import type { MiLocalUser } from '@/models/User.js';
+import { renderReplyVisibleContents } from '@/misc/reply-visible-content.js';
 import { ApiError } from '../../error.js';
 
 export const meta = {
@@ -43,6 +44,11 @@ export const meta = {
 	},
 
 	errors: {
+		noteVersionConflict: {
+			message: 'The note has changed. Reload it before editing.',
+			code: 'NOTE_VERSION_CONFLICT',
+			id: 'bcc6f160-d94f-4fb9-8db8-41f8b53b876f',
+		},
 		noSuchNote: {
 			message: 'No such note.',
 			code: 'NO_SUCH_NOTE',
@@ -103,13 +109,15 @@ export const paramDef = {
 	type: 'object',
 	properties: {
 		noteId: { type: 'string', format: 'misskey:id' },
-		visibility: { type: 'string', enum: ['public', 'home', 'followers', 'specified'], default: 'public' },
+		updateMode: { type: 'string', enum: ['replace', 'patch'], default: 'replace' },
+		expectedRevision: { type: 'integer', minimum: 0 },
+		visibility: { type: 'string', enum: ['public', 'home', 'followers', 'specified'] },
 		visibleUserIds: { type: 'array', uniqueItems: true, items: {
 			type: 'string', format: 'misskey:id',
 		} },
 		cw: { type: 'string', nullable: true, minLength: 1, maxLength: 100 },
-		localOnly: { type: 'boolean', default: false },
-		reactionAcceptance: { type: 'string', nullable: true, enum: [null, 'likeOnly', 'likeOnlyForRemote', 'nonSensitiveOnly', 'nonSensitiveOnlyForLocalLikeOnlyForRemote'], default: null },
+		localOnly: { type: 'boolean' },
+		reactionAcceptance: { type: 'string', nullable: true, enum: [null, 'likeOnly', 'likeOnlyForRemote', 'nonSensitiveOnly', 'nonSensitiveOnlyForLocalLikeOnlyForRemote'] },
 		replyId: { type: 'string', format: 'misskey:id', nullable: true },
 		renoteId: { type: 'string', format: 'misskey:id', nullable: true },
 		channelId: { type: 'string', format: 'misskey:id', nullable: true },
@@ -122,14 +130,14 @@ export const paramDef = {
 		fileIds: {
 			type: 'array',
 			uniqueItems: true,
-			minItems: 1,
+			minItems: 0,
 			maxItems: 18,
 			items: { type: 'string', format: 'misskey:id' },
 		},
 		mediaIds: {
 			type: 'array',
 			uniqueItems: true,
-			minItems: 1,
+			minItems: 0,
 			maxItems: 18,
 			items: { type: 'string', format: 'misskey:id' },
 		},
@@ -152,33 +160,6 @@ export const paramDef = {
 		},
 	},
 	required: ['noteId'],
-	if: {
-		properties: {
-			renoteId: {
-				type: 'null',
-			},
-			fileIds: {
-				type: 'null',
-			},
-			mediaIds: {
-				type: 'null',
-			},
-			poll: {
-				type: 'null',
-			},
-		},
-	},
-	then: {
-		properties: {
-			text: {
-				type: 'string',
-				minLength: 1,
-				maxLength: MAX_NOTE_TEXT_LENGTH,
-				pattern: '[^\\s]+',
-			},
-		},
-		required: ['text'],
-	},
 } as const;
 
 @Injectable()
@@ -186,6 +167,9 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 	constructor(
 		@Inject(DI.usersRepository)
 		private usersRepository: UsersRepository,
+
+		@Inject(DI.pollsRepository)
+		private pollsRepository: PollsRepository,
 
 		private getterService: GetterService,
 		private noteEntityService: NoteEntityService,
@@ -201,26 +185,30 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 				throw new ApiError(meta.errors.accessDenied);
 			}
 
+			const patch = ps.updateMode === 'patch';
+			const currentPoll = patch && ps.poll === undefined && note.hasPoll ? await this.pollsRepository.findOneBy({ noteId: note.id }) : null;
+
 			try {
 				const updatedNote = await this.noteUpdateService.update(
 					await this.usersRepository.findOneByOrFail({ id: me.id }) as MiLocalUser,
 					note,
 					{
-						fileIds: ps.fileIds ?? ps.mediaIds ?? [],
+						expectedRevision: ps.expectedRevision,
+						fileIds: ps.fileIds ?? ps.mediaIds ?? (patch ? note.fileIds : []),
 						poll: ps.poll ? {
 							choices: ps.poll.choices,
 							multiple: ps.poll.multiple ?? false,
 							expiresAt: ps.poll.expiredAfter ? new Date(Date.now() + ps.poll.expiredAfter) : ps.poll.expiresAt ? new Date(ps.poll.expiresAt) : null,
-						} : null,
-						text: ps.text ?? null,
-						replyId: ps.replyId ?? null,
-						renoteId: ps.renoteId ?? null,
-						channelId: ps.channelId ?? null,
-						cw: ps.cw ?? null,
-						localOnly: ps.localOnly,
-						reactionAcceptance: ps.reactionAcceptance,
-						visibility: ps.visibility,
-						visibleUserIds: ps.visibleUserIds ?? [],
+						} : currentPoll,
+						text: ps.text === undefined && patch ? renderReplyVisibleContents(note.text, note.replyVisibleContents, true) : ps.text ?? null,
+						replyId: ps.replyId === undefined && patch ? note.replyId : ps.replyId ?? null,
+						renoteId: ps.renoteId === undefined && patch ? note.renoteId : ps.renoteId ?? null,
+						channelId: ps.channelId === undefined && patch ? note.channelId : ps.channelId ?? null,
+						cw: ps.cw === undefined && patch ? note.cw : ps.cw ?? null,
+						localOnly: ps.localOnly ?? (patch ? note.localOnly : false),
+						reactionAcceptance: ps.reactionAcceptance === undefined && patch ? note.reactionAcceptance : ps.reactionAcceptance ?? null,
+						visibility: ps.visibility ?? (patch ? note.visibility : 'public'),
+						visibleUserIds: ps.visibleUserIds ?? (patch ? note.visibleUserIds : []),
 					},
 				);
 
@@ -229,7 +217,9 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 				};
 			} catch (err) {
 				if (err instanceof IdentifiableError) {
-					if (err.id === '801c046c-5bf5-4234-ad2b-e78fc20a2ac7') {
+					if (err.id === 'da1d6c7f-f5c8-4d50-a96f-48e8afcb7a47') {
+						throw new ApiError(meta.errors.noteVersionConflict);
+					} else if (err.id === '801c046c-5bf5-4234-ad2b-e78fc20a2ac7') {
 						throw new ApiError(meta.errors.noSuchFile);
 					} else if (err.id === '689ee33f-f97c-479a-ac49-1b9f8140af99') {
 						throw new ApiError(meta.errors.containsProhibitedWords);

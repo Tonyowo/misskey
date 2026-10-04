@@ -186,18 +186,7 @@ export const PREF_DEF = definePreferences({
 		default: true,
 	},
 	menu: {
-		default: [
-			'notifications',
-			'clips',
-			'drive',
-			'followRequests',
-			'chat',
-			'-',
-			'explore',
-			'announcements',
-			'channels',
-			'search',
-		],
+		default: ['explore', 'publish', 'messages', 'profile', '-', 'favorites', 'search', 'chat', 'drive', 'followRequests'],
 	},
 	statusbars: {
 		default: [] as StatusbarStore[],
@@ -327,9 +316,6 @@ export const PREF_DEF = definePreferences({
 	},
 	notificationStackAxis: {
 		default: 'horizontal' as 'vertical' | 'horizontal',
-	},
-	enableCondensedLine: {
-		default: true,
 	},
 	keepScreenOn: {
 		default: false,

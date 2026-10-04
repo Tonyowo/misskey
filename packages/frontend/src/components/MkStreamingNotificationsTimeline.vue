@@ -23,14 +23,14 @@ SPDX-License-Identifier: AGPL-3.0-only
 			:moveClass="$style.transition_x_move"
 			tag="div"
 		>
-			<div v-for="(notification, i) in paginator.items.value" :key="notification.id" :data-scroll-anchor="notification.id" :class="$style.item">
-				<div v-if="i > 0 && isSeparatorNeeded(paginator.items.value[i -1].createdAt, notification.createdAt)" :class="$style.date">
-					<span><i class="ti ti-chevron-up"></i> {{ getSeparatorInfo(paginator.items.value[i -1].createdAt, notification.createdAt)?.prevText }}</span>
+			<div v-for="(group, i) in displayedNotifications" :key="group.notification.id" :ref="el => observeNotification(el, group.sourceIds)" :data-scroll-anchor="group.notification.id" :class="[$style.item, { [$style.unread]: !group.notification.isRead }]">
+				<div v-if="i > 0 && isSeparatorNeeded(displayedNotifications[i -1].notification.createdAt, group.notification.createdAt)" :class="$style.date">
+					<span><i class="ti ti-chevron-up"></i> {{ getSeparatorInfo(displayedNotifications[i -1].notification.createdAt, group.notification.createdAt)?.prevText }}</span>
 					<span style="height: 1em; width: 1px; background: var(--MI_THEME-divider);"></span>
-					<span>{{ getSeparatorInfo(paginator.items.value[i -1].createdAt, notification.createdAt)?.nextText }} <i class="ti ti-chevron-down"></i></span>
+					<span>{{ getSeparatorInfo(displayedNotifications[i -1].notification.createdAt, group.notification.createdAt)?.nextText }} <i class="ti ti-chevron-down"></i></span>
 				</div>
-				<MkNote v-if="['reply', 'quote', 'mention'].includes(notification.type) && 'note' in notification" :class="$style.content" :note="notification.note" :withHardMute="true"/>
-				<XNotification v-else :class="$style.content" :notification="notification" :withTime="true" :full="true"/>
+				<MkNote v-if="['reply', 'quote', 'mention'].includes(group.notification.type) && 'note' in group.notification" :class="$style.content" :note="group.notification.note" :withHardMute="true"/>
+				<XNotification v-else :class="$style.content" :notification="group.notification" :withTime="true" :full="true"/>
 			</div>
 		</component>
 		<button v-show="paginator.canFetchOlder.value" key="_more_" v-appear="prefer.s.enableInfiniteScroll ? paginator.fetchOlder : null" :disabled="paginator.fetchingOlder.value" class="_button" :class="$style.more" @click="paginator.fetchOlder">
@@ -48,6 +48,7 @@ import { notificationTypes } from 'misskey-js';
 import { useInterval } from '@@/js/use-interval.js';
 import { useDocumentVisibility } from '@@/js/use-document-visibility.js';
 import { getScrollContainer, scrollToTop } from '@@/js/scroll.js';
+import type { ComponentPublicInstance } from 'vue';
 import XNotification from '@/components/MkNotification.vue';
 import MkNote from '@/components/MkNote.vue';
 import { useStream } from '@/stream.js';
@@ -56,6 +57,9 @@ import MkPullToRefresh from '@/components/MkPullToRefresh.vue';
 import { prefer } from '@/preferences.js';
 import { store } from '@/store.js';
 import { isSeparatorNeeded, getSeparatorInfo } from '@/utility/timeline-date-separate.js';
+import { misskeyApi } from '@/utility/misskey-api.js';
+import { groupNotifications } from '@/utility/notification-groups.js';
+import { updateCurrentAccountPartial } from '@/accounts.js';
 import { Paginator } from '@/utility/paginator.js';
 
 const props = defineProps<{
@@ -64,17 +68,68 @@ const props = defineProps<{
 
 const rootEl = useTemplateRef('rootEl');
 
-const paginator = prefer.s.useGroupedNotifications ? markRaw(new Paginator('i/notifications-grouped', {
+const paginator = markRaw(new Paginator('i/notifications', {
 	limit: 20,
 	computedParams: computed(() => ({
 		excludeTypes: props.excludeTypes ?? undefined,
-	})),
-})) : markRaw(new Paginator('i/notifications', {
-	limit: 20,
-	computedParams: computed(() => ({
-		excludeTypes: props.excludeTypes ?? undefined,
+		markAsRead: false,
 	})),
 }));
+const displayedNotifications = computed(() => groupNotifications(paginator.items.value, prefer.s.useGroupedNotifications));
+const visibleIds = new Map<Element, string[]>();
+const pendingRead = new Set<string>();
+const intersecting = new Set<Element>();
+let readTimer: number | null = null;
+let marking = false;
+const observer = new IntersectionObserver(entries => {
+	for (const entry of entries) {
+		if (entry.isIntersecting) {
+			intersecting.add(entry.target);
+			for (const id of visibleIds.get(entry.target) ?? []) pendingRead.add(id);
+		} else {
+			intersecting.delete(entry.target);
+			for (const id of visibleIds.get(entry.target) ?? []) pendingRead.delete(id);
+		}
+	}
+	scheduleRead();
+}, { threshold: 0.1 });
+
+function observeNotification(el: Element | ComponentPublicInstance | null, sourceIds: string[]) {
+	for (const target of visibleIds.keys()) {
+		if (!target.isConnected) {
+			observer.unobserve(target);
+			for (const id of visibleIds.get(target) ?? []) pendingRead.delete(id);
+			visibleIds.delete(target);
+			intersecting.delete(target);
+		}
+	}
+	if (!(el instanceof Element)) return;
+	visibleIds.set(el, sourceIds);
+	if (intersecting.has(el)) {
+		for (const id of sourceIds) pendingRead.add(id);
+		scheduleRead();
+	}
+	observer.observe(el);
+}
+
+function scheduleRead() {
+	if (readTimer != null || marking || window.document.hidden) return;
+	readTimer = window.setTimeout(() => { readTimer = null; void markVisibleRead(); }, 200);
+}
+
+async function markVisibleRead() {
+	if (window.document.hidden || marking) return;
+	const ids = [...pendingRead].filter(id => paginator.items.value.some(item => item.id === id && !item.isRead)).slice(0, 100);
+	if (!ids.length) return;
+	marking = true;
+	try {
+		const { unreadCount } = await misskeyApi('notifications/read', { notificationIds: ids });
+		updateCurrentAccountPartial({ hasUnreadNotification: unreadCount > 0, unreadNotificationsCount: unreadCount });
+		for (const item of paginator.items.value) if (ids.includes(item.id)) item.isRead = true;
+		for (const id of ids) pendingRead.delete(id);
+	} catch { marking = false; return; /* A later visibility change can retry. */ } finally { marking = false; }
+	if (pendingRead.size > 0) scheduleRead();
+}
 
 const MIN_POLLING_INTERVAL = 1000 * 10;
 const POLLING_INTERVAL =
@@ -127,6 +182,7 @@ const visibility = useDocumentVisibility();
 let isPausingUpdate = false;
 
 watch(visibility, () => {
+	if (visibility.value === 'visible') scheduleRead();
 	if (visibility.value === 'hidden') {
 		isPausingUpdate = true;
 	} else { // 'visible'
@@ -139,11 +195,6 @@ watch(visibility, () => {
 
 function onNotification(notification: Misskey.entities.Notification) {
 	const isMuted = props.excludeTypes ? props.excludeTypes.includes(notification.type as typeof notificationTypes[number]) : false;
-	if (isMuted || window.document.visibilityState === 'visible') {
-		if (store.s.realtimeMode) {
-			useStream().send('readNotification');
-		}
-	}
 
 	if (!isMuted) {
 		if (isTop() && !isPausingUpdate) {
@@ -169,15 +220,29 @@ onMounted(() => {
 		}, { immediate: false, deep: true });
 	}
 
+	connection = useStream().useChannel('main');
 	if (store.s.realtimeMode) {
-		connection = useStream().useChannel('main');
 		connection.on('notification', onNotification);
-		connection.on('notificationFlushed', reload);
 	}
+	connection.on('notificationFlushed', reload);
+	connection.on('notificationsRead', ({ notificationIds, unreadCount }) => {
+		updateCurrentAccountPartial({ hasUnreadNotification: unreadCount > 0, unreadNotificationsCount: unreadCount });
+		for (const item of paginator.items.value) if (notificationIds.includes(item.id)) item.isRead = true;
+	});
+	connection.on('readAllNotifications', () => {
+		for (const item of paginator.items.value) item.isRead = true;
+		updateCurrentAccountPartial({ hasUnreadNotification: false, unreadNotificationsCount: 0 });
+	});
 });
 
 onUnmounted(() => {
+	observer.disconnect();
+	visibleIds.clear();
+	if (readTimer != null) window.clearTimeout(readTimer);
 	if (connection) connection.dispose();
+	if (scrollContainer != null) {
+		scrollContainer.removeEventListener('scroll', onScrollContainerScroll);
+	}
 });
 
 defineExpose({
@@ -186,6 +251,9 @@ defineExpose({
 </script>
 
 <style lang="scss" module>
+.unread {
+	border-left: 3px solid var(--MI_THEME-accent);
+}
 .transition_x_move {
 	transition: transform 0.7s cubic-bezier(0.23, 1, 0.32, 1);
 }

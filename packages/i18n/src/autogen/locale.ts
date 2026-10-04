@@ -2509,6 +2509,14 @@ export interface Locale extends ILocale {
      */
     "updateRemoteUser": string;
     /**
+     * 二要素認証を解除
+     */
+    "unsetMfa": string;
+    /**
+     * 二要素認証を解除しますか？
+     */
+    "unsetMfaConfirm": string;
+    /**
      * アイコンを解除
      */
     "unsetUserAvatar": string;
@@ -4205,6 +4213,10 @@ export interface Locale extends ILocale {
      */
     "cannotLoad": string;
     /**
+     * プレビューできません
+     */
+    "cannotPreview": string;
+    /**
      * プロフィール表示回数
      */
     "numberOfProfileView": string;
@@ -5497,14 +5509,6 @@ export interface Locale extends ILocale {
      */
     "directMessage_short": string;
     /**
-     * 旧設定情報を移行
-     */
-    "migrateOldSettings": string;
-    /**
-     * 通常これは自動で行われていますが、何らかの理由により上手く移行されなかった場合は手動で移行処理をトリガーできます。現在の設定情報は上書きされます。
-     */
-    "migrateOldSettings_description": string;
-    /**
      * 圧縮
      */
     "compress": string;
@@ -5524,10 +5528,6 @@ export interface Locale extends ILocale {
      * 埋め込み
      */
     "embed": string;
-    /**
-     * 設定を移行しています。しばらくお待ちください... (後ほど、設定→その他→旧設定情報を移行 で手動で移行することもできます)
-     */
-    "settingsMigrating": string;
     /**
      * 読み取り専用
      */
@@ -5735,6 +5735,18 @@ export interface Locale extends ILocale {
      * 先頭に追加
      */
     "prepend": string;
+    /**
+     * サムネイルの表示を制限するURL
+     */
+    "urlPreviewSensitiveList": string;
+    /**
+     * スペースで区切るとAND指定になり、改行で区切るとOR指定になります。スラッシュで囲むと正規表現になります。一致した場合、サムネイルが表示されなくなります。
+     */
+    "urlPreviewSensitiveListDescription": string;
+    /**
+     * ピクセルアート拡大モード
+     */
+    "pixelatedZoom": string;
     "_imageEditing": {
         "_vars": {
             /**
@@ -8554,6 +8566,42 @@ export interface Locale extends ILocale {
          * 静止画に加えて動画も解析するようにします。サーバーの負荷が少し増えます。
          */
         "analyzeVideosDescription": string;
+        /**
+         * センシティブメディアの判定は外部サービス (sensitive-detector) に分離されました。この機能を利用するには、別途サイドカーサービスをセットアップし、下記の接続先を設定する必要があります。接続先が未設定の場合、判定は行われません (非センシティブ扱い)。
+         */
+        "externalServiceInfo": string;
+        /**
+         * 判定サービスの接続先URL
+         */
+        "apiUrl": string;
+        /**
+         * sensitive-detector サービスのベースURL (例: http://localhost:3009)。プライベートネットワーク上のサービスに接続する場合は、設定ファイルの allowedPrivateNetworks で接続先ネットワークを許可してください。プロキシを使用している場合は、proxyBypassHosts も設定してください。空欄の場合、センシティブ判定は行われません。
+         */
+        "apiUrlDescription": string;
+        /**
+         * APIキー
+         */
+        "apiKey": string;
+        /**
+         * 判定サービス側で認証 (Bearerトークン) を設定している場合に入力します。設定していない場合は空欄のままにしてください。
+         */
+        "apiKeyDescription": string;
+        /**
+         * タイムアウト (ミリ秒)
+         */
+        "timeout": string;
+        /**
+         * 判定リクエスト1回あたりのタイムアウト時間です。
+         */
+        "timeoutDescription": string;
+        /**
+         * 1リクエストあたりの最大画像数
+         */
+        "maxImagesPerRequest": string;
+        /**
+         * 動画など複数フレームを判定する際、1回のリクエストにまとめて送る画像の最大枚数です。これを超える分は分割して順次送信されます。sensitive-detector 側の maxParts 設定（デフォルト: 10）を超えないように設定してください。超えた場合、そのチャンクは全件非センシティブ扱いとなります。
+         */
+        "maxImagesPerRequestDescription": string;
     };
     "_emailUnavailable": {
         /**
@@ -9746,6 +9794,10 @@ export interface Locale extends ILocale {
          * ユーザーを凍結する
          */
         "write:admin:suspend-user": string;
+        /**
+         * ユーザーの二要素認証を解除する
+         */
+        "write:admin:unset-mfa": string;
         /**
          * ユーザーのアバターを削除する
          */
@@ -11001,6 +11053,10 @@ export interface Locale extends ILocale {
     };
     "_notification": {
         /**
+         * 通報への対応が完了しました
+         */
+        "abuseReportResolved": string;
+        /**
          * ファイルがアップロードされました
          */
         "fileUploaded": string;
@@ -11121,6 +11177,10 @@ export interface Locale extends ILocale {
          */
         "createTokenDescription": ParameterizedString<"text">;
         "_types": {
+            /**
+             * 通報への対応完了
+             */
+            "abuseReportResolved": string;
             /**
              * すべて
              */
@@ -11716,6 +11776,10 @@ export interface Locale extends ILocale {
          * アイコンデコレーションを削除
          */
         "deleteAvatarDecoration": string;
+        /**
+         * ユーザーの二要素認証を解除
+         */
+        "unsetMfa": string;
         /**
          * ユーザーのアイコンを解除
          */
@@ -13489,5 +13553,123 @@ export interface Locale extends ILocale {
          * MFM
          */
         "mfm": string;
+    };
+    "_community": {
+        /**
+         * ホーム
+         */
+        "home": string;
+        /**
+         * 発見
+         */
+        "discover": string;
+        /**
+         * 投稿
+         */
+        "publish": string;
+        /**
+         * メッセージ
+         */
+        "messages": string;
+        /**
+         * 自分
+         */
+        "myProfile": string;
+        /**
+         * 会話
+         */
+        "conversations": string;
+        /**
+         * コメント・返信
+         */
+        "comments": string;
+        /**
+         * コメント
+         */
+        "comment": string;
+        /**
+         * いいね・リアクション
+         */
+        "likes": string;
+        /**
+         * リノート
+         */
+        "reposts": string;
+        /**
+         * システム
+         */
+        "system": string;
+        /**
+         * グループ管理
+         */
+        "groups": string;
+        /**
+         * 招待
+         */
+        "invitations": string;
+        /**
+         * 申請
+         */
+        "requests": string;
+        /**
+         * 承認待ち
+         */
+        "approvals": string;
+        /**
+         * 編集履歴
+         */
+        "history": string;
+        /**
+         * アップグレード後に保存された版のみ表示します。以前の編集は復元できません。
+         */
+        "historyNotice": string;
+        /**
+         * この添付ファイルは削除されています
+         */
+        "missingMedia": string;
+        /**
+         * 投稿は別の場所で更新されました。下書きは保存されています。投稿を再読み込みしてください。
+         */
+        "versionConflict": string;
+        /**
+         * 投稿の状態を確認できません。下書きを保存しました。自分の投稿を確認してから再送してください。
+         */
+        "publishUnknown": string;
+        /**
+         * 現在のリアクションをいいねに変更しますか？
+         */
+        "switchReaction": string;
+        /**
+         * 返信をさらに表示
+         */
+        "olderReplies": string;
+        /**
+         * 表示できる返信の深さの上限に達しました。
+         */
+        "threadLimit": string;
+        /**
+         * 公開（公開タイムラインには表示しません）
+         */
+        "publicHomeVisibility": string;
+        /**
+         * このメッセージは全員の画面から削除されます。
+         */
+        "deleteChatForEveryone": string;
+        /**
+         * 詳細オプション
+         */
+        "advanced": string;
+        /**
+         * メンションがあります
+         */
+        "mentionedMe": string;
+        /**
+         * チャット履歴を読み込めませんでした。もう一度お試しください。
+         */
+        "chatHistoryFailed": string;
+        /**
+         * いいね
+         */
+        "like": string;
     };
 }

@@ -13,13 +13,13 @@ export class MiChatRoomInviteLink {
 	@PrimaryColumn(id())
 	public id: string;
 
-	@Index({ unique: true })
+	@Index('IDX_97d65ff480d95e3e2bd6b61cf8', { unique: true })
 	@Column('varchar', {
 		length: 64,
 	})
 	public code: string;
 
-	@Index()
+	@Index('IDX_9295d43264fbf06eb677446d47')
 	@Column({
 		...id(),
 	})
@@ -28,10 +28,10 @@ export class MiChatRoomInviteLink {
 	@ManyToOne(() => MiChatRoom, {
 		onDelete: 'CASCADE',
 	})
-	@JoinColumn()
+	@JoinColumn({ foreignKeyConstraintName: 'FK_9295d43264fbf06eb677446d47f' })
 	public room: MiChatRoom | null;
 
-	@Index()
+	@Index('IDX_d6733ecedf3ee502ff17f447bf')
 	@Column({
 		...id(),
 	})
@@ -40,7 +40,7 @@ export class MiChatRoomInviteLink {
 	@ManyToOne(() => MiUser, {
 		onDelete: 'CASCADE',
 	})
-	@JoinColumn()
+	@JoinColumn({ foreignKeyConstraintName: 'FK_d6733ecedf3ee502ff17f447bfa' })
 	public createdBy: MiUser | null;
 
 	@Column('integer', {

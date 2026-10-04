@@ -50,6 +50,7 @@ const exampleNote = reactive<Misskey.entities.Note>({
 	id: '0000000000',
 	createdAt: '2019-04-14T17:30:49.181Z',
 	updatedAt: null,
+		revision: 0,
 	userId: '0000000001',
 	user: $i!,
 	text: i18n.ts._initialTutorial._howToMakeAttachmentsSensitive._exampleNote.note,

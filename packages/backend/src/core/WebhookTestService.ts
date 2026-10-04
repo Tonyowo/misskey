@@ -71,6 +71,7 @@ function generateDummyNote(override?: Partial<MiNote>): MiNote {
 	return {
 		id: 'dummy-note-1',
 		updatedAt: null,
+			revision: 0,
 		replyId: null,
 		reply: null,
 		renoteId: null,
@@ -369,6 +370,7 @@ export class WebhookTestService {
 			id: note.id,
 			createdAt: new Date().toISOString(),
 			updatedAt: note.updatedAt?.toISOString() ?? null,
+			revision: note.revision ?? 0,
 			deletedAt: null,
 			text: note.text,
 			cw: note.cw,

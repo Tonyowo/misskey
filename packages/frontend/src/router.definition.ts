@@ -524,8 +524,13 @@ export const ROUTE_DEF = [{
 		component: page(() => import('@/pages/_empty_.vue')),
 	}],
 }, {
+	path: '/my/messages',
+	component: page(() => import('@/pages/messages.vue')),
+	loginRequired: true,
+}, {
 	path: '/my/notifications',
 	component: page(() => import('@/pages/notifications.vue')),
+	query: { initialTab: 'tab' },
 	loginRequired: true,
 }, {
 	path: '/my/favorites',

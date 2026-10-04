@@ -12,7 +12,7 @@ import { MiDriveFile } from './DriveFile.js';
 import { MiNoteDraft } from './NoteDraft.js';
 
 // misskey-js の notificationTypes と同期すべし
-export type MiNotification = {
+export type MiNotification = { isRead?: boolean } & ({
 	type: 'note';
 	id: string;
 	createdAt: string;
@@ -139,12 +139,16 @@ export type MiNotification = {
 	 */
 	appAccessTokenId: MiAccessToken['id'] | null;
 } | {
+	type: 'abuseReportResolved';
+	id: string;
+	createdAt: string;
+} | {
 	type: 'test';
 	id: string;
 	createdAt: string;
-};
+});
 
-export type MiGroupedNotification = MiNotification | {
+export type MiGroupedNotification = { isRead?: boolean } & (MiNotification | {
 	type: 'reaction:grouped';
 	id: string;
 	createdAt: string;
@@ -159,4 +163,4 @@ export type MiGroupedNotification = MiNotification | {
 	createdAt: string;
 	noteId: MiNote['id'];
 	userIds: string[];
-};
+});

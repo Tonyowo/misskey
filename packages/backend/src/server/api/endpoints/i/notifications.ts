@@ -91,7 +91,8 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 
 			// Mark all as read
 			if (ps.markAsRead) {
-				this.notificationService.readAllNotification(me.id);
+				await this.notificationService.readAllNotification(me.id);
+				for (const notification of notifications) notification.isRead = true;
 			}
 
 			return await this.notificationEntityService.packMany(notifications, me.id);

@@ -37,6 +37,9 @@ export class MiNote {
 	})
 	public updatedAt: Date | null;
 
+	@Column('integer', { default: 0 })
+	public revision: number;
+
 	@Index()
 	@Column({
 		...id(),

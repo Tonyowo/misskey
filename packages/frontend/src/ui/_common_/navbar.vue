@@ -19,8 +19,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 			</button>
 		</div>
 		<div :class="$style.middle">
-			<MkA v-tooltip.noDelay.right="i18n.ts.timeline" :class="$style.item" :activeClass="$style.active" to="/" exact>
-				<i :class="$style.itemIcon" class="ti ti-home ti-fw" style="view-transition-name: navbar-homeIcon;"></i><span :class="$style.itemText">{{ i18n.ts.timeline }}</span>
+			<MkA v-tooltip.noDelay.right="(prefer.s.menu.includes('messages') ? i18n.ts._community.home : i18n.ts.timeline)" :class="$style.item" :activeClass="$style.active" to="/" exact>
+				<i :class="$style.itemIcon" class="ti ti-home ti-fw" style="view-transition-name: navbar-homeIcon;"></i><span :class="$style.itemText">{{ (prefer.s.menu.includes('messages') ? i18n.ts._community.home : i18n.ts.timeline) }}</span>
 			</MkA>
 			<template v-for="item in prefer.r.menu.value">
 				<div v-if="item === '-'" :class="$style.divider"></div>
@@ -57,7 +57,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 				<i v-if="store.r.realtimeMode.value" class="ti ti-bolt ti-fw"></i>
 				<i v-else class="ti ti-bolt-off ti-fw"></i>
 			</button>
-			<button v-tooltip.noDelay.right="i18n.ts.note" class="_button" :class="[$style.post]" data-cy-open-post-form @click="() => { os.post(); }">
+			<button v-tooltip.noDelay.right="i18n.ts.note" class="_button" :class="[$style.post]" data-testid="open-post-form" @click="() => { os.post(); }">
 				<i class="ti ti-pencil ti-fw" :class="$style.postIcon"></i><span :class="$style.postText">{{ i18n.ts.note }}</span>
 			</button>
 			<button v-if="$i != null" v-tooltip.noDelay.right="`${i18n.ts.account}: @${$i.username}`" class="_button" :class="[$style.account]" @click="openAccountMenu">

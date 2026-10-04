@@ -6,6 +6,7 @@
 import { onUnmounted, reactive } from 'vue';
 import * as Misskey from 'misskey-js';
 import { EventEmitter } from 'eventemitter3';
+import { createVisibilityAwareInterval } from '@@/js/interval.js';
 import type { Reactive } from 'vue';
 import type { NoteUpdatedEvent } from 'misskey-js/streaming.types.js';
 import { useStream } from '@/stream.js';
@@ -86,7 +87,8 @@ const POLLING_INTERVAL =
 	prefer.s.pollingInterval === 3 ? MIN_POLLING_INTERVAL :
 	MIN_POLLING_INTERVAL;
 
-window.setInterval(() => {
+// documentが非表示の間はポーリングを停止する
+createVisibilityAwareInterval(() => {
 	const ids = [...pollingQueue.entries()]
 		.filter(([k, v]) => Date.now() - v.lastAddedAt < 1000 * 60 * 5) // 追加されてから一定時間経過したものは省く
 		.map(([k, v]) => k)
@@ -94,7 +96,6 @@ window.setInterval(() => {
 		.slice(0, CAPTURE_MAX);
 
 	if (ids.length === 0) return;
-	if (window.document.hidden) return;
 
 	// まとめてリクエストするのではなく、個別にHTTPリクエスト投げてCDNにキャッシュさせた方がサーバーの負荷低減には良いかもしれない？
 	misskeyApi('notes/show-partial-bulk', {
@@ -174,13 +175,13 @@ function realtimeSubscribe(props: {
 			}
 
 			case 'updated': {
+				globalEvents.emit('noteUpdated', body);
 				Object.assign(note, body);
 				$note.reactions = normalizeReactions(body.reactions);
 				$note.reactionCount = body.reactionCount;
 				$note.reactionEmojis = body.reactionEmojis;
 				$note.myReaction = body.myReaction ?? null;
 				$note.pollChoices = body.poll?.choices ?? [];
-				globalEvents.emit('noteUpdated', body);
 				break;
 			}
 		}
@@ -223,6 +224,7 @@ export function useNoteCapture(props: {
 	note: Misskey.entities.Note;
 	parentNote: Misskey.entities.Note | null;
 	mock?: boolean;
+	forceCapture?: boolean;
 }): {
 	$note: Reactive<ReactiveNoteData>;
 	subscribe: () => void;
@@ -301,13 +303,17 @@ export function useNoteCapture(props: {
 		$note.pollChoices = choices;
 	}
 
+	let subscribed = false;
+
 	function subscribe() {
+		if (subscribed) return;
+		subscribed = true;
 		if (mock) {
 			// モックモードでは購読しない
 			return;
 		}
 
-		if ($i && store.s.realtimeMode) {
+		if ($i && (store.s.realtimeMode || props.forceCapture || note.hasReplyVisibleContent)) {
 			realtimeSubscribe({
 				note,
 				$note,

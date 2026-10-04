@@ -244,6 +244,7 @@ export function note(id = 'somenoteid'): entities.Note {
 		id,
 		createdAt: '2016-12-28T22:49:51.000Z',
 		updatedAt: null,
+		revision: 0,
 		deletedAt: null,
 		text: 'some note',
 		cw: null,

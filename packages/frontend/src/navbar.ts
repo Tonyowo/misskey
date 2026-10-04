@@ -26,6 +26,16 @@ export const navbarItemDef = reactive<{
 		action?: (ev: PointerEvent) => void;
 	};
 }>({
+	messages: {
+		title: i18n.ts._community.messages, icon: 'ti ti-messages', to: '/my/messages',
+		show: computed(() => $i != null),
+		indicated: computed(() => Boolean($i?.hasUnreadNotification || $i?.hasUnreadChatMessages)),
+	},
+	publish: { title: i18n.ts._community.publish, icon: 'ti ti-pencil', action: () => { os.post(); } },
+	profile: {
+		title: i18n.ts._community.myProfile, icon: 'ti ti-user',
+		to: $i ? `/@${$i.username}` : '/settings',
+	},
 	notifications: {
 		title: i18n.ts.notifications,
 		icon: 'ti ti-bell',
@@ -55,7 +65,7 @@ export const navbarItemDef = reactive<{
 		to: '/my/follow-requests',
 	},
 	explore: {
-		title: i18n.ts.explore,
+		title: i18n.ts._community.discover,
 		icon: 'ti ti-hash',
 		to: '/explore',
 	},
@@ -186,12 +196,6 @@ export const navbarItemDef = reactive<{
 		action: (ev) => {
 			window.location.reload();
 		},
-	},
-	profile: {
-		title: i18n.ts.profile,
-		icon: 'ti ti-user',
-		show: computed(() => $i != null),
-		to: `/@${$i?.username}`,
 	},
 	cacheClear: {
 		title: i18n.ts.clearCache,

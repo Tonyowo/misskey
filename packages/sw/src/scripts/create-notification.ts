@@ -249,6 +249,8 @@ async function composeNotification(data: PushNotificationDataMap[keyof PushNotif
 						data,
 					}];
 
+				case 'abuseReportResolved':
+					return [i18n.ts._notification.abuseReportResolved, { badge: iconUrl('bell') }];
 				case 'test':
 					return [i18n.ts._notification.testNotification, {
 						body: i18n.ts._notification.notificationWillBeDisplayedLikeThis,

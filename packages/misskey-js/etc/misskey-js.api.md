@@ -433,6 +433,9 @@ type AdminSystemWebhookUpdateRequest = operations['admin___system-webhook___upda
 type AdminSystemWebhookUpdateResponse = operations['admin___system-webhook___update']['responses']['200']['content']['application/json'];
 
 // @public (undocumented)
+type AdminUnsetMfaRequest = operations['admin___unset-mfa']['requestBody']['content']['application/json'];
+
+// @public (undocumented)
 type AdminUnsetUserAvatarRequest = operations['admin___unset-user-avatar']['requestBody']['content']['application/json'];
 
 // @public (undocumented)
@@ -668,6 +671,10 @@ export type Channels = {
             urlUploadFinished: (payload: {
                 marker: string;
                 file: DriveFile;
+            }) => void;
+            notificationsRead: (payload: {
+                notificationIds: string[];
+                unreadCount: number;
             }) => void;
             readAllNotifications: () => void;
             unreadNotification: (payload: Notification_2) => void;
@@ -1807,6 +1814,7 @@ declare namespace entities {
         AdminSystemWebhookTestRequest,
         AdminSystemWebhookUpdateRequest,
         AdminSystemWebhookUpdateResponse,
+        AdminUnsetMfaRequest,
         AdminUnsetUserAvatarRequest,
         AdminUnsetUserBannerRequest,
         AdminUnsuspendUserRequest,
@@ -2233,6 +2241,8 @@ declare namespace entities {
         NotesFeaturedResponse,
         NotesGlobalTimelineRequest,
         NotesGlobalTimelineResponse,
+        NotesHistoryRequest,
+        NotesHistoryResponse,
         NotesHybridTimelineRequest,
         NotesHybridTimelineResponse,
         NotesLocalTimelineRequest,
@@ -2250,6 +2260,8 @@ declare namespace entities {
         NotesRenotesResponse,
         NotesRepliesRequest,
         NotesRepliesResponse,
+        NotesRepliesThreadRequest,
+        NotesRepliesThreadResponse,
         NotesSearchRequest,
         NotesSearchResponse,
         NotesSearchByTagRequest,
@@ -2272,6 +2284,8 @@ declare namespace entities {
         NotesUserListTimelineRequest,
         NotesUserListTimelineResponse,
         NotificationsCreateRequest,
+        NotificationsReadRequest,
+        NotificationsReadResponse,
         PagePushRequest,
         PagesCreateRequest,
         PagesCreateResponse,
@@ -3070,6 +3084,8 @@ type MiauthGenTokenRequest = operations['miauth___gen-token']['requestBody']['co
 // @public (undocumented)
 type MiauthGenTokenResponse = operations['miauth___gen-token']['responses']['200']['content']['application/json'];
 
+// Warning: (ae-forgotten-export) The symbol "ModerationLogPayloads" needs to be exported by the entry point index.d.ts
+//
 // @public (undocumented)
 type ModerationLog = {
     id: ID;
@@ -3077,165 +3093,14 @@ type ModerationLog = {
     userId: User['id'];
     user: UserDetailedNotMe;
 } & ({
-    type: 'updateServerSettings';
-    info: ModerationLogPayloads['updateServerSettings'];
-} | {
-    type: 'suspend';
-    info: ModerationLogPayloads['suspend'];
-} | {
-    type: 'unsuspend';
-    info: ModerationLogPayloads['unsuspend'];
-} | {
-    type: 'updateUserNote';
-    info: ModerationLogPayloads['updateUserNote'];
-} | {
-    type: 'addCustomEmoji';
-    info: ModerationLogPayloads['addCustomEmoji'];
-} | {
-    type: 'updateCustomEmoji';
-    info: ModerationLogPayloads['updateCustomEmoji'];
-} | {
-    type: 'deleteCustomEmoji';
-    info: ModerationLogPayloads['deleteCustomEmoji'];
-} | {
-    type: 'assignRole';
-    info: ModerationLogPayloads['assignRole'];
-} | {
-    type: 'unassignRole';
-    info: ModerationLogPayloads['unassignRole'];
-} | {
-    type: 'createRole';
-    info: ModerationLogPayloads['createRole'];
-} | {
-    type: 'updateRole';
-    info: ModerationLogPayloads['updateRole'];
-} | {
-    type: 'deleteRole';
-    info: ModerationLogPayloads['deleteRole'];
-} | {
-    type: 'clearQueue';
-    info: ModerationLogPayloads['clearQueue'];
-} | {
-    type: 'promoteQueue';
-    info: ModerationLogPayloads['promoteQueue'];
-} | {
-    type: 'deleteDriveFile';
-    info: ModerationLogPayloads['deleteDriveFile'];
-} | {
-    type: 'deleteNote';
-    info: ModerationLogPayloads['deleteNote'];
-} | {
-    type: 'createGlobalAnnouncement';
-    info: ModerationLogPayloads['createGlobalAnnouncement'];
-} | {
-    type: 'createUserAnnouncement';
-    info: ModerationLogPayloads['createUserAnnouncement'];
-} | {
-    type: 'updateGlobalAnnouncement';
-    info: ModerationLogPayloads['updateGlobalAnnouncement'];
-} | {
-    type: 'updateUserAnnouncement';
-    info: ModerationLogPayloads['updateUserAnnouncement'];
-} | {
-    type: 'deleteGlobalAnnouncement';
-    info: ModerationLogPayloads['deleteGlobalAnnouncement'];
-} | {
-    type: 'deleteUserAnnouncement';
-    info: ModerationLogPayloads['deleteUserAnnouncement'];
-} | {
-    type: 'resetPassword';
-    info: ModerationLogPayloads['resetPassword'];
-} | {
-    type: 'suspendRemoteInstance';
-    info: ModerationLogPayloads['suspendRemoteInstance'];
-} | {
-    type: 'unsuspendRemoteInstance';
-    info: ModerationLogPayloads['unsuspendRemoteInstance'];
-} | {
-    type: 'updateRemoteInstanceNote';
-    info: ModerationLogPayloads['updateRemoteInstanceNote'];
-} | {
-    type: 'markSensitiveDriveFile';
-    info: ModerationLogPayloads['markSensitiveDriveFile'];
-} | {
-    type: 'unmarkSensitiveDriveFile';
-    info: ModerationLogPayloads['unmarkSensitiveDriveFile'];
-} | {
-    type: 'createInvitation';
-    info: ModerationLogPayloads['createInvitation'];
-} | {
-    type: 'createAd';
-    info: ModerationLogPayloads['createAd'];
-} | {
-    type: 'updateAd';
-    info: ModerationLogPayloads['updateAd'];
-} | {
-    type: 'deleteAd';
-    info: ModerationLogPayloads['deleteAd'];
-} | {
-    type: 'createAvatarDecoration';
-    info: ModerationLogPayloads['createAvatarDecoration'];
-} | {
-    type: 'updateAvatarDecoration';
-    info: ModerationLogPayloads['updateAvatarDecoration'];
-} | {
-    type: 'deleteAvatarDecoration';
-    info: ModerationLogPayloads['deleteAvatarDecoration'];
-} | {
-    type: 'resolveAbuseReport';
-    info: ModerationLogPayloads['resolveAbuseReport'];
-} | {
-    type: 'forwardAbuseReport';
-    info: ModerationLogPayloads['forwardAbuseReport'];
-} | {
-    type: 'updateAbuseReportNote';
-    info: ModerationLogPayloads['updateAbuseReportNote'];
-} | {
-    type: 'unsetUserAvatar';
-    info: ModerationLogPayloads['unsetUserAvatar'];
-} | {
-    type: 'unsetUserBanner';
-    info: ModerationLogPayloads['unsetUserBanner'];
-} | {
-    type: 'createSystemWebhook';
-    info: ModerationLogPayloads['createSystemWebhook'];
-} | {
-    type: 'updateSystemWebhook';
-    info: ModerationLogPayloads['updateSystemWebhook'];
-} | {
-    type: 'deleteSystemWebhook';
-    info: ModerationLogPayloads['deleteSystemWebhook'];
-} | {
-    type: 'createAbuseReportNotificationRecipient';
-    info: ModerationLogPayloads['createAbuseReportNotificationRecipient'];
-} | {
-    type: 'updateAbuseReportNotificationRecipient';
-    info: ModerationLogPayloads['updateAbuseReportNotificationRecipient'];
-} | {
-    type: 'deleteAbuseReportNotificationRecipient';
-    info: ModerationLogPayloads['deleteAbuseReportNotificationRecipient'];
-} | {
-    type: 'deleteAccount';
-    info: ModerationLogPayloads['deleteAccount'];
-} | {
-    type: 'deletePage';
-    info: ModerationLogPayloads['deletePage'];
-} | {
-    type: 'deleteFlash';
-    info: ModerationLogPayloads['deleteFlash'];
-} | {
-    type: 'deleteGalleryPost';
-    info: ModerationLogPayloads['deleteGalleryPost'];
-} | {
-    type: 'deleteChatRoom';
-    info: ModerationLogPayloads['deleteChatRoom'];
-} | {
-    type: 'updateProxyAccountDescription';
-    info: ModerationLogPayloads['updateProxyAccountDescription'];
-});
+    [K in keyof ModerationLogPayloads]: {
+        type: K;
+        info: ModerationLogPayloads[K];
+    };
+}[keyof ModerationLogPayloads]);
 
 // @public (undocumented)
-export const moderationLogTypes: readonly ["updateServerSettings", "suspend", "unsuspend", "updateUserNote", "addCustomEmoji", "updateCustomEmoji", "deleteCustomEmoji", "assignRole", "unassignRole", "createRole", "updateRole", "deleteRole", "clearQueue", "promoteQueue", "deleteDriveFile", "deleteNote", "createGlobalAnnouncement", "createUserAnnouncement", "updateGlobalAnnouncement", "updateUserAnnouncement", "deleteGlobalAnnouncement", "deleteUserAnnouncement", "resetPassword", "suspendRemoteInstance", "unsuspendRemoteInstance", "updateRemoteInstanceNote", "markSensitiveDriveFile", "unmarkSensitiveDriveFile", "resolveAbuseReport", "forwardAbuseReport", "updateAbuseReportNote", "createInvitation", "createAd", "updateAd", "deleteAd", "createAvatarDecoration", "updateAvatarDecoration", "deleteAvatarDecoration", "unsetUserAvatar", "unsetUserBanner", "createSystemWebhook", "updateSystemWebhook", "deleteSystemWebhook", "createAbuseReportNotificationRecipient", "updateAbuseReportNotificationRecipient", "deleteAbuseReportNotificationRecipient", "deleteAccount", "deletePage", "deleteFlash", "deleteGalleryPost", "deleteChatRoom", "updateProxyAccountDescription"];
+export const moderationLogTypes: readonly ["updateServerSettings", "suspend", "unsuspend", "updateUserNote", "addCustomEmoji", "updateCustomEmoji", "deleteCustomEmoji", "assignRole", "unassignRole", "createRole", "updateRole", "deleteRole", "clearQueue", "promoteQueue", "deleteDriveFile", "deleteNote", "createGlobalAnnouncement", "createUserAnnouncement", "updateGlobalAnnouncement", "updateUserAnnouncement", "deleteGlobalAnnouncement", "deleteUserAnnouncement", "resetPassword", "suspendRemoteInstance", "unsuspendRemoteInstance", "updateRemoteInstanceNote", "markSensitiveDriveFile", "unmarkSensitiveDriveFile", "resolveAbuseReport", "forwardAbuseReport", "updateAbuseReportNote", "createInvitation", "createAd", "updateAd", "deleteAd", "createAvatarDecoration", "updateAvatarDecoration", "deleteAvatarDecoration", "unsetMfa", "unsetUserAvatar", "unsetUserBanner", "createSystemWebhook", "updateSystemWebhook", "deleteSystemWebhook", "createAbuseReportNotificationRecipient", "updateAbuseReportNotificationRecipient", "deleteAbuseReportNotificationRecipient", "deleteAccount", "deletePage", "deleteFlash", "deleteGalleryPost", "deleteChatRoom", "updateProxyAccountDescription"];
 
 // @public (undocumented)
 type MuteCreateRequest = operations['mute___create']['requestBody']['content']['application/json'];
@@ -3353,6 +3218,12 @@ type NotesGlobalTimelineRequest = operations['notes___global-timeline']['request
 type NotesGlobalTimelineResponse = operations['notes___global-timeline']['responses']['200']['content']['application/json'];
 
 // @public (undocumented)
+type NotesHistoryRequest = operations['notes___history']['requestBody']['content']['application/json'];
+
+// @public (undocumented)
+type NotesHistoryResponse = operations['notes___history']['responses']['200']['content']['application/json'];
+
+// @public (undocumented)
 type NotesHybridTimelineRequest = operations['notes___hybrid-timeline']['requestBody']['content']['application/json'];
 
 // @public (undocumented)
@@ -3402,6 +3273,12 @@ type NotesRepliesRequest = operations['notes___replies']['requestBody']['content
 
 // @public (undocumented)
 type NotesRepliesResponse = operations['notes___replies']['responses']['200']['content']['application/json'];
+
+// @public (undocumented)
+type NotesRepliesThreadRequest = operations['notes___replies-thread']['requestBody']['content']['application/json'];
+
+// @public (undocumented)
+type NotesRepliesThreadResponse = operations['notes___replies-thread']['responses']['200']['content']['application/json'];
 
 // @public (undocumented)
 type NotesRequest = operations['notes']['requestBody']['content']['application/json'];
@@ -3482,7 +3359,13 @@ type Notification_2 = components['schemas']['Notification'];
 type NotificationsCreateRequest = operations['notifications___create']['requestBody']['content']['application/json'];
 
 // @public (undocumented)
-export const notificationTypes: readonly ["note", "follow", "mention", "reply", "renote", "quote", "reaction", "pollEnded", "scheduledNotePosted", "scheduledNotePostFailed", "receiveFollowRequest", "followRequestAccepted", "app", "roleAssigned", "chatRoomInvitationReceived", "achievementEarned", "exportCompleted", "test", "login", "createToken"];
+type NotificationsReadRequest = operations['notifications___read']['requestBody']['content']['application/json'];
+
+// @public (undocumented)
+type NotificationsReadResponse = operations['notifications___read']['responses']['200']['content']['application/json'];
+
+// @public (undocumented)
+export const notificationTypes: readonly ["note", "follow", "mention", "reply", "renote", "quote", "reaction", "pollEnded", "scheduledNotePosted", "scheduledNotePostFailed", "receiveFollowRequest", "followRequestAccepted", "app", "roleAssigned", "chatRoomInvitationReceived", "achievementEarned", "exportCompleted", "abuseReportResolved", "test", "login", "createToken"];
 
 // @public (undocumented)
 export function nyaize(text: string): string;
@@ -3545,7 +3428,7 @@ type PartialRolePolicyOverride = Partial<{
 }>;
 
 // @public (undocumented)
-export const permissions: readonly ["read:account", "write:account", "read:blocks", "write:blocks", "read:drive", "write:drive", "read:favorites", "write:favorites", "read:following", "write:following", "read:messaging", "write:messaging", "read:mutes", "write:mutes", "write:notes", "read:notifications", "write:notifications", "read:reactions", "write:reactions", "write:votes", "read:pages", "write:pages", "write:page-likes", "read:page-likes", "read:user-groups", "write:user-groups", "read:channels", "write:channels", "read:gallery", "write:gallery", "read:gallery-likes", "write:gallery-likes", "read:flash", "write:flash", "read:flash-likes", "write:flash-likes", "read:admin:abuse-user-reports", "write:admin:delete-account", "write:admin:delete-all-files-of-a-user", "read:admin:index-stats", "read:admin:table-stats", "read:admin:user-ips", "read:admin:meta", "write:admin:reset-password", "write:admin:resolve-abuse-user-report", "write:admin:send-email", "read:admin:server-info", "read:admin:show-moderation-log", "read:admin:show-user", "write:admin:suspend-user", "write:admin:unset-user-avatar", "write:admin:unset-user-banner", "write:admin:unsuspend-user", "write:admin:meta", "write:admin:user-note", "write:admin:roles", "read:admin:roles", "write:admin:relays", "read:admin:relays", "write:admin:invite-codes", "read:admin:invite-codes", "write:admin:announcements", "read:admin:announcements", "write:admin:avatar-decorations", "read:admin:avatar-decorations", "write:admin:federation", "write:admin:account", "read:admin:account", "write:admin:emoji", "read:admin:emoji", "write:admin:queue", "read:admin:queue", "write:admin:promo", "write:admin:drive", "read:admin:drive", "write:admin:ad", "read:admin:ad", "write:invite-codes", "read:invite-codes", "write:clip-favorite", "read:clip-favorite", "read:federation", "write:report-abuse", "write:chat", "read:chat"];
+export const permissions: readonly ["read:account", "write:account", "read:blocks", "write:blocks", "read:drive", "write:drive", "read:favorites", "write:favorites", "read:following", "write:following", "read:messaging", "write:messaging", "read:mutes", "write:mutes", "write:notes", "read:notifications", "write:notifications", "read:reactions", "write:reactions", "write:votes", "read:pages", "write:pages", "write:page-likes", "read:page-likes", "read:user-groups", "write:user-groups", "read:channels", "write:channels", "read:gallery", "write:gallery", "read:gallery-likes", "write:gallery-likes", "read:flash", "write:flash", "read:flash-likes", "write:flash-likes", "read:admin:abuse-user-reports", "write:admin:delete-account", "write:admin:delete-all-files-of-a-user", "read:admin:index-stats", "read:admin:table-stats", "read:admin:user-ips", "read:admin:meta", "write:admin:reset-password", "write:admin:resolve-abuse-user-report", "write:admin:send-email", "read:admin:server-info", "read:admin:show-moderation-log", "read:admin:show-user", "write:admin:suspend-user", "write:admin:unset-mfa", "write:admin:unset-user-avatar", "write:admin:unset-user-banner", "write:admin:unsuspend-user", "write:admin:meta", "write:admin:user-note", "write:admin:roles", "read:admin:roles", "write:admin:relays", "read:admin:relays", "write:admin:invite-codes", "read:admin:invite-codes", "write:admin:announcements", "read:admin:announcements", "write:admin:avatar-decorations", "read:admin:avatar-decorations", "write:admin:federation", "write:admin:account", "read:admin:account", "write:admin:emoji", "read:admin:emoji", "write:admin:queue", "read:admin:queue", "write:admin:promo", "write:admin:drive", "read:admin:drive", "write:admin:ad", "read:admin:ad", "write:invite-codes", "read:invite-codes", "write:clip-favorite", "read:clip-favorite", "read:federation", "write:report-abuse", "write:chat", "read:chat"];
 
 // @public (undocumented)
 type PingResponse = operations['ping']['responses']['200']['content']['application/json'];
@@ -4120,10 +4003,9 @@ type VerifyEmailRequest = operations['verify-email']['requestBody']['content']['
 
 // Warnings were encountered during analysis:
 //
-// src/entities.ts:60:2 - (ae-forgotten-export) The symbol "ModerationLogPayloads" needs to be exported by the entry point index.d.ts
 // src/streaming.ts:67:3 - (ae-forgotten-export) The symbol "ReconnectingWebSocket" needs to be exported by the entry point index.d.ts
-// src/streaming.types.ts:226:4 - (ae-forgotten-export) The symbol "ReversiUpdateKey" needs to be exported by the entry point index.d.ts
-// src/streaming.types.ts:241:4 - (ae-forgotten-export) The symbol "ReversiUpdateSettings" needs to be exported by the entry point index.d.ts
+// src/streaming.types.ts:227:4 - (ae-forgotten-export) The symbol "ReversiUpdateKey" needs to be exported by the entry point index.d.ts
+// src/streaming.types.ts:242:4 - (ae-forgotten-export) The symbol "ReversiUpdateSettings" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

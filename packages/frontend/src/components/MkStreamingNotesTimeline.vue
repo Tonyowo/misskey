@@ -9,7 +9,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 	<MkError v-else-if="paginator.error.value" @retry="paginator.init()"/>
 
-	<div v-else-if="paginator.items.value.length === 0" key="_empty_">
+	<div v-else-if="paginator.items.value.length === 0 && paginator.queuedAheadItemsCount.value === 0" key="_empty_">
 		<slot name="empty"><MkResult type="empty" :text="i18n.ts.noNotes"/></slot>
 	</div>
 
@@ -59,8 +59,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 import { computed, watch, onUnmounted, provide, useTemplateRef, TransitionGroup, onMounted, shallowRef, ref, markRaw } from 'vue';
 import * as Misskey from 'misskey-js';
 import { useInterval } from '@@/js/use-interval.js';
-import { useDocumentVisibility } from '@@/js/use-document-visibility.js';
-import { getScrollContainer, scrollToTop } from '@@/js/scroll.js';
+import { scrollToTop } from '@@/js/scroll.js';
 import type { BasicTimelineType } from '@/timelines.js';
 import type { SoundStore } from '@/preferences/def.js';
 import type { IPaginator, MisskeyEntity } from '@/utility/paginator.js';
@@ -195,50 +194,7 @@ onMounted(() => {
 	}
 });
 
-function isTop() {
-	if (scrollContainer == null) return true;
-	if (rootEl.value == null) return true;
-	const scrollTop = scrollContainer.scrollTop;
-	const tlTop = rootEl.value.offsetTop - scrollContainer.offsetTop;
-	return scrollTop <= tlTop;
-}
-
-let scrollContainer: HTMLElement | null = null;
-
-function onScrollContainerScroll() {
-	if (isTop()) {
-		paginator.releaseQueue();
-	}
-}
-
 const rootEl = useTemplateRef('rootEl');
-watch(rootEl, (el) => {
-	if (el && scrollContainer == null) {
-		scrollContainer = getScrollContainer(el);
-		if (scrollContainer == null) return;
-		scrollContainer.addEventListener('scroll', onScrollContainerScroll, { passive: true }); // ほんとはscrollendにしたいけどiosが非対応
-	}
-}, { immediate: true });
-
-onUnmounted(() => {
-	if (scrollContainer) {
-		scrollContainer.removeEventListener('scroll', onScrollContainerScroll);
-	}
-});
-
-const visibility = useDocumentVisibility();
-let isPausingUpdate = false;
-
-watch(visibility, () => {
-	if (visibility.value === 'hidden') {
-		isPausingUpdate = true;
-	} else { // 'visible'
-		isPausingUpdate = false;
-		if (isTop()) {
-			releaseQueue();
-		}
-	}
-});
 
 let adInsertionCounter = 0;
 
@@ -253,7 +209,7 @@ if (!store.s.realtimeMode) {
 	// TODO: 先頭のノートの作成日時が1日以上前であれば流速が遅いTLと見做してインターバルを通常より延ばす
 	useInterval(async () => {
 		paginator.fetchNewer({
-			toQueue: !isTop() || isPausingUpdate,
+			toQueue: true,
 		});
 	}, POLLING_INTERVAL, {
 		immediate: false,
@@ -262,7 +218,7 @@ if (!store.s.realtimeMode) {
 
 	useGlobalEvent('notePosted', (note) => {
 		paginator.fetchNewer({
-			toQueue: !isTop() || isPausingUpdate,
+			toQueue: true,
 		});
 	});
 }
@@ -289,11 +245,7 @@ function prepend(note: Misskey.entities.Note & MisskeyEntity) {
 		note._shouldInsertAd_ = true;
 	}
 
-	if (isTop() && !isPausingUpdate) {
-		paginator.prepend(note);
-	} else {
-		paginator.enqueue(note);
-	}
+	paginator.enqueue(note);
 
 	if (props.sound) {
 		if (props.customSound) {

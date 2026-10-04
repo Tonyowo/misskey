@@ -85,6 +85,9 @@ import { useLongPressGridSort } from '@/composables/use-long-press-grid-sort.js'
 import MkDraggable from '@/components/MkDraggable.vue';
 import * as os from '@/os.js';
 import { i18n } from '@/i18n.js';
+import { getUploadName } from '@/composables/use-uploader.js';
+import { isPreviewable, getType } from '@/utility/lightbox.js';
+import type { Content } from '@/components/MkLightbox.item.vue';
 
 const props = withDefaults(defineProps<{
 	items: UploaderItem[];
@@ -120,33 +123,27 @@ function onContextmenu(item: UploaderItem, ev: PointerEvent) {
 	emit('showMenuViaContextmenu', item, ev);
 }
 
-function isPreviewableImage(item: UploaderItem): item is UploaderItem & { thumbnail: string } {
-	return item.file.type.startsWith('image/') && item.thumbnail != null;
-}
+async function onActivate(item: UploaderItem, ev: MouseEvent | KeyboardEvent) {
+	if (shouldSuppressActivation()) return;
+	if (isPreviewable(item.file.type)) {
+		const contents = props.items
+			.filter(item => isPreviewable(item.file.type))
+			.map<Content>(item => ({
+				id: item.id,
+				type: getType(item.file.type),
+				url: item.objectUrl,
+				thumbnailUrl: item.thumbnail,
+				filename: getUploadName(item),
+			}));
 
-async function openPreview(item: UploaderItem) {
-	if (!isPreviewableImage(item)) return;
-
-	const { dispose } = await os.popupAsyncWithDialog(import('@/components/MkImgPreviewDialog.vue').then(x => x.default), {
-		src: item.thumbnail,
-		name: item.name,
-		alt: item.caption ?? item.name,
-	}, {
-		closed: () => dispose(),
-	});
-}
-
-function onActivate(item: UploaderItem, ev: MouseEvent | KeyboardEvent) {
-	if (shouldSuppressActivation()) {
-		return;
-	}
-
-	if (isPreviewableImage(item)) {
-		openPreview(item);
-		return;
-	}
-
-	if (ev instanceof KeyboardEvent) {
+		const { dispose } = await os.popupAsyncWithDialog(import('@/components/MkLightbox.vue').then(x => x.default), {
+		returnFocusTo: window.document.activeElement instanceof HTMLElement ? window.document.activeElement : null,
+			defaultIndex: contents.findIndex(content => content.id === item.id),
+			contents: contents,
+		}, {
+			closed: () => dispose(),
+		});
+	} else if (ev instanceof KeyboardEvent) {
 		emit('showMenu', item, ev);
 	}
 }

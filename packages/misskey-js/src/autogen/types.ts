@@ -616,7 +616,7 @@ export type paths = {
          * admin/queue/stats
          * @description No description provided.
          *
-         *     **Credential required**: *Yes* / **Permission**: *read:admin:emoji*
+         *     **Credential required**: *Yes* / **Permission**: *read:admin:queue*
          */
         post: operations['admin___queue___stats'];
     };
@@ -859,6 +859,15 @@ export type paths = {
          *     **Credential required**: *Yes* / **Permission**: *write:admin:system-webhook*
          */
         post: operations['admin___system-webhook___update'];
+    };
+    '/admin/unset-mfa': {
+        /**
+         * admin/unset-mfa
+         * @description No description provided.
+         *
+         *     **Credential required**: *Yes* / **Permission**: *write:admin:unset-mfa*
+         */
+        post: operations['admin___unset-mfa'];
     };
     '/admin/unset-user-avatar': {
         /**
@@ -2226,7 +2235,7 @@ export type paths = {
          * federation/update-remote-user
          * @description No description provided.
          *
-         *     **Credential required**: *No*
+         *     **Credential required**: *Yes* / **Permission**: *read:account*
          */
         post: operations['federation___update-remote-user'];
     };
@@ -3036,10 +3045,9 @@ export type paths = {
     '/i/revoke-token': {
         /**
          * i/revoke-token
-         * @description No description provided.
+         * @description Revoke an access token of the authenticated user. Requires credential. When called with an access token (third-party app), only the token currently in use can be revoked.
          *
-         *     **Internal Endpoint**: This endpoint is an API for the misskey mainframe and is not intended for use by third parties.
-         *     **Credential required**: *Yes*
+         *     **Credential required**: *No*
          */
         post: operations['i___revoke-token'];
     };
@@ -3362,6 +3370,15 @@ export type paths = {
          */
         post: operations['notes___global-timeline'];
     };
+    '/notes/history': {
+        /**
+         * notes/history
+         * @description No description provided.
+         *
+         *     **Credential required**: *No*
+         */
+        post: operations['notes___history'];
+    };
     '/notes/hybrid-timeline': {
         /**
          * notes/hybrid-timeline
@@ -3451,6 +3468,15 @@ export type paths = {
          *     **Credential required**: *No*
          */
         post: operations['notes___replies'];
+    };
+    '/notes/replies-thread': {
+        /**
+         * notes/replies-thread
+         * @description No description provided.
+         *
+         *     **Credential required**: *No*
+         */
+        post: operations['notes___replies-thread'];
     };
     '/notes/search': {
         /**
@@ -3586,6 +3612,15 @@ export type paths = {
          *     **Credential required**: *Yes* / **Permission**: *write:notifications*
          */
         post: operations['notifications___mark-all-as-read'];
+    };
+    '/notifications/read': {
+        /**
+         * notifications/read
+         * @description No description provided.
+         *
+         *     **Credential required**: *Yes* / **Permission**: *write:notifications*
+         */
+        post: operations['notifications___read'];
     };
     '/notifications/test-notification': {
         /**
@@ -4564,6 +4599,15 @@ export type components = {
                     /** Format: misskey:id */
                     userListId: string;
                 };
+                abuseReportResolved?: {
+                    /** @enum {string} */
+                    type: 'all' | 'following' | 'follower' | 'mutualFollow' | 'followingOrFollower' | 'never';
+                } | {
+                    /** @enum {string} */
+                    type: 'list';
+                    /** Format: misskey:id */
+                    userListId: string;
+                };
                 login?: {
                     /** @enum {string} */
                     type: 'all' | 'following' | 'follower' | 'mutualFollow' | 'followingOrFollower' | 'never';
@@ -4694,6 +4738,7 @@ export type components = {
             id: string;
             /** Format: date-time */
             createdAt: string;
+            revision: number;
             /** Format: date-time */
             updatedAt: string | null;
             /** Format: date-time */
@@ -4848,6 +4893,7 @@ export type components = {
             noteId: string;
         };
         Notification: {
+            isRead: boolean;
             /** Format: id */
             id: string;
             /** Format: date-time */
@@ -4859,6 +4905,7 @@ export type components = {
             userId: string;
             note: components['schemas']['Note'];
         } | {
+            isRead: boolean;
             /** Format: id */
             id: string;
             /** Format: date-time */
@@ -4870,6 +4917,7 @@ export type components = {
             userId: string;
             note: components['schemas']['Note'];
         } | {
+            isRead: boolean;
             /** Format: id */
             id: string;
             /** Format: date-time */
@@ -4881,6 +4929,7 @@ export type components = {
             userId: string;
             note: components['schemas']['Note'];
         } | {
+            isRead: boolean;
             /** Format: id */
             id: string;
             /** Format: date-time */
@@ -4892,6 +4941,7 @@ export type components = {
             userId: string;
             note: components['schemas']['Note'];
         } | {
+            isRead: boolean;
             /** Format: id */
             id: string;
             /** Format: date-time */
@@ -4903,6 +4953,7 @@ export type components = {
             userId: string;
             note: components['schemas']['Note'];
         } | {
+            isRead: boolean;
             /** Format: id */
             id: string;
             /** Format: date-time */
@@ -4915,6 +4966,7 @@ export type components = {
             note: components['schemas']['Note'];
             reaction: string;
         } | {
+            isRead: boolean;
             /** Format: id */
             id: string;
             /** Format: date-time */
@@ -4926,6 +4978,7 @@ export type components = {
             userId: string;
             note: components['schemas']['Note'];
         } | {
+            isRead: boolean;
             /** Format: id */
             id: string;
             /** Format: date-time */
@@ -4934,6 +4987,7 @@ export type components = {
             type: 'scheduledNotePosted';
             note: components['schemas']['Note'];
         } | {
+            isRead: boolean;
             /** Format: id */
             id: string;
             /** Format: date-time */
@@ -4942,6 +4996,7 @@ export type components = {
             type: 'scheduledNotePostFailed';
             noteDraft: components['schemas']['NoteDraft'];
         } | {
+            isRead: boolean;
             /** Format: id */
             id: string;
             /** Format: date-time */
@@ -4952,6 +5007,7 @@ export type components = {
             /** Format: id */
             userId: string;
         } | {
+            isRead: boolean;
             /** Format: id */
             id: string;
             /** Format: date-time */
@@ -4962,6 +5018,7 @@ export type components = {
             /** Format: id */
             userId: string;
         } | {
+            isRead: boolean;
             /** Format: id */
             id: string;
             /** Format: date-time */
@@ -4973,6 +5030,7 @@ export type components = {
             userId: string;
             message: string | null;
         } | {
+            isRead: boolean;
             /** Format: id */
             id: string;
             /** Format: date-time */
@@ -4981,6 +5039,7 @@ export type components = {
             type: 'roleAssigned';
             role: components['schemas']['Role'];
         } | {
+            isRead: boolean;
             /** Format: id */
             id: string;
             /** Format: date-time */
@@ -4989,6 +5048,7 @@ export type components = {
             type: 'chatRoomInvitationReceived';
             invitation: components['schemas']['ChatRoomInvitation'];
         } | {
+            isRead: boolean;
             /** Format: id */
             id: string;
             /** Format: date-time */
@@ -4997,6 +5057,7 @@ export type components = {
             type: 'achievementEarned';
             achievement: components['schemas']['AchievementName'];
         } | {
+            isRead: boolean;
             /** Format: id */
             id: string;
             /** Format: date-time */
@@ -5008,6 +5069,7 @@ export type components = {
             /** Format: id */
             fileId: string;
         } | {
+            isRead: boolean;
             /** Format: id */
             id: string;
             /** Format: date-time */
@@ -5015,6 +5077,7 @@ export type components = {
             /** @enum {string} */
             type: 'login';
         } | {
+            isRead: boolean;
             /** Format: id */
             id: string;
             /** Format: date-time */
@@ -5022,6 +5085,7 @@ export type components = {
             /** @enum {string} */
             type: 'createToken';
         } | {
+            isRead: boolean;
             /** Format: id */
             id: string;
             /** Format: date-time */
@@ -5032,6 +5096,7 @@ export type components = {
             header: string | null;
             icon: string | null;
         } | {
+            isRead: boolean;
             /** Format: id */
             id: string;
             /** Format: date-time */
@@ -5044,6 +5109,7 @@ export type components = {
                 reaction: string;
             }[];
         } | {
+            isRead: boolean;
             /** Format: id */
             id: string;
             /** Format: date-time */
@@ -5053,12 +5119,13 @@ export type components = {
             note: components['schemas']['Note'];
             users: components['schemas']['UserLite'][];
         } | {
+            isRead: boolean;
             /** Format: id */
             id: string;
             /** Format: date-time */
             createdAt: string;
             /** @enum {string} */
-            type: 'test';
+            type: 'test' | 'abuseReportResolved';
         };
         DriveFile: {
             /**
@@ -9869,6 +9936,10 @@ export interface operations {
                         sensitiveMediaDetectionSensitivity: 'medium' | 'low' | 'high' | 'veryLow' | 'veryHigh';
                         setSensitiveFlagAutomatically: boolean;
                         enableSensitiveMediaDetectionForVideos: boolean;
+                        sensitiveMediaDetectionApiUrl: string | null;
+                        sensitiveMediaDetectionApiKey: string | null;
+                        sensitiveMediaDetectionTimeout: number;
+                        sensitiveMediaDetectionMaxImagesPerRequest: number;
                         /** Format: id */
                         proxyAccountId: string;
                         email: string | null;
@@ -9946,6 +10017,7 @@ export interface operations {
                         urlPreviewRequireContentLength: boolean;
                         urlPreviewUserAgent: string | null;
                         urlPreviewSummaryProxyUrl: string | null;
+                        urlPreviewSensitiveList: string[];
                         /** @enum {string} */
                         federation: 'all' | 'specified' | 'none';
                         federationHosts: string[];
@@ -10270,7 +10342,7 @@ export interface operations {
                 'application/json': {
                     /** @enum {string} */
                     queue: 'system' | 'endedPollNotification' | 'postScheduledNote' | 'deliver' | 'inbox' | 'db' | 'relationship' | 'objectStorage' | 'userWebhookDeliver' | 'systemWebhookDeliver';
-                    state: ('active' | 'wait' | 'delayed' | 'completed' | 'failed' | 'paused')[];
+                    state: ('active' | 'wait' | 'delayed' | 'completed' | 'failed')[];
                     search?: string;
                 };
             };
@@ -13019,6 +13091,69 @@ export interface operations {
             };
         };
     };
+    'admin___unset-mfa': {
+        requestBody: {
+            content: {
+                'application/json': {
+                    /** Format: misskey:id */
+                    userId: string;
+                };
+            };
+        };
+        responses: {
+            /** @description OK (without any results) */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+            };
+            /** @description Client error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Authentication error */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Forbidden error */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description I'm Ai */
+            418: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+        };
+    };
     'admin___unset-user-avatar': {
         requestBody: {
             content: {
@@ -13329,6 +13464,10 @@ export interface operations {
                     sensitiveMediaDetectionSensitivity?: 'medium' | 'low' | 'high' | 'veryLow' | 'veryHigh';
                     setSensitiveFlagAutomatically?: boolean;
                     enableSensitiveMediaDetectionForVideos?: boolean;
+                    sensitiveMediaDetectionApiUrl?: string | null;
+                    sensitiveMediaDetectionApiKey?: string | null;
+                    sensitiveMediaDetectionTimeout?: number;
+                    sensitiveMediaDetectionMaxImagesPerRequest?: number;
                     maintainerName?: string | null;
                     maintainerEmail?: string | null;
                     langs?: string[];
@@ -13398,6 +13537,7 @@ export interface operations {
                     urlPreviewRequireContentLength?: boolean;
                     urlPreviewUserAgent?: string | null;
                     urlPreviewSummaryProxyUrl?: string | null;
+                    urlPreviewSensitiveList?: string[] | null;
                     /** @enum {string} */
                     federation?: 'all' | 'none' | 'specified';
                     federationHosts?: string[];
@@ -23789,6 +23929,15 @@ export interface operations {
                     'application/json': components['schemas']['Error'];
                 };
             };
+            /** @description Too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
             /** @description Internal server error */
             500: {
                 headers: {
@@ -24046,6 +24195,15 @@ export interface operations {
             };
             /** @description I'm Ai */
             418: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Too many requests */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -28781,8 +28939,8 @@ export interface operations {
                     untilDate?: number;
                     /** @default true */
                     markAsRead?: boolean;
-                    includeTypes?: ('note' | 'follow' | 'mention' | 'reply' | 'renote' | 'quote' | 'reaction' | 'pollEnded' | 'scheduledNotePosted' | 'scheduledNotePostFailed' | 'receiveFollowRequest' | 'followRequestAccepted' | 'roleAssigned' | 'chatRoomInvitationReceived' | 'achievementEarned' | 'exportCompleted' | 'login' | 'createToken' | 'app' | 'test' | 'pollVote' | 'groupInvited')[];
-                    excludeTypes?: ('note' | 'follow' | 'mention' | 'reply' | 'renote' | 'quote' | 'reaction' | 'pollEnded' | 'scheduledNotePosted' | 'scheduledNotePostFailed' | 'receiveFollowRequest' | 'followRequestAccepted' | 'roleAssigned' | 'chatRoomInvitationReceived' | 'achievementEarned' | 'exportCompleted' | 'login' | 'createToken' | 'app' | 'test' | 'pollVote' | 'groupInvited')[];
+                    includeTypes?: ('note' | 'follow' | 'mention' | 'reply' | 'renote' | 'quote' | 'reaction' | 'pollEnded' | 'scheduledNotePosted' | 'scheduledNotePostFailed' | 'receiveFollowRequest' | 'followRequestAccepted' | 'roleAssigned' | 'chatRoomInvitationReceived' | 'achievementEarned' | 'exportCompleted' | 'login' | 'createToken' | 'app' | 'abuseReportResolved' | 'test' | 'pollVote' | 'groupInvited')[];
+                    excludeTypes?: ('note' | 'follow' | 'mention' | 'reply' | 'renote' | 'quote' | 'reaction' | 'pollEnded' | 'scheduledNotePosted' | 'scheduledNotePostFailed' | 'receiveFollowRequest' | 'followRequestAccepted' | 'roleAssigned' | 'chatRoomInvitationReceived' | 'achievementEarned' | 'exportCompleted' | 'login' | 'createToken' | 'app' | 'abuseReportResolved' | 'test' | 'pollVote' | 'groupInvited')[];
                 };
             };
         };
@@ -28866,8 +29024,8 @@ export interface operations {
                     untilDate?: number;
                     /** @default true */
                     markAsRead?: boolean;
-                    includeTypes?: ('note' | 'follow' | 'mention' | 'reply' | 'renote' | 'quote' | 'reaction' | 'pollEnded' | 'scheduledNotePosted' | 'scheduledNotePostFailed' | 'receiveFollowRequest' | 'followRequestAccepted' | 'roleAssigned' | 'chatRoomInvitationReceived' | 'achievementEarned' | 'exportCompleted' | 'login' | 'createToken' | 'app' | 'test' | 'pollVote' | 'groupInvited')[];
-                    excludeTypes?: ('note' | 'follow' | 'mention' | 'reply' | 'renote' | 'quote' | 'reaction' | 'pollEnded' | 'scheduledNotePosted' | 'scheduledNotePostFailed' | 'receiveFollowRequest' | 'followRequestAccepted' | 'roleAssigned' | 'chatRoomInvitationReceived' | 'achievementEarned' | 'exportCompleted' | 'login' | 'createToken' | 'app' | 'test' | 'pollVote' | 'groupInvited')[];
+                    includeTypes?: ('note' | 'follow' | 'mention' | 'reply' | 'renote' | 'quote' | 'reaction' | 'pollEnded' | 'scheduledNotePosted' | 'scheduledNotePostFailed' | 'receiveFollowRequest' | 'followRequestAccepted' | 'roleAssigned' | 'chatRoomInvitationReceived' | 'achievementEarned' | 'exportCompleted' | 'login' | 'createToken' | 'app' | 'abuseReportResolved' | 'test' | 'pollVote' | 'groupInvited')[];
+                    excludeTypes?: ('note' | 'follow' | 'mention' | 'reply' | 'renote' | 'quote' | 'reaction' | 'pollEnded' | 'scheduledNotePosted' | 'scheduledNotePostFailed' | 'receiveFollowRequest' | 'followRequestAccepted' | 'roleAssigned' | 'chatRoomInvitationReceived' | 'achievementEarned' | 'exportCompleted' | 'login' | 'createToken' | 'app' | 'abuseReportResolved' | 'test' | 'pollVote' | 'groupInvited')[];
                 };
             };
         };
@@ -30214,6 +30372,15 @@ export interface operations {
                             userListId: string;
                         };
                         test?: {
+                            /** @enum {string} */
+                            type: 'all' | 'following' | 'follower' | 'mutualFollow' | 'followingOrFollower' | 'never';
+                        } | {
+                            /** @enum {string} */
+                            type: 'list';
+                            /** Format: misskey:id */
+                            userListId: string;
+                        };
+                        abuseReportResolved?: {
                             /** @enum {string} */
                             type: 'all' | 'following' | 'follower' | 'mutualFollow' | 'followingOrFollower' | 'never';
                         } | {
@@ -32605,6 +32772,92 @@ export interface operations {
             };
         };
     };
+    notes___history: {
+        requestBody: {
+            content: {
+                'application/json': {
+                    /** Format: misskey:id */
+                    noteId: string;
+                    /** Format: misskey:id */
+                    untilId?: string;
+                    /** @default 20 */
+                    limit?: number;
+                };
+            };
+        };
+        responses: {
+            /** @description OK (with results) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': {
+                        /** Format: id */
+                        id: string;
+                        revision: number;
+                        /** Format: date-time */
+                        createdAt: string;
+                        note: components['schemas']['Note'];
+                    }[];
+                };
+            };
+            /** @description Client error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Authentication error */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Forbidden error */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description I'm Ai */
+            418: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+        };
+    };
     'notes___hybrid-timeline': {
         requestBody: {
             content: {
@@ -33321,6 +33574,91 @@ export interface operations {
             };
             /** @description I'm Ai */
             418: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+        };
+    };
+    'notes___replies-thread': {
+        requestBody: {
+            content: {
+                'application/json': {
+                    /** Format: misskey:id */
+                    noteId: string;
+                    /** Format: misskey:id */
+                    untilId?: string;
+                    /** @default 20 */
+                    limit?: number;
+                };
+            };
+        };
+        responses: {
+            /** @description OK (with results) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': {
+                        items: components['schemas']['Note'][];
+                        /** Format: id */
+                        nextCursor: string | null;
+                        hasMore: boolean;
+                        truncated: boolean;
+                    };
+                };
+            };
+            /** @description Client error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Authentication error */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Forbidden error */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description I'm Ai */
+            418: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Too many requests */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -34098,18 +34436,17 @@ export interface operations {
                     /** Format: misskey:id */
                     noteId: string;
                     /**
-                     * @default public
+                     * @default replace
                      * @enum {string}
                      */
+                    updateMode?: 'replace' | 'patch';
+                    expectedRevision?: number;
+                    /** @enum {string} */
                     visibility?: 'public' | 'home' | 'followers' | 'specified';
                     visibleUserIds?: string[];
                     cw?: string | null;
-                    /** @default false */
                     localOnly?: boolean;
-                    /**
-                     * @default null
-                     * @enum {string|null}
-                     */
+                    /** @enum {string|null} */
                     reactionAcceptance?: null | 'likeOnly' | 'likeOnlyForRemote' | 'nonSensitiveOnly' | 'nonSensitiveOnlyForLocalLikeOnlyForRemote';
                     /** Format: misskey:id */
                     replyId?: string | null;
@@ -34451,6 +34788,82 @@ export interface operations {
             };
             /** @description I'm Ai */
             418: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+        };
+    };
+    notifications___read: {
+        requestBody: {
+            content: {
+                'application/json': {
+                    notificationIds: string[];
+                };
+            };
+        };
+        responses: {
+            /** @description OK (with results) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': {
+                        unreadCount: number;
+                    };
+                };
+            };
+            /** @description Client error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Authentication error */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Forbidden error */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description I'm Ai */
+            418: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Too many requests */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -36568,6 +36981,7 @@ export interface operations {
                         originalNotesCount: number;
                         usersCount: number;
                         originalUsersCount: number;
+                        reactionsCount: number;
                         instances: number;
                         driveUsageLocal: number;
                         driveUsageRemote: number;
@@ -36777,6 +37191,8 @@ export interface operations {
             content: {
                 'application/json': {
                     endpoint: string;
+                    auth: string;
+                    publickey: string;
                 };
             };
         };
@@ -36816,6 +37232,15 @@ export interface operations {
             };
             /** @description I'm Ai */
             418: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Too many requests */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -39532,3 +39957,4 @@ export interface operations {
         };
     };
 }
+

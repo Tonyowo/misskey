@@ -38,11 +38,15 @@ export class MiChatRoomInvitation {
 	@JoinColumn()
 	public room: MiChatRoom | null;
 
-	@Index()
+	@Index('IDX_3a6abe5727b7d2660fd4fcca31')
 	@Column({
 		...id(),
 	})
 	public createdById: MiUser['id'];
+
+	@ManyToOne(() => MiUser, { onDelete: 'CASCADE' })
+	@JoinColumn({ foreignKeyConstraintName: 'FK_3a6abe5727b7d2660fd4fcca317' })
+	public createdBy: MiUser | null;
 
 	@Column('boolean', {
 		default: false,

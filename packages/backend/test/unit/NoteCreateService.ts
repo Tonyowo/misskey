@@ -27,6 +27,7 @@ describe('NoteCreateService', () => {
 		const base: MiNote = {
 			id: 'some-note-id',
 			updatedAt: null,
+	revision: 0,
 			replyId: null,
 			reply: null,
 			renoteId: null,

@@ -29,7 +29,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 					<li v-for="item in instance.serverRules" :class="$style.rule"><div :class="$style.ruleText" v-html="item"></div></li>
 				</ol>
 
-				<MkSwitch :modelValue="agreeServerRules" style="margin-top: 16px;" @update:modelValue="updateAgreeServerRules">{{ i18n.ts.agree }}</MkSwitch>
+				<MkSwitch :modelValue="agreeServerRules" style="margin-top: 16px;" data-testid="signup-rules-server-agree" @update:modelValue="updateAgreeServerRules">{{ i18n.ts.agree }}</MkSwitch>
 			</MkFolder>
 
 			<MkFolder v-if="availableTos || availablePrivacyPolicy" :defaultOpen="true">
@@ -47,7 +47,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 			<div class="_buttonsCenter">
 				<MkButton inline rounded @click="emit('cancel')">{{ i18n.ts.cancel }}</MkButton>
-				<MkButton inline primary rounded gradate :disabled="!agreed" data-cy-signup-rules-continue @click="emit('done')">{{ i18n.ts.continue }} <i class="ti ti-arrow-right"></i></MkButton>
+				<MkButton inline primary rounded gradate :disabled="!agreed" data-testid="signup-rules-continue" @click="emit('done')">{{ i18n.ts.continue }} <i class="ti ti-arrow-right"></i></MkButton>
 			</div>
 		</div>
 	</div>

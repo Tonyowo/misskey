@@ -100,7 +100,8 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 
 			// Mark all as read
 			if (ps.markAsRead) {
-				this.notificationService.readAllNotification(me.id);
+				await this.notificationService.readAllNotification(me.id);
+				for (const notification of notifications) notification.isRead = true;
 			}
 
 			// grouping
@@ -114,6 +115,7 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 					if (prevGroupedNotification.type !== 'reaction:grouped') {
 						groupedNotifications[groupedNotifications.length - 1] = {
 							type: 'reaction:grouped',
+							isRead: prev.isRead === true,
 							id: '',
 							createdAt: prev.createdAt,
 							noteId: prev.noteId!,
@@ -129,12 +131,14 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 						reaction: notification.reaction!,
 					});
 					prevGroupedNotification.id = notification.id;
+					prevGroupedNotification.isRead = prevGroupedNotification.isRead === true && notification.isRead === true;
 					continue;
 				}
 				if (prev.type === 'renote' && notification.type === 'renote' && prev.targetNoteId === notification.targetNoteId) {
 					if (prevGroupedNotification.type !== 'renote:grouped') {
 						groupedNotifications[groupedNotifications.length - 1] = {
 							type: 'renote:grouped',
+							isRead: prev.isRead === true,
 							id: '',
 							createdAt: notification.createdAt,
 							noteId: prev.noteId!,
@@ -144,6 +148,7 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 					}
 					(prevGroupedNotification as FilterUnionByProperty<MiGroupedNotification, 'type', 'renote:grouped'>).userIds.push(notification.notifierId!);
 					prevGroupedNotification.id = notification.id;
+					prevGroupedNotification.isRead = prevGroupedNotification.isRead === true && notification.isRead === true;
 					continue;
 				}
 

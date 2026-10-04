@@ -3,11 +3,10 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
-import { URLSearchParams } from 'node:url';
 import * as nodemailer from 'nodemailer';
 import juice from 'juice';
+import sanitizeHtml from 'sanitize-html';
 import { Inject, Injectable } from '@nestjs/common';
-import { validate as validateEmail } from 'deep-email-validator';
 import { UtilityService } from '@/core/UtilityService.js';
 import { DI } from '@/di-symbols.js';
 import type { Config } from '@/config.js';
@@ -16,6 +15,7 @@ import type { MiMeta, UserProfilesRepository } from '@/models/_.js';
 import { LoggerService } from '@/core/LoggerService.js';
 import { bindThis } from '@/decorators.js';
 import { HttpRequestService } from '@/core/HttpRequestService.js';
+import { escapeHtml } from '@/misc/escape-html.js';
 
 @Injectable()
 export class EmailService {
@@ -54,6 +54,8 @@ export class EmailService {
 
 		const enableAuth = this.meta.smtpUser != null && this.meta.smtpUser !== '';
 
+		const sanitizedHtml = sanitizeHtml(html);
+
 		const transporter = nodemailer.createTransport({
 			host: this.meta.smtpHost,
 			port: this.meta.smtpPort,
@@ -70,7 +72,7 @@ export class EmailService {
 <html>
 	<head>
 		<meta charset="utf-8">
-		<title>${ subject }</title>
+		<title>${ escapeHtml(subject) }</title>
 		<style>
 			html {
 				background: #eee;
@@ -135,18 +137,18 @@ export class EmailService {
 	<body>
 		<main>
 			<header>
-				<img src="${ headerLogoSrc }" alt="${ this.meta.name ?? this.config.host }"/>
+				<img src="${ escapeHtml(headerLogoSrc) }" alt="${ escapeHtml(this.meta.name ?? this.config.host) }"/>
 			</header>
 			<article>
-				<h1>${ subject }</h1>
-				<div>${ html }</div>
+				<h1>${ escapeHtml(subject) }</h1>
+				<div>${ sanitizedHtml }</div>
 			</article>
 			<footer>
-				<a href="${ emailSettingUrl }">${ '邮件设置' }</a>
+				<a href="${ escapeHtml(emailSettingUrl) }">${ '邮件设置' }</a>
 			</footer>
 		</main>
 		<nav>
-			<a href="${ this.config.url }">${ this.config.host }</a>
+			<a href="${ escapeHtml(this.config.url) }">${ escapeHtml(this.config.host) }</a>
 		</nav>
 	</body>
 </html>`;
@@ -154,7 +156,6 @@ export class EmailService {
 		const inlinedHtml = juice(htmlContent);
 
 		try {
-			// TODO: htmlサニタイズ
 			const info = await transporter.sendMail({
 				from: this.meta.name ? {
 					name: this.meta.name,
@@ -254,6 +255,7 @@ export class EmailService {
 			} else if (this.meta.enableTruemailApi && this.meta.truemailInstance && this.meta.truemailAuthKey != null) {
 				validated = await this.trueMail(this.meta.truemailInstance, emailAddress, this.meta.truemailAuthKey);
 			} else {
+				const { validate: validateEmail } = await import('deep-email-validator');
 				validated = await validateEmail({
 					email: emailAddress,
 					validateRegex: true,

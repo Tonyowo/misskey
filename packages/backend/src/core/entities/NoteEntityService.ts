@@ -135,6 +135,9 @@ export class NoteEntityService implements OnModuleInit {
 		if (meId === packedNote.userId) return false;
 		// TODO: isVisibleForMe を使うようにしても良さそう(型違うけど)
 
+		// TODO: ugcVisibilityForVisitor が local の場合も、付随するリモートのノートをリンクだけ残して内容を隠せるようにする
+		if (meId == null && this.meta.ugcVisibilityForVisitor === 'none') return true;
+
 		if (packedNote.user.requireSigninToViewContents && meId == null) {
 			return true;
 		}
@@ -319,7 +322,7 @@ export class NoteEntityService implements OnModuleInit {
 				return false;
 			} else if (meId === note.userId) {
 				return true;
-			} else if (note.reply && (meId === note.reply.userId)) {
+			} else if (note.replyUserId && (meId === note.replyUserId)) {
 				// 自分の投稿に対するリプライ
 				return true;
 			} else if (note.mentions && note.mentions.some(id => meId === id)) {
@@ -427,6 +430,7 @@ export class NoteEntityService implements OnModuleInit {
 		const packed: Packed<'Note'> = await awaitAll({
 			id: note.id,
 			createdAt: this.idService.parse(note.id).date.toISOString(),
+			revision: note.revision ?? 0,
 			updatedAt: note.updatedAt ? note.updatedAt.toISOString() : null,
 			userId: note.userId,
 			user: packedUsers?.get(note.userId) ?? this.userEntityService.pack(note.user ?? note.userId, me),
@@ -664,20 +668,34 @@ export class NoteEntityService implements OnModuleInit {
 	}
 
 	@bindThis
-	public async fetchDiffs(noteIds: MiNote['id'][]) {
+	public async fetchDiffs(noteIds: MiNote['id'][], meId: MiUser['id'] | null = null) {
 		if (noteIds.length === 0) return [];
+		// TODO: ugcVisibilityForVisitor が local の場合の扱いを shouldHideNote と揃える
+		if (meId == null && this.meta.ugcVisibilityForVisitor === 'none') return [];
 
-		const notes = await this.notesRepository.find({
+		const fetched = await this.notesRepository.find({
 			where: {
 				id: In(noteIds),
 			},
 			select: {
 				id: true,
+				userId: true,
 				userHost: true,
+				visibility: true,
+				visibleUserIds: true,
+				mentions: true,
+				replyUserId: true,
 				reactions: true,
 				reactionAndUserPairCache: true,
 			},
 		});
+
+		const notes: MiNote[] = [];
+		for (const note of fetched) {
+			if (await this.isVisibleForMe(note, meId)) {
+				notes.push(note);
+			}
+		}
 
 		const bufferedReactionsMap = this.meta.enableReactionsBuffering ? await this.reactionsBufferingService.getMany(noteIds) : null;
 

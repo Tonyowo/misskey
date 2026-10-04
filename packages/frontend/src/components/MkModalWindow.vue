@@ -11,14 +11,14 @@ SPDX-License-Identifier: AGPL-3.0-only
 		:style="{ width: type === 'drawer' ? '' : `${width}px`, height: type === 'drawer' ? '' : height == null ? 'auto' : `min(${height}px, 100%)` }"
 	>
 		<div :class="$style.header">
-			<button v-if="withCloseButton && closeButtonPosition === 'left'" :class="$style.headerButton" class="_button" data-cy-modal-window-close @click="emit('close')"><i class="ti ti-x"></i></button>
+			<button v-if="withCloseButton && closeButtonPosition === 'left'" :class="$style.headerButton" class="_button" data-testid="modal-window-close" @click="emit('close')"><i class="ti ti-x"></i></button>
 			<span :class="[$style.title, withCloseButton && closeButtonPosition === 'left' ? $style.titleWithLeadingButton : null]">
 				<slot name="header"></slot>
 			</span>
 			<div v-if="withOkButton" style="padding: 0 16px; place-content: center;">
 				<MkButton primary gradate small rounded :disabled="okButtonDisabled" @click="emit('ok')">{{ i18n.ts.done }} <i class="ti ti-check"></i></MkButton>
 			</div>
-			<button v-if="withCloseButton && closeButtonPosition === 'right'" :class="$style.headerButton" class="_button" data-cy-modal-window-close @click="emit('close')"><i class="ti ti-x"></i></button>
+			<button v-if="withCloseButton && closeButtonPosition === 'right'" :class="$style.headerButton" class="_button" data-testid="modal-window-close" @click="emit('close')"><i class="ti ti-x"></i></button>
 		</div>
 		<div :class="$style.body">
 			<slot></slot>

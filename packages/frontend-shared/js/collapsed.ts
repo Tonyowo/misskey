@@ -5,7 +5,7 @@
 
 import * as Misskey from 'misskey-js';
 
-export function shouldCollapsed(note: Misskey.entities.Note, urls: string[]): boolean {
+export function shouldCollapsed(note: Misskey.entities.Note, urls: string[], collapseMedia = true): boolean {
 	if (note.cw != null) {
 		return false;
 	}
@@ -27,7 +27,7 @@ export function shouldCollapsed(note: Misskey.entities.Note, urls: string[]): bo
 		return true;
 	}
 
-	if (note.files != null && note.files.length >= 5) {
+	if (collapseMedia && note.files != null && note.files.length >= 5) {
 		return true;
 	}
 

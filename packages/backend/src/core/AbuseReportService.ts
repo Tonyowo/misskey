@@ -13,6 +13,7 @@ import { QueueService } from '@/core/QueueService.js';
 import { ApRendererService } from '@/core/activitypub/ApRendererService.js';
 import { ModerationLogService } from '@/core/ModerationLogService.js';
 import { SystemAccountService } from '@/core/SystemAccountService.js';
+import { NotificationService } from './NotificationService.js';
 import { IdService } from './IdService.js';
 
 @Injectable()
@@ -25,6 +26,7 @@ export class AbuseReportService {
 		private usersRepository: UsersRepository,
 
 		private idService: IdService,
+		private notificationService: NotificationService,
 		private abuseReportNotificationService: AbuseReportNotificationService,
 		private queueService: QueueService,
 		private systemAccountService: SystemAccountService,
@@ -99,11 +101,15 @@ export class AbuseReportService {
 			// eslint-disable-next-line @typescript-eslint/no-non-null-assertion
 			const ps = paramsMap.get(report.id)!;
 
-			await this.abuseUserReportsRepository.update(report.id, {
+			const transition = await this.abuseUserReportsRepository.update({ id: report.id, resolved: false }, {
 				resolved: true,
 				assigneeId: moderator.id,
 				resolvedAs: ps.resolvedAs,
 			});
+
+			if (transition.affected === 1 && report.reporterHost == null && report.reporterId) {
+				this.notificationService.createNotification(report.reporterId, 'abuseReportResolved', {});
+			}
 
 			this.moderationLogService
 				.log(moderator, 'resolveAbuseReport', {

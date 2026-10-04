@@ -25,20 +25,43 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script lang="ts" setup>
-import { computed, ref } from 'vue';
+import { computed, ref, reactive, watch } from 'vue';
 import * as Misskey from 'misskey-js';
 import MkNoteHeader from '@/components/MkNoteHeader.vue';
 import MkSubNoteContent from '@/components/MkSubNoteContent.vue';
 import MkCwButton from '@/components/MkCwButton.vue';
 import { i18n } from '@/i18n.js';
 import { prefer } from '@/preferences.js';
+import { useNoteCapture } from '@/composables/use-note-capture.js';
+import { useGlobalEvent } from '@/events.js';
+import { deepClone } from '@/utility/clone.js';
 
 const props = defineProps<{
 	note: Misskey.entities.Note | null;
+	live?: boolean;
 }>();
 
 const showContent = ref(false);
-const hasCw = computed(() => props.note?.cw != null);
+const liveNote = props.live && props.note ? reactive(deepClone(props.note)) : null;
+const deleted = ref(false);
+const note = computed(() => props.live ? (deleted.value ? null : liveNote) : props.note);
+const hasCw = computed(() => note.value?.cw != null);
+if (liveNote) {
+	useNoteCapture({ note: liveNote, parentNote: null, forceCapture: true }).subscribe();
+	useGlobalEvent('noteUpdated', updated => {
+		if (updated.id !== liveNote.id) return;
+		showContent.value = false;
+		Object.assign(liveNote, deepClone(updated));
+	});
+	useGlobalEvent('noteDeleted', id => {
+		if (id === liveNote.id) deleted.value = true;
+	});
+	watch(() => props.note, updated => {
+		if (!updated || updated.id !== liveNote.id) return;
+		showContent.value = false;
+		Object.assign(liveNote, deepClone(updated));
+	});
+}
 </script>
 
 <style lang="scss" module>
@@ -114,7 +137,6 @@ const hasCw = computed(() => props.note?.cw != null);
 .deleted {
 	text-align: center;
 	padding: 8px !important;
-	margin: 8px 8px 0 8px;
 	--color: light-dark(rgba(0, 0, 0, 0.05), rgba(0, 0, 0, 0.15));
 	background-size: auto auto;
 	background-image: repeating-linear-gradient(135deg, transparent, transparent 10px, var(--color) 4px, var(--color) 14px);

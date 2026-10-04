@@ -4,7 +4,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 -->
 
 <template>
-<div :class="$style.wrapper" data-cy-signin-page-input>
+<div :class="$style.wrapper" data-testid="signin-page-input">
 	<div :class="$style.root">
 		<div :class="$style.avatar">
 			<i class="ti ti-user"></i>
@@ -60,13 +60,13 @@ SPDX-License-Identifier: AGPL-3.0-only
 				:autocomplete="inputMode === 'email' ? 'email' : 'username webauthn'"
 				autofocus
 				required
-				data-cy-signin-username
+				data-testid="signin-username"
 			>
 				<template v-if="inputMode === 'username'" #prefix><span :class="$style.identifierPrefix">@</span></template>
 				<template v-else #prefix><i class="ti ti-mail" :class="$style.identifierPrefix"></i></template>
 				<template v-if="inputMode === 'username'" #suffix>@{{ host }}</template>
 			</MkInput>
-			<MkButton type="submit" large primary rounded style="margin: 0 auto;" data-cy-signin-page-input-continue>{{ i18n.ts.continue }} <i class="ti ti-arrow-right"></i></MkButton>
+			<MkButton type="submit" large primary rounded style="margin: 0 auto;" data-testid="signin-page-input-continue">{{ i18n.ts.continue }} <i class="ti ti-arrow-right"></i></MkButton>
 		</form>
 
 		<!-- パスワードレスログイン -->

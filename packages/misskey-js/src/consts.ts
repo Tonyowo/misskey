@@ -34,6 +34,7 @@ export const notificationTypes = [
 	'chatRoomInvitationReceived',
 	'achievementEarned',
 	'exportCompleted',
+	'abuseReportResolved',
 	'test',
 	'login',
 	'createToken',
@@ -98,6 +99,7 @@ export const permissions = [
 	'read:admin:show-moderation-log',
 	'read:admin:show-user',
 	'write:admin:suspend-user',
+	'write:admin:unset-mfa',
 	'write:admin:unset-user-avatar',
 	'write:admin:unset-user-banner',
 	'write:admin:unsuspend-user',
@@ -174,6 +176,7 @@ export const moderationLogTypes = [
 	'createAvatarDecoration',
 	'updateAvatarDecoration',
 	'deleteAvatarDecoration',
+	'unsetMfa',
 	'unsetUserAvatar',
 	'unsetUserBanner',
 	'createSystemWebhook',
@@ -461,6 +464,11 @@ export type ModerationLogPayloads = {
 	deleteAvatarDecoration: {
 		avatarDecorationId: string;
 		avatarDecoration: AvatarDecoration;
+	};
+	unsetMfa: {
+		userId: string;
+		userUsername: string;
+		userHost: string | null;
 	};
 	unsetUserAvatar: {
 		userId: string;

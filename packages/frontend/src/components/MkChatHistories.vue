@@ -28,7 +28,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 							<i class="ti ti-users"></i>
 							{{ item.message.toRoom.memberCount }}
 						</span>
-						<span v-if="item.hasUnreadMention" :class="[$style.badge, $style.badgeMention]">有人@我</span>
+						<span v-if="item.hasUnreadMention" :class="[$style.badge, $style.badgeMention]">{{ i18n.ts._community.mentionedMe }}</span>
 						<span v-else-if="item.isUnread" :class="[$style.badge, $style.badgeUnread]">{{ i18n.ts.unread }}</span>
 						<span v-if="item.message.toRoom.isMuted" :class="$style.badge" :title="i18n.ts._chat.muteThisRoom">
 							<i class="ti ti-bell-off"></i>
@@ -75,7 +75,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 				{{ item.message.fromUser.name ?? item.message.fromUser.username }}
 			</div>
 			<div :class="$style.messageBodyText">
-				<span v-if="item.hasUnreadMention" :class="$style.mentionPreview">有人@我</span>
+				<span v-if="item.hasUnreadMention" :class="$style.mentionPreview">{{ i18n.ts._community.mentionedMe }}</span>
 				<span v-if="item.isMe && !isSystemChatMessage(item.message)" :class="$style.youSaid">{{ i18n.ts.you }}:</span>
 				{{ formatChatMessagePreviewText(item.message) }}
 			</div>
@@ -83,9 +83,9 @@ SPDX-License-Identifier: AGPL-3.0-only
 	</MkA>
 </div>
 <div v-if="fetchError && !initializing && filteredHistory.length === 0" class="_gaps_s">
-	<MkInfo warn>聊天历史加载失败，请稍后重试。</MkInfo>
+	<MkInfo warn>{{ i18n.ts._community.chatHistoryFailed }}</MkInfo>
 	<div class="_buttons">
-		<MkButton rounded @click="fetchHistory"><i class="ti ti-refresh"></i> 重试</MkButton>
+		<MkButton rounded @click="fetchHistory"><i class="ti ti-refresh"></i> {{ i18n.ts.retry }}</MkButton>
 	</div>
 </div>
 <MkResult v-else-if="!initializing && filteredHistory.length == 0" type="empty" :text="i18n.ts._chat.noHistory">

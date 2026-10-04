@@ -16,12 +16,14 @@ import { bindThis } from '@/decorators.js';
 import { GlobalEventService } from '@/core/GlobalEventService.js';
 import { PushNotificationService } from '@/core/PushNotificationService.js';
 import { NotificationEntityService } from '@/core/entities/NotificationEntityService.js';
+import { NotificationReadService } from '@/core/NotificationReadService.js';
 import { IdService } from '@/core/IdService.js';
 import { CacheService } from '@/core/CacheService.js';
 import type { Config } from '@/config.js';
 import { UserListService } from '@/core/UserListService.js';
 import { FilterUnionByProperty, groupedNotificationTypes, obsoleteNotificationTypes } from '@/types.js';
 import { trackPromise } from '@/misc/promise-tracker.js';
+// import { escapeHtml } from '@/misc/escape-html.js';
 
 @Injectable()
 export class NotificationService implements OnApplicationShutdown {
@@ -37,6 +39,7 @@ export class NotificationService implements OnApplicationShutdown {
 		@Inject(DI.usersRepository)
 		private usersRepository: UsersRepository,
 
+		private notificationReadService: NotificationReadService,
 		private notificationEntityService: NotificationEntityService,
 		private idService: IdService,
 		private globalEventService: GlobalEventService,
@@ -51,22 +54,17 @@ export class NotificationService implements OnApplicationShutdown {
 		userId: MiUser['id'],
 		force = false,
 	) {
-		const latestReadNotificationId = await this.redisClient.get(`latestReadNotification:${userId}`);
+		await this.notificationReadService.getState(userId, 'all');
+		return this.postReadAllNotifications(userId);
+	}
 
-		const latestNotificationIdsRes = await this.redisClient.xrevrange(
-			`notificationTimeline:${userId}`,
-			'+',
-			'-',
-			'COUNT', 1);
-		const latestNotificationId = latestNotificationIdsRes[0]?.[0];
-
-		if (latestNotificationId == null) return;
-
-		this.redisClient.set(`latestReadNotification:${userId}`, latestNotificationId);
-
-		if (force || latestReadNotificationId == null || (latestReadNotificationId < latestNotificationId)) {
-			return this.postReadAllNotifications(userId);
-		}
+	@bindThis
+	public async readNotifications(userId: MiUser['id'], notificationIds: string[]) {
+		const state = await this.notificationReadService.getState(userId, 'some', notificationIds);
+		const marked = Array.isArray(state.marked) ? state.marked : [];
+		this.globalEventService.publishMainStream(userId, 'notificationsRead', { notificationIds: marked, unreadCount: state.unreadCount });
+		if (state.unreadCount === 0) this.postReadAllNotifications(userId);
+		return { unreadCount: state.unreadCount };
 	}
 
 	@bindThis
@@ -188,8 +186,8 @@ export class NotificationService implements OnApplicationShutdown {
 		// テスト通知の場合は即時発行
 		const interval = notification.type === 'test' ? 0 : 2000;
 		trackPromise(setTimeout(interval, 'unread notification', { signal: this.#shutdownController.signal }).then(async () => {
-			const latestReadNotificationId = await this.redisClient.get(`latestReadNotification:${notifieeId}`);
-			if (latestReadNotificationId && (latestReadNotificationId >= redisId)) return;
+			const readState = await this.notificationReadService.getState(notifieeId);
+			if (readState.states[notification.id] !== false) return;
 
 			this.globalEventService.publishMainStream(notifieeId, 'unreadNotification', packed);
 			this.pushNotificationService.pushNotification(notifieeId, 'notification', packed);
@@ -214,7 +212,8 @@ export class NotificationService implements OnApplicationShutdown {
 		const locale = locales[userProfile.lang ?? 'ja-JP'];
 		const i18n = new I18n(locale);
 		// TODO: render user information html
-		sendEmail(userProfile.email, i18n.t('_email._follow.title'), `${follower.name} (@${Acct.toString(follower)})`, `${follower.name} (@${Acct.toString(follower)})`);
+		const body = `${follower.name} (@${Acct.toString(follower)})`;
+		sendEmail(userProfile.email, i18n.t('_email._follow.title'), escapeHtml(body), body);
 		*/
 	}
 
@@ -226,7 +225,8 @@ export class NotificationService implements OnApplicationShutdown {
 		const locale = locales[userProfile.lang ?? 'ja-JP'];
 		const i18n = new I18n(locale);
 		// TODO: render user information html
-		sendEmail(userProfile.email, i18n.t('_email._receiveFollowRequest.title'), `${follower.name} (@${Acct.toString(follower)})`, `${follower.name} (@${Acct.toString(follower)})`);
+		const body = `${follower.name} (@${Acct.toString(follower)})`;
+		sendEmail(userProfile.email, i18n.t('_email._receiveFollowRequest.title'), escapeHtml(body), body);
 		*/
 	}
 
@@ -235,6 +235,7 @@ export class NotificationService implements OnApplicationShutdown {
 		await Promise.all([
 			this.redisClient.del(`notificationTimeline:${userId}`),
 			this.redisClient.del(`latestReadNotification:${userId}`),
+			this.redisClient.del(`seenNotifications:${userId}`),
 		]);
 		this.globalEventService.publishMainStream(userId, 'notificationFlushed');
 	}
@@ -315,7 +316,8 @@ export class NotificationService implements OnApplicationShutdown {
 			}
 		}
 
-		return notifications;
+		const readState = await this.notificationReadService.getState(userId);
+		return notifications.map(notification => ({ ...notification, isRead: readState.states[notification.id] ?? true }));
 	}
 
 	@bindThis

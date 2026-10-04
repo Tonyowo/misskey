@@ -45,7 +45,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 				:enableEmojiMenu="true"
 				:enableEmojiMenuReaction="true"
 			/>
-			<MkMediaList v-if="message.file" :mediaList="[message.file]"/>
+			<MkMediaList v-if="message.file" :mediaList="[message.file]" :user="message.fromUser"/>
 		</MkFukidashi>
 		<MkUrlPreview v-for="url in urls" :key="url" :url="url" style="margin: 8px 0;"/>
 		<div :class="$style.footer">
@@ -86,6 +86,7 @@ import type { NormalizedChatMessage } from './room.vue';
 import { extractUrlFromMfm } from '@/utility/extract-url-from-mfm.js';
 import { formatChatSystemEventText, isSystemChatMessage } from '@/utility/chat-system-event-text.js';
 import MkUrlPreview from '@/components/MkUrlPreview.vue';
+import { i18n } from '@/i18n.js';
 import { ensureSignin } from '@/i.js';
 import { misskeyApi } from '@/utility/misskey-api.js';
 import MkFukidashi from '@/components/MkFukidashi.vue';
@@ -287,11 +288,13 @@ function showMenu(ev: PointerEvent, contextmenu = false) {
 
 	if (isMe.value && $i.policies.chatAvailability === 'available') {
 		menu.push({
-			text: '删除消息',
+			text: i18n.ts.delete,
 			icon: 'ti ti-trash',
 			danger: true,
-			action: () => {
-				misskeyApi('chat/messages/delete', {
+			action: async () => {
+				const confirmation = await os.confirm({ type: 'warning', text: i18n.ts._community.deleteChatForEveryone });
+				if (confirmation.canceled) return;
+				await misskeyApi('chat/messages/delete', {
 					messageId: props.message.id,
 				});
 			},

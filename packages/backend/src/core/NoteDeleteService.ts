@@ -18,6 +18,7 @@ import InstanceChart from '@/core/chart/charts/instance.js';
 import { GlobalEventService } from '@/core/GlobalEventService.js';
 import { ApRendererService } from '@/core/activitypub/ApRendererService.js';
 import { ApDeliverManagerService } from '@/core/activitypub/ApDeliverManagerService.js';
+import { NoteEntityService } from '@/core/entities/NoteEntityService.js';
 import { UserEntityService } from '@/core/entities/UserEntityService.js';
 import { bindThis } from '@/decorators.js';
 import { SearchService } from '@/core/SearchService.js';
@@ -42,6 +43,7 @@ export class NoteDeleteService {
 		@Inject(DI.instancesRepository)
 		private instancesRepository: InstancesRepository,
 
+		private noteEntityService: NoteEntityService,
 		private userEntityService: UserEntityService,
 		private globalEventService: GlobalEventService,
 		private relayService: RelayService,
@@ -114,6 +116,12 @@ export class NoteDeleteService {
 			id: note.id,
 			userId: user.id,
 		});
+		if (note.replyId) {
+			const parent = await this.notesRepository.findOneBy({ id: note.replyId });
+			if (parent?.replyVisibleContents?.length) {
+				this.globalEventService.publishNoteStream(parent, 'updated', await this.noteEntityService.pack(parent, null));
+			}
+		}
                 await this.usersRepository
                     .createQueryBuilder()
                     .update()

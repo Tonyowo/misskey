@@ -120,6 +120,7 @@ export class NotificationEntityService implements OnModuleInit {
 
 			return await awaitAll({
 				id: notification.id,
+				isRead: notification.isRead ?? false,
 				createdAt: new Date(notification.createdAt).toISOString(),
 				type: notification.type,
 				note: noteIfNeed,
@@ -141,6 +142,7 @@ export class NotificationEntityService implements OnModuleInit {
 
 			return await awaitAll({
 				id: notification.id,
+				isRead: notification.isRead ?? false,
 				createdAt: new Date(notification.createdAt).toISOString(),
 				type: notification.type,
 				note: noteIfNeed,
@@ -165,6 +167,7 @@ export class NotificationEntityService implements OnModuleInit {
 
 		return await awaitAll({
 			id: notification.id,
+				isRead: notification.isRead ?? false,
 			createdAt: new Date(notification.createdAt).toISOString(),
 			type: notification.type,
 			userId: 'notifierId' in notification ? notification.notifierId : undefined,

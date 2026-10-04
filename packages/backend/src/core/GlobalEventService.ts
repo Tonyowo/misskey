@@ -65,6 +65,7 @@ export interface MainEventTypes {
 		marker?: string | null;
 		file: Packed<'DriveFile'>;
 	};
+	notificationsRead: { notificationIds: string[]; unreadCount: number };
 	readAllNotifications: undefined;
 	notificationFlushed: undefined;
 	unreadNotification: Packed<'Notification'>;
@@ -260,7 +261,7 @@ export interface InternalEventTypes {
 	userListMemberRemoved: { userListId: MiUserList['id']; memberId: MiUser['id']; };
 }
 
-type EventTypesToEventPayload<T> = EventUnionFromDictionary<UndefinedAsNullAll<SerializedAll<T>>>;
+export type EventTypesToEventPayload<T> = EventUnionFromDictionary<UndefinedAsNullAll<SerializedAll<T>>>;
 
 // name/messages(spec) pairs dictionary
 export type GlobalEvents = {

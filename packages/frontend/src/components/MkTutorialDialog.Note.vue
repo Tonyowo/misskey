@@ -43,6 +43,7 @@ const exampleNote = reactive<Misskey.entities.Note>({
 	id: '0000000000',
 	createdAt: '2019-04-14T17:30:49.181Z',
 	updatedAt: null,
+		revision: 0,
 	userId: '0000000001',
 	user: {
 		id: '0000000001',
@@ -88,6 +89,7 @@ function doNotification(emoji: string): void {
 		id: genId(),
 		createdAt: new Date().toUTCString(),
 		type: 'reaction',
+		isRead: false,
 		reaction: emoji,
 		user: $i,
 		userId: $i.id,

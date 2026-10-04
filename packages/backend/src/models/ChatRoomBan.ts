@@ -9,12 +9,12 @@ import { MiUser } from './User.js';
 import { MiChatRoom } from './ChatRoom.js';
 
 @Entity('chat_room_ban')
-@Index(['roomId', 'userId'], { unique: true })
+@Index('IDX_635ecfd77ff4b74053c9e6f4eb', ['roomId', 'userId'], { unique: true })
 export class MiChatRoomBan {
 	@PrimaryColumn(id())
 	public id: string;
 
-	@Index()
+	@Index('IDX_15375f6f4ff19483e5b1ef95d9')
 	@Column({
 		...id(),
 	})
@@ -23,10 +23,10 @@ export class MiChatRoomBan {
 	@ManyToOne(() => MiChatRoom, {
 		onDelete: 'CASCADE',
 	})
-	@JoinColumn()
+	@JoinColumn({ foreignKeyConstraintName: 'FK_15375f6f4ff19483e5b1ef95d96' })
 	public room: MiChatRoom | null;
 
-	@Index()
+	@Index('IDX_41ec4b7c539bafbd1379c91bc5')
 	@Column({
 		...id(),
 	})
@@ -35,10 +35,10 @@ export class MiChatRoomBan {
 	@ManyToOne(() => MiUser, {
 		onDelete: 'CASCADE',
 	})
-	@JoinColumn()
+	@JoinColumn({ foreignKeyConstraintName: 'FK_41ec4b7c539bafbd1379c91bc58' })
 	public user: MiUser | null;
 
-	@Index()
+	@Index('IDX_0f6f5d3605be7f73b1562c4d34')
 	@Column({
 		...id(),
 	})

@@ -14,6 +14,8 @@ import { DI } from '@/di-symbols.js';
 import type { MiLocalUser, MiRemoteUser, MiUser } from '@/models/User.js';
 import type { IMentionedRemoteUsers, IReplyVisibleContent } from '@/models/Note.js';
 import { MiNote } from '@/models/Note.js';
+import { MiNoteRevision } from '@/models/NoteRevision.js';
+import { IdService } from '@/core/IdService.js';
 import type { IPoll } from '@/models/Poll.js';
 import { MiPoll } from '@/models/Poll.js';
 import type { DriveFilesRepository, MiMeta, NotesRepository, PollsRepository, UserProfilesRepository, UsersRepository } from '@/models/_.js';
@@ -58,6 +60,7 @@ export class NoteUpdateService {
 		@Inject(DI.pollsRepository)
 		private pollsRepository: PollsRepository,
 
+		private idService: IdService,
 		private noteEntityService: NoteEntityService,
 		private userEntityService: UserEntityService,
 		private globalEventService: GlobalEventService,
@@ -72,6 +75,7 @@ export class NoteUpdateService {
 
 	@bindThis
 	public async update(user: MiLocalUser, note: MiNote, data: {
+		expectedRevision?: number;
 		fileIds: MiDriveFile['id'][];
 		text: string | null;
 		cw: string | null;
@@ -97,13 +101,9 @@ export class NoteUpdateService {
 				.setParameters({ fileIds: data.fileIds })
 				.getMany();
 
-			if (files.length !== data.fileIds.length) {
+			if (data.fileIds.some(id => !files.some(file => file.id === id) && !note.fileIds.includes(id))) {
 				throw new IdentifiableError('801c046c-5bf5-4234-ad2b-e78fc20a2ac7', 'No such file');
 			}
-		}
-
-		if (data.poll?.expiresAt != null && data.poll.expiresAt.getTime() < Date.now()) {
-			throw new IdentifiableError('0c11c11e-0c8d-48e7-822c-76ccef660068', 'Poll expiration must be future time');
 		}
 
 		const currentPoll = note.hasPoll ? await this.pollsRepository.findOneBy({ noteId: note.id }) : null;
@@ -111,7 +111,7 @@ export class NoteUpdateService {
 			throw new IdentifiableError('f6a9a78d-1af9-4d1e-a566-bb5d1d6fced1', 'Poll cannot be edited in place');
 		}
 
-		const normalized = this.normalizeContent(note, data, files.length > 0, currentPoll != null);
+		const normalized = this.normalizeContent(note, data, data.fileIds.length > 0, currentPoll != null);
 		const hasProhibitedWords = this.checkProhibitedWordsContain({
 			cw: normalized.cw,
 			text: data.text,
@@ -130,8 +130,10 @@ export class NoteUpdateService {
 		}
 
 		const mentionedRemoteUsers = await this.buildMentionedRemoteUsers(mentionedUsers);
-		const nextFileIds = files.map(file => file.id);
-		const nextAttachedFileTypes = files.map(file => file.type);
+		const nextFileIds = data.fileIds;
+		const nextAttachedFileTypes = this.sameIds(note.fileIds, nextFileIds)
+			? note.attachedFileTypes
+			: nextFileIds.map(id => files.find(file => file.id === id)?.type ?? note.attachedFileTypes[note.fileIds.indexOf(id)]).filter((type): type is string => type != null);
 		const nextMentionIds = mentionedUsers.map(u => u.id);
 		const nextMentionedRemoteUsers = JSON.stringify(mentionedRemoteUsers);
 		const nextTags = tags.map(tag => normalizeForSearch(tag));
@@ -147,17 +149,44 @@ export class NoteUpdateService {
 			!this.sameIds(note.emojis, emojis) ||
 			note.reactionAcceptance !== normalized.reactionAcceptance;
 
-		if (!didChange) {
-			return note;
-		}
-
 		const updatedAt = new Date();
 
 		await this.db.transaction(async transactionalEntityManager => {
+			const lockedNote = await transactionalEntityManager.findOneOrFail(MiNote, {
+				where: { id: note.id, userId: user.id },
+				lock: { mode: 'pessimistic_write' },
+			});
+			const revision = lockedNote.revision ?? 0;
+			if (revision !== (data.expectedRevision ?? note.revision ?? 0)) {
+				throw new IdentifiableError('da1d6c7f-f5c8-4d50-a96f-48e8afcb7a47', 'Note version conflict');
+			}
+			if (!didChange) return;
+			const snapshot = (source: MiNote) => ({
+				text: source.text, cw: source.cw, fileIds: source.fileIds,
+				reactionAcceptance: source.reactionAcceptance,
+				replyVisibleContents: source.replyVisibleContents ?? [],
+			});
+			if (revision === 0) {
+				await transactionalEntityManager.insert(MiNoteRevision, {
+					id: this.idService.gen(), noteId: note.id, revision: 0,
+					createdAt: lockedNote.updatedAt ?? this.idService.parse(note.id).date,
+					schemaVersion: 1, snapshot: snapshot(lockedNote),
+				});
+			}
+			await transactionalEntityManager.insert(MiNoteRevision, {
+				id: this.idService.gen(), noteId: note.id, revision: revision + 1,
+				createdAt: updatedAt, schemaVersion: 1,
+				snapshot: {
+					text: normalized.text, cw: normalized.cw, fileIds: nextFileIds,
+					reactionAcceptance: normalized.reactionAcceptance,
+					replyVisibleContents: normalized.replyVisibleContents,
+				},
+			});
 			await transactionalEntityManager.update(MiNote, {
 				id: note.id,
 				userId: user.id,
 			}, {
+				revision: revision + 1,
 				text: normalized.text,
 				updatedAt,
 				replyVisibleContents: normalized.replyVisibleContents,
@@ -182,13 +211,14 @@ export class NoteUpdateService {
 			}
 		});
 
+		if (!didChange) return note;
+
 		const updatedNote = await this.notesRepository.findOneByOrFail({ id: note.id });
 
 		this.searchService.unindexNote(note);
 		this.searchService.indexNote(updatedNote);
 
-		const packedUpdatedNote = await this.noteEntityService.pack(updatedNote, user, {
-			skipHide: true,
+		const packedUpdatedNote = await this.noteEntityService.pack(updatedNote, null, {
 			withReactionAndUserPairCache: true,
 		});
 		this.globalEventService.publishNoteStream(updatedNote, 'updated', packedUpdatedNote);

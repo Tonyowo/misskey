@@ -9,6 +9,7 @@ import _Ajv from 'ajv';
 import { ModuleRef } from '@nestjs/core';
 import { In } from 'typeorm';
 import { DI } from '@/di-symbols.js';
+import { NotificationReadService } from '@/core/NotificationReadService.js';
 import type { Config } from '@/config.js';
 import type { Packed } from '@/misc/json-schema.js';
 import type { Promiseable } from '@/misc/prelude/await-all.js';
@@ -97,6 +98,7 @@ export class UserEntityService implements OnModuleInit {
 	private chatService: ChatService;
 
 	constructor(
+		private notificationReadService: NotificationReadService,
 		private moduleRef: ModuleRef,
 
 		@Inject(DI.config)
@@ -335,30 +337,8 @@ export class UserEntityService implements OnModuleInit {
 		hasUnread: boolean;
 		unreadCount: number;
 	}> {
-		const response = {
-			hasUnread: false,
-			unreadCount: 0,
-		};
-
-		const latestReadNotificationId = await this.redisClient.get(`latestReadNotification:${userId}`);
-
-		if (!latestReadNotificationId) {
-			response.unreadCount = await this.redisClient.xlen(`notificationTimeline:${userId}`);
-		} else {
-			const latestNotificationIdsRes = await this.redisClient.xrevrange(
-				`notificationTimeline:${userId}`,
-				'+',
-				latestReadNotificationId,
-			);
-
-			response.unreadCount = (latestNotificationIdsRes.length - 1 >= 0) ? latestNotificationIdsRes.length - 1 : 0;
-		}
-
-		if (response.unreadCount > 0) {
-			response.hasUnread = true;
-		}
-
-		return response;
+		const { unreadCount } = await this.notificationReadService.getState(userId);
+		return { hasUnread: unreadCount > 0, unreadCount };
 	}
 
 	@bindThis

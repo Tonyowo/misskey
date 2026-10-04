@@ -8,6 +8,7 @@ import { notificationTypes, userExportableEntities } from '@/types.js';
 const baseSchema = {
 	type: 'object',
 	properties: {
+		isRead: { type: 'boolean', optional: false, nullable: false },
 		id: {
 			type: 'string',
 			optional: false, nullable: false,
@@ -471,7 +472,7 @@ export const packedNotificationSchema = {
 			type: {
 				type: 'string',
 				optional: false, nullable: false,
-				enum: ['test'],
+				enum: ['test', 'abuseReportResolved'],
 			},
 		},
 	}],

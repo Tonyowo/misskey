@@ -42,6 +42,7 @@ export type ChatMessageSystemEvent = {
 	messageId?: MiChatMessage['id'] | null;
 };
 
+@Index('IDX_chat_message_mentions', { synchronize: false })
 @Entity('chat_message')
 export class MiChatMessage {
 	@PrimaryColumn(id())

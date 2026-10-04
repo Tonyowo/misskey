@@ -131,6 +131,7 @@ import type {
 	AdminSystemWebhookTestRequest,
 	AdminSystemWebhookUpdateRequest,
 	AdminSystemWebhookUpdateResponse,
+	AdminUnsetMfaRequest,
 	AdminUnsetUserAvatarRequest,
 	AdminUnsetUserBannerRequest,
 	AdminUnsuspendUserRequest,
@@ -559,6 +560,8 @@ import type {
 	NotesFeaturedResponse,
 	NotesGlobalTimelineRequest,
 	NotesGlobalTimelineResponse,
+	NotesHistoryRequest,
+	NotesHistoryResponse,
 	NotesHybridTimelineRequest,
 	NotesHybridTimelineResponse,
 	NotesLocalTimelineRequest,
@@ -576,6 +579,8 @@ import type {
 	NotesRenotesResponse,
 	NotesRepliesRequest,
 	NotesRepliesResponse,
+	NotesRepliesThreadRequest,
+	NotesRepliesThreadResponse,
 	NotesSearchRequest,
 	NotesSearchResponse,
 	NotesSearchByTagRequest,
@@ -598,6 +603,8 @@ import type {
 	NotesUserListTimelineRequest,
 	NotesUserListTimelineResponse,
 	NotificationsCreateRequest,
+	NotificationsReadRequest,
+	NotificationsReadResponse,
 	PagePushRequest,
 	PagesCreateRequest,
 	PagesCreateResponse,
@@ -805,6 +812,7 @@ export type Endpoints = {
 	'admin/system-webhook/show': { req: AdminSystemWebhookShowRequest; res: AdminSystemWebhookShowResponse };
 	'admin/system-webhook/test': { req: AdminSystemWebhookTestRequest; res: EmptyResponse };
 	'admin/system-webhook/update': { req: AdminSystemWebhookUpdateRequest; res: AdminSystemWebhookUpdateResponse };
+	'admin/unset-mfa': { req: AdminUnsetMfaRequest; res: EmptyResponse };
 	'admin/unset-user-avatar': { req: AdminUnsetUserAvatarRequest; res: EmptyResponse };
 	'admin/unset-user-banner': { req: AdminUnsetUserBannerRequest; res: EmptyResponse };
 	'admin/unsuspend-user': { req: AdminUnsuspendUserRequest; res: EmptyResponse };
@@ -1079,6 +1087,7 @@ export type Endpoints = {
 	'notes/favorites/delete': { req: NotesFavoritesDeleteRequest; res: EmptyResponse };
 	'notes/featured': { req: NotesFeaturedRequest; res: NotesFeaturedResponse };
 	'notes/global-timeline': { req: NotesGlobalTimelineRequest; res: NotesGlobalTimelineResponse };
+	'notes/history': { req: NotesHistoryRequest; res: NotesHistoryResponse };
 	'notes/hybrid-timeline': { req: NotesHybridTimelineRequest; res: NotesHybridTimelineResponse };
 	'notes/local-timeline': { req: NotesLocalTimelineRequest; res: NotesLocalTimelineResponse };
 	'notes/mentions': { req: NotesMentionsRequest; res: NotesMentionsResponse };
@@ -1089,6 +1098,7 @@ export type Endpoints = {
 	'notes/reactions/delete': { req: NotesReactionsDeleteRequest; res: EmptyResponse };
 	'notes/renotes': { req: NotesRenotesRequest; res: NotesRenotesResponse };
 	'notes/replies': { req: NotesRepliesRequest; res: NotesRepliesResponse };
+	'notes/replies-thread': { req: NotesRepliesThreadRequest; res: NotesRepliesThreadResponse };
 	'notes/search': { req: NotesSearchRequest; res: NotesSearchResponse };
 	'notes/search-by-tag': { req: NotesSearchByTagRequest; res: NotesSearchByTagResponse };
 	'notes/show': { req: NotesShowRequest; res: NotesShowResponse };
@@ -1104,6 +1114,7 @@ export type Endpoints = {
 	'notifications/create': { req: NotificationsCreateRequest; res: EmptyResponse };
 	'notifications/flush': { req: EmptyRequest; res: EmptyResponse };
 	'notifications/mark-all-as-read': { req: EmptyRequest; res: EmptyResponse };
+	'notifications/read': { req: NotificationsReadRequest; res: NotificationsReadResponse };
 	'notifications/test-notification': { req: EmptyRequest; res: EmptyResponse };
 	'page-push': { req: PagePushRequest; res: EmptyResponse };
 	'pages/create': { req: PagesCreateRequest; res: PagesCreateResponse };
