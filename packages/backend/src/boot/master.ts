@@ -18,6 +18,8 @@ import { envOption } from '@/env.js';
 import { initTelemetry, shutdownTelemetry } from '@/core/telemetry/telemetry-registry.js';
 import { initExtraThreadPool, jobQueue, server } from './common.js';
 import { installShutdownSignalHandlers } from './shutdown-handler.js';
+import { repairReactionCountsOnStartup } from './reaction-count-repair.js';
+import { repairUserNoteCountsOnStartup } from './user-note-count-repair.js';
 
 const logger = new Logger('core', 'cyan');
 const bootLogger = logger.createSubLogger('boot', 'magenta');
@@ -71,6 +73,8 @@ export async function masterMain() {
 		showEnvironment();
 		await showMachineInfo(bootLogger);
 		showNodejsVersion();
+		await repairUserNoteCountsOnStartup(config, bootLogger.createSubLogger('user-note-count-repair'));
+		await repairReactionCountsOnStartup(config, bootLogger.createSubLogger('reaction-count-repair'));
 		//await connectDb();
 		if (config.pidFile) fs.writeFileSync(config.pidFile, process.pid.toString());
 	} catch (e) {

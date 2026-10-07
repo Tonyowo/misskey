@@ -721,11 +721,11 @@ export class NoteCreateService implements OnApplicationShutdown {
 
 		// 投稿を作成
 		try {
-			if (insert.hasPoll) {
-				// Start transaction
-				await this.db.transaction(async transactionalEntityManager => {
-					await transactionalEntityManager.insert(MiNote, insert);
+			// Persist the note and its author's count together, before deferred side effects.
+			await this.db.transaction(async transactionalEntityManager => {
+				await transactionalEntityManager.insert(MiNote, insert);
 
+				if (insert.hasPoll) {
 					const poll = new MiPoll({
 						noteId: insert.id,
 						choices: data.poll!.choices,
@@ -739,10 +739,15 @@ export class NoteCreateService implements OnApplicationShutdown {
 					});
 
 					await transactionalEntityManager.insert(MiPoll, poll);
-				});
-			} else {
-				await this.notesRepository.insert(insert);
-			}
+				}
+				await transactionalEntityManager.getRepository(this.usersRepository.target).createQueryBuilder().update()
+					.set({
+						updatedAt: () => 'CURRENT_TIMESTAMP',
+						notesCount: () => '"notesCount" + 1',
+					})
+					.where('id = :id', { id: user.id })
+					.execute();
+			});
 
 			return {
 				...insert,
@@ -791,9 +796,6 @@ export class NoteCreateService implements OnApplicationShutdown {
 		if (data.visibility === 'public' || data.visibility === 'home') {
 			this.hashtagService.updateHashtags(user, tags);
 		}
-
-		// Increment notes count (user)
-		this.incNotesCountOfUser(user);
 
 		this.pushToTl(note, user);
 
@@ -1054,17 +1056,6 @@ export class NoteCreateService implements OnApplicationShutdown {
 		if (note.text == null && note.cw == null) return;
 
 		this.searchService.indexNote(note);
-	}
-
-	@bindThis
-	private incNotesCountOfUser(user: { id: MiUser['id']; }) {
-		this.usersRepository.createQueryBuilder().update()
-			.set({
-				updatedAt: new Date(),
-				notesCount: () => '"notesCount" + 1',
-			})
-			.where('id = :id', { id: user.id })
-			.execute();
 	}
 
 	@bindThis

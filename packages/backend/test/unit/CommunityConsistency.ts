@@ -12,6 +12,7 @@ import { GlobalModule } from '@/GlobalModule.js';
 import { DI } from '@/di-symbols.js';
 import { IdService } from '@/core/IdService.js';
 import { NoteDeleteService } from '@/core/NoteDeleteService.js';
+import { NoteCreateService } from '@/core/NoteCreateService.js';
 import { ChatService } from '@/core/ChatService.js';
 import { EmailService } from '@/core/EmailService.js';
 import { SignupService } from '@/core/SignupService.js';
@@ -102,6 +103,49 @@ describe('community consistency with PostgreSQL transactions', () => {
 		} finally {
 			await users.query('ALTER TABLE "user" DROP CONSTRAINT test_note_count');
 		}
+	});
+
+	test.each([false, true])('commits a new note and its counter together (poll: %s)', async withPoll => {
+		const author = await createUser();
+		const note = await app.get(NoteCreateService)['insertNote'](author, {
+			text: 'counted before deferred side effects', visibility: 'public', localOnly: true,
+			...(withPoll ? { poll: { choices: ['a', 'b'], multiple: false, expiresAt: null } } : {}),
+		}, [], [], []);
+		expect(await notes.existsBy({ id: note.id })).toBe(true);
+		expect((await users.findOneByOrFail({ id: author.id })).notesCount).toBe(11);
+		if (withPoll) expect(await users.query('SELECT "noteId" FROM poll WHERE "noteId" = $1', [note.id])).toHaveLength(1);
+	});
+
+	test.each([false, true])('rolls a new note and poll back if the counter cannot be updated (poll: %s)', async withPoll => {
+		const author = await createUser();
+		await users.query('ALTER TABLE "user" ADD CONSTRAINT test_create_count CHECK ("notesCount" <= 10) NOT VALID');
+		try {
+			await expect(app.get(NoteCreateService)['insertNote'](author, {
+				text: 'must roll back', visibility: 'public', localOnly: true,
+				...(withPoll ? { poll: { choices: ['a', 'b'], multiple: false, expiresAt: null } } : {}),
+			}, [], [], [])).rejects.toThrow();
+			expect(await notes.countBy({ userId: author.id })).toBe(0);
+			expect(await users.query('SELECT "noteId" FROM poll WHERE "userId" = $1', [author.id])).toHaveLength(0);
+			expect((await users.findOneByOrFail({ id: author.id })).notesCount).toBe(10);
+		} finally {
+			await users.query('ALTER TABLE "user" DROP CONSTRAINT test_create_count');
+		}
+	});
+
+	test('does not lose concurrent increments or increment again when insertion fails', async () => {
+		const author = await createUser();
+		const service = app.get(NoteCreateService);
+		await Promise.all(Array.from({ length: 8 }, () => service['insertNote'](author, {
+			text: 'concurrent', visibility: 'public', localOnly: true,
+		}, [], [], [])));
+		expect(await notes.countBy({ userId: author.id })).toBe(8);
+		expect((await users.findOneByOrFail({ id: author.id })).notesCount).toBe(18);
+		const existing = await notes.findOneByOrFail({ userId: author.id });
+		vi.spyOn(ids, 'gen').mockReturnValueOnce(existing.id);
+		await expect(service['insertNote'](author, { text: 'duplicate', visibility: 'public' }, [], [], [])).rejects.toThrow('Duplicated note');
+		expect((await users.findOneByOrFail({ id: author.id })).notesCount).toBe(18);
+		await app.get(NoteDeleteService).delete(author, existing, true);
+		expect((await users.findOneByOrFail({ id: author.id })).notesCount).toBe(17);
 	});
 
 	test('only one concurrent ownership transfer succeeds and all users retain membership', async () => {

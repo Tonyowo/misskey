@@ -137,7 +137,9 @@ export default defineConfig((args) => {
 			input: [
 				'./src/boot/entry.ts',
 				'./src/boot/cli.ts',
+				'./src/boot/user-note-count-repair.ts',
 				'./src/config.ts',
+				'./src/const.ts',
 				'./src/postgres.ts',
 				'./src/server/api/openapi/gen-spec.ts',
 			],
