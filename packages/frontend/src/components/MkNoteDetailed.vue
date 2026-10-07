@@ -140,9 +140,9 @@ SPDX-License-Identifier: AGPL-3.0-only
 				<MkReactionsViewer
 					v-if="appearNote.reactionAcceptance !== 'likeOnly'"
 					style="margin-top: 6px;"
-					:reactions="extraReactions"
+					:reactions="$appearNote.reactions"
 					:reactionEmojis="$appearNote.reactionEmojis"
-					:myReaction="liked ? null : $appearNote.myReaction"
+					:myReaction="$appearNote.myReaction"
 					:noteId="appearNote.id"
 				/>
 
@@ -163,12 +163,13 @@ SPDX-License-Identifier: AGPL-3.0-only
 					<i class="ti ti-message-circle"></i><span>{{ i18n.ts._community.comment }}</span>
 					<p v-if="appearNote.repliesCount > 0" :class="$style.noteFooterButtonCount">{{ number(appearNote.repliesCount) }}</p>
 				</button>
-				<button ref="reactButton" :class="$style.noteFooterButton" class="_button" :disabled="likePending" :aria-pressed="liked" :aria-label="i18n.ts._community.like" @click="toggleLike()">
-					<i :class="liked ? 'ti ti-heart-filled' : 'ti ti-heart'" :style="liked ? { color: 'var(--MI_THEME-love)' } : undefined"></i>
-					<span>{{ i18n.ts._community.like }}</span>
-					<p v-if="likeCount > 0" :class="$style.noteFooterButtonCount">{{ number(likeCount) }}</p>
+				<button ref="reactButton" :class="$style.noteFooterButton" class="_button" :aria-label="appearNote.reactionAcceptance === 'likeOnly' ? i18n.ts._community.like : i18n.ts.reactions" :aria-pressed="$appearNote.myReaction != null" @click="toggleReact()">
+					<i v-if="appearNote.reactionAcceptance === 'likeOnly' && $appearNote.myReaction != null" class="ti ti-heart-filled" style="color: var(--MI_THEME-love);"></i>
+					<i v-else-if="$appearNote.myReaction != null" class="ti ti-minus" style="color: var(--MI_THEME-accent);"></i>
+					<i v-else-if="appearNote.reactionAcceptance === 'likeOnly'" class="ti ti-heart"></i>
+					<i v-else class="ti ti-plus"></i>
+					<p v-if="(appearNote.reactionAcceptance === 'likeOnly' || prefer.s.showReactionsCount) && $appearNote.reactionCount > 0" :class="$style.noteFooterButtonCount">{{ number($appearNote.reactionCount) }}</p>
 				</button>
-				<button class="_button" :class="$style.noteFooterButton" :aria-label="i18n.ts.reactions" @click="react()"><i class="ti ti-mood-smile"></i></button>
 				<button v-if="prefer.s.showClipButtonInNoteFooter" ref="clipButton" class="_button" :class="$style.noteFooterButton" @mousedown.prevent="clip()">
 					<i class="ti ti-paperclip"></i>
 				</button>
@@ -295,7 +296,6 @@ const {
 	translation,
 	muted,
 	canRenote,
-	liked, likePending, likeCount, extraReactions, toggleLike,
 	isMyRenote,
 	parsed,
 	urls,
