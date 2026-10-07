@@ -14,6 +14,7 @@ import {
 describe('chat home route helpers', () => {
 	test('parses only known tab values', () => {
 		expect(parseChatHomeTab('groups')).toBe('groups');
+		expect(parseChatHomeTab('directNotes')).toBe('directNotes');
 		expect(parseChatHomeTab('invalid')).toBe('conversation');
 		expect(parseChatHomeTab(undefined)).toBe('conversation');
 	});
@@ -59,5 +60,8 @@ describe('chat home route helpers', () => {
 			q: '',
 			focus: 'requests',
 		})).toEqual({});
+	});
+	test('preserves private-note URLs without group-only focus', () => {
+		expect(buildChatHomeQuery({ tab: 'directNotes', filter: 'all', q: '', focus: 'approvals' })).toEqual({ tab: 'directNotes' });
 	});
 });

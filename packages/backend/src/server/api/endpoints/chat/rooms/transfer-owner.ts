@@ -24,6 +24,11 @@ export const meta = {
 	},
 
 	errors: {
+		forbidden: {
+			message: 'Only the current room owner can transfer ownership.',
+			code: 'FORBIDDEN',
+			id: '3652e549-aa30-4152-be8f-b8ff0d141190',
+		},
 		noSuchMembership: {
 			message: 'Target user must be a room member.',
 			code: 'NO_SUCH_MEMBERSHIP',
@@ -63,6 +68,9 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 				const room = await this.chatService.transferRoomOwner(me.id, ps.roomId, ps.userId);
 				return await this.chatEntityService.packRoom(room, me);
 			} catch (err) {
+				if (err instanceof Error && err.message === 'forbidden') {
+					throw new ApiError(meta.errors.forbidden);
+				}
 				if (err instanceof EntityNotFoundError) {
 					throw new ApiError(meta.errors.noSuchMembership);
 				}

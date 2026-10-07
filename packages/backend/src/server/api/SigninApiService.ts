@@ -18,6 +18,7 @@ import type {
 import type Logger from '@/logger.js';
 import type { Config } from '@/config.js';
 import { getIpHash } from '@/misc/get-ip-hash.js';
+import { findVerifiedLocalEmailProfile } from '@/misc/account-email.js';
 import type { MiLocalUser } from '@/models/User.js';
 import { IdService } from '@/core/IdService.js';
 import { bindThis } from '@/decorators.js';
@@ -68,13 +69,7 @@ export class SigninApiService {
 	@bindThis
 	private async resolveSigninUser(identifier: string): Promise<MiLocalUser | null> {
 		if (identifier.includes('@')) {
-			const profile = await this.userProfilesRepository.findOne({
-				where: {
-					email: identifier,
-					emailVerified: true,
-				},
-				relations: { user: true },
-			});
+			const profile = await findVerifiedLocalEmailProfile(this.userProfilesRepository, identifier);
 
 			if (profile?.user != null && profile.user.host == null) {
 				return profile.user as MiLocalUser;

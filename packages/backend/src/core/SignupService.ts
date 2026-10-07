@@ -15,6 +15,7 @@ import { IdService } from '@/core/IdService.js';
 import { MiUserKeypair } from '@/models/UserKeypair.js';
 import { MiUsedUsername } from '@/models/UsedUsername.js';
 import { generateNativeUserToken } from '@/misc/token.js';
+import { isAccountEmailUsed, lockAccountEmail, normalizeAccountEmail } from '@/misc/account-email.js';
 import { UserEntityService } from '@/core/entities/UserEntityService.js';
 import { bindThis } from '@/decorators.js';
 import UsersChart from '@/core/chart/charts/users.js';
@@ -55,6 +56,8 @@ export class SignupService {
 		passwordHash?: MiUserProfile['password'] | null;
 		host?: string | null;
 		ignorePreservedUsernames?: boolean;
+		/** Email ownership has already been verified by the pending signup code. */
+		verifiedEmail?: string;
 	}) {
 		const { username, password, passwordHash, host } = opts;
 		let hash = passwordHash;
@@ -121,6 +124,13 @@ export class SignupService {
 
 		// Start transaction
 		await this.db.transaction(async transactionalEntityManager => {
+			const email = opts.verifiedEmail == null ? null : normalizeAccountEmail(opts.verifiedEmail);
+			if (email != null) {
+				await lockAccountEmail(transactionalEntityManager, email);
+				if (await isAccountEmailUsed(transactionalEntityManager.getRepository(MiUserProfile), email)) {
+					throw new Error('EMAIL_ALREADY_USED');
+				}
+			}
 			const exist = await transactionalEntityManager.findOneBy(MiUser, {
 				usernameLower: username.toLowerCase(),
 				host: IsNull(),
@@ -146,6 +156,8 @@ export class SignupService {
 				userId: account.id,
 				autoAcceptFollowed: true,
 				password: hash,
+				email,
+				emailVerified: email != null,
 			}));
 
 			await transactionalEntityManager.save(new MiUsedUsername({

@@ -4,6 +4,7 @@
  */
 
 import { Inject, Injectable } from '@nestjs/common';
+import { normalizeAccountEmail } from '@/misc/account-email.js';
 import ms from 'ms';
 import bcrypt from 'bcryptjs';
 import { Endpoint } from '@/server/api/endpoint-base.js';
@@ -82,6 +83,7 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 		private globalEventService: GlobalEventService,
 	) {
 		super(meta, paramDef, async (ps, me) => {
+			const emailAddress = ps.email == null ? null : normalizeAccountEmail(ps.email);
 			const token = ps.token;
 			const profile = await this.userProfilesRepository.findOneByOrFail({ userId: me.id });
 
@@ -102,8 +104,8 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 				throw new ApiError(meta.errors.incorrectPassword);
 			}
 
-			if (ps.email != null) {
-				const res = await this.emailService.validateEmailForAccount(ps.email);
+			if (emailAddress != null) {
+				const res = await this.emailService.validateEmailForAccount(emailAddress);
 				if (!res.available) {
 					throw new ApiError(meta.errors.unavailable);
 				}
@@ -111,10 +113,11 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 				throw new ApiError(meta.errors.emailRequired);
 			}
 
+			const code = emailAddress == null ? null : secureRndstr(16, { chars: L_CHARS });
 			await this.userProfilesRepository.update(me.id, {
-				email: ps.email,
+				email: emailAddress,
 				emailVerified: false,
-				emailVerifyCode: null,
+				emailVerifyCode: code,
 			});
 
 			const iObj = await this.userEntityService.pack(me.id, me, {
@@ -125,17 +128,11 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 			// Publish meUpdated event
 			this.globalEventService.publishMainStream(me.id, 'meUpdated', iObj);
 
-			if (ps.email != null) {
-				const code = secureRndstr(16, { chars: L_CHARS });
-
-				await this.userProfilesRepository.update(me.id, {
-					emailVerifyCode: code,
-				});
-
+			if (emailAddress != null) {
 				const link = `${this.config.url}/verify-email/${code}`;
 				const email = createEmailVerificationEmail(link);
 
-				this.emailService.sendEmail(ps.email, email.subject, email.html, email.text);
+				this.emailService.sendEmail(emailAddress, email.subject, email.html, email.text);
 			}
 
 			return iObj;

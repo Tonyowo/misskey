@@ -4,6 +4,7 @@
  */
 
 import { Inject, Injectable } from '@nestjs/common';
+import { EntityNotFoundError } from 'typeorm';
 import { Endpoint } from '@/server/api/endpoint-base.js';
 import { DI } from '@/di-symbols.js';
 import { ChatService } from '@/core/ChatService.js';
@@ -41,7 +42,12 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 		super(meta, paramDef, async (ps, me) => {
 			await this.chatService.checkChatAvailability(me.id, 'write');
 
-			await this.chatService.leaveRoom(me.id, ps.roomId);
+			try {
+				await this.chatService.leaveRoom(me.id, ps.roomId);
+			} catch (err) {
+				if (err instanceof EntityNotFoundError) throw new ApiError(meta.errors.noSuchRoom);
+				throw err;
+			}
 		});
 	}
 }

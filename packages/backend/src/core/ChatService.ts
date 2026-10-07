@@ -913,9 +913,10 @@ export class ChatService implements OnApplicationShutdown {
 	}
 
 	@bindThis
-	public async getRoomActorRole(room: MiChatRoom, userId: MiUser['id']): Promise<'owner' | ChatRoomMembershipRole | null> {
+	public async getRoomActorRole(room: MiChatRoom, userId: MiUser['id'], manager?: EntityManager): Promise<'owner' | ChatRoomMembershipRole | null> {
 		if (room.ownerId === userId) return 'owner';
-		const membership = await this.chatRoomMembershipsRepository.findOneBy({ roomId: room.id, userId });
+		const memberships = manager ? manager.getRepository(this.chatRoomMembershipsRepository.target) : this.chatRoomMembershipsRepository;
+		const membership = await memberships.findOneBy({ roomId: room.id, userId });
 		return membership?.role ?? null;
 	}
 
@@ -1553,8 +1554,12 @@ export class ChatService implements OnApplicationShutdown {
 
 	@bindThis
 	public async leaveRoom(userId: MiUser['id'], roomId: MiChatRoom['id']) {
-		const membership = await this.chatRoomMembershipsRepository.findOneByOrFail({ roomId, userId });
-		await this.chatRoomMembershipsRepository.delete(membership.id);
+		await this.chatRoomsRepository.manager.transaction(async manager => {
+			await this.lockRoomForMembershipMutation(manager, roomId);
+			const memberships = manager.getRepository(this.chatRoomMembershipsRepository.target);
+			const membership = await memberships.findOneByOrFail({ roomId, userId });
+			await memberships.delete(membership.id);
+		});
 
 		// 未読フラグを消す (「既読にする」というわけでもないのでreadメソッドは使わないでおく)
 		const redisPipeline = this.redisClient.pipeline();
@@ -1717,21 +1722,16 @@ export class ChatService implements OnApplicationShutdown {
 
 	@bindThis
 	public async kickRoomMember(actorId: MiUser['id'], roomId: MiChatRoom['id'], userId: MiUser['id']) {
-		const room = await this.chatRoomsRepository.findOneByOrFail({ id: roomId });
-		const actorRole = await this.getRoomActorRole(room, actorId);
-		if (!this.hasRoomPermissionByRole(room, actorRole, 'kick')) {
-			throw new Error('forbidden');
-		}
-		if (room.ownerId === userId) {
-			throw new Error('cannot kick owner');
-		}
-
-		const targetMembership = await this.chatRoomMembershipsRepository.findOneByOrFail({ roomId, userId });
-		if (actorRole === 'admin' && targetMembership.role === 'admin') {
-			throw new Error('forbidden');
-		}
-
-		await this.chatRoomMembershipsRepository.delete(targetMembership.id);
+		await this.chatRoomsRepository.manager.transaction(async manager => {
+			const room = await this.lockRoomForMembershipMutation(manager, roomId);
+			const actorRole = await this.getRoomActorRole(room, actorId, manager);
+			if (!this.hasRoomPermissionByRole(room, actorRole, 'kick')) throw new Error('forbidden');
+			if (room.ownerId === userId) throw new Error('cannot kick owner');
+			const memberships = manager.getRepository(this.chatRoomMembershipsRepository.target);
+			const targetMembership = await memberships.findOneByOrFail({ roomId, userId });
+			if (actorRole === 'admin' && targetMembership.role === 'admin') throw new Error('forbidden');
+			await memberships.delete(targetMembership.id);
+		});
 
 		const redisPipeline = this.redisClient.pipeline();
 		redisPipeline.del(this.getRoomUnreadMarkerKey(userId, roomId));
@@ -1746,24 +1746,17 @@ export class ChatService implements OnApplicationShutdown {
 
 	@bindThis
 	public async banRoomMember(actorId: MiUser['id'], roomId: MiChatRoom['id'], userId: MiUser['id'], reason?: string | null, expiresAt?: Date | null) {
-		const room = await this.chatRoomsRepository.findOneByOrFail({ id: roomId });
-		const actorRole = await this.getRoomActorRole(room, actorId);
-		if (!this.hasRoomPermissionByRole(room, actorRole, 'ban')) {
-			throw new Error('forbidden');
-		}
 		if (expiresAt != null && expiresAt.getTime() <= Date.now()) {
 			throw new Error('invalid expires at');
 		}
-		if (room.ownerId === userId) {
-			throw new Error('cannot ban owner');
-		}
-
-		const targetMembership = await this.chatRoomMembershipsRepository.findOneBy({ roomId, userId });
-		if (actorRole === 'admin' && targetMembership?.role === 'admin') {
-			throw new Error('forbidden');
-		}
 
 		await this.chatRoomsRepository.manager.transaction(async (manager) => {
+			const room = await this.lockRoomForMembershipMutation(manager, roomId);
+			const actorRole = await this.getRoomActorRole(room, actorId, manager);
+			if (!this.hasRoomPermissionByRole(room, actorRole, 'ban')) throw new Error('forbidden');
+			if (room.ownerId === userId) throw new Error('cannot ban owner');
+			const targetMembership = await manager.getRepository(this.chatRoomMembershipsRepository.target).findOneBy({ roomId, userId });
+			if (actorRole === 'admin' && targetMembership?.role === 'admin') throw new Error('forbidden');
 			await manager.getRepository(this.chatRoomBansRepository.target).upsert({
 				id: this.idService.gen(),
 				roomId,
@@ -1901,12 +1894,12 @@ export class ChatService implements OnApplicationShutdown {
 
 	@bindThis
 	public async transferRoomOwner(ownerId: MiUser['id'], roomId: MiChatRoom['id'], newOwnerId: MiUser['id']) {
-		const room = await this.chatRoomsRepository.findOneByOrFail({ id: roomId, ownerId });
-		if (newOwnerId === ownerId) return room;
-
-		const newOwnerMembership = await this.chatRoomMembershipsRepository.findOneByOrFail({ roomId, userId: newOwnerId });
-
 		await this.chatRoomsRepository.manager.transaction(async (manager) => {
+			const room = await this.lockRoomForMembershipMutation(manager, roomId);
+			if (room.ownerId !== ownerId) throw new Error('forbidden');
+			if (newOwnerId === ownerId) return;
+			const newOwnerMembership = await manager.getRepository(this.chatRoomMembershipsRepository.target)
+				.findOneByOrFail({ roomId, userId: newOwnerId });
 			await manager.getRepository(this.chatRoomMembershipsRepository.target).delete(newOwnerMembership.id);
 
 			const oldOwnerMembership = await manager.getRepository(this.chatRoomMembershipsRepository.target).findOneBy({ roomId, userId: ownerId });
@@ -1923,6 +1916,7 @@ export class ChatService implements OnApplicationShutdown {
 
 			await manager.getRepository(this.chatRoomsRepository.target).update(room.id, { ownerId: newOwnerId });
 		});
+		if (newOwnerId === ownerId) return await this.chatRoomsRepository.findOneByOrFail({ id: roomId });
 
 		await this.createRoomSystemMessage(ownerId, roomId, {
 			type: 'owner_transferred',

@@ -29,7 +29,7 @@ export const navbarItemDef = reactive<{
 	messages: {
 		title: i18n.ts._community.messages, icon: 'ti ti-messages', to: '/my/messages',
 		show: computed(() => $i != null),
-		indicated: computed(() => Boolean($i?.hasUnreadNotification || $i?.hasUnreadChatMessages)),
+		indicated: computed(() => Boolean($i?.hasUnreadChatMessages)),
 	},
 	publish: { title: i18n.ts._community.publish, icon: 'ti ti-pencil', action: () => { os.post(); } },
 	profile: {
@@ -138,10 +138,10 @@ export const navbarItemDef = reactive<{
 		to: '/channels',
 	},
 	chat: {
-		title: i18n.ts.chat,
+		title: i18n.ts._community.messages,
 		icon: 'ti ti-messages',
-		to: '/chat',
-		show: computed(() => $i != null && $i.policies.chatAvailability !== 'unavailable'),
+		to: '/my/messages',
+		show: computed(() => $i != null),
 		indicated: computed(() => $i != null && $i.hasUnreadChatMessages),
 	},
 	achievements: {

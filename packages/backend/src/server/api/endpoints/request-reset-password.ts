@@ -4,9 +4,8 @@
  */
 
 import ms from 'ms';
-import { IsNull } from 'typeorm';
 import { Inject, Injectable } from '@nestjs/common';
-import type { PasswordResetRequestsRepository, UserProfilesRepository, UsersRepository } from '@/models/_.js';
+import type { PasswordResetRequestsRepository, UserProfilesRepository } from '@/models/_.js';
 import { Endpoint } from '@/server/api/endpoint-base.js';
 import { IdService } from '@/core/IdService.js';
 import type { Config } from '@/config.js';
@@ -14,6 +13,7 @@ import { DI } from '@/di-symbols.js';
 import { EmailService } from '@/core/EmailService.js';
 import { createPasswordResetEmail } from '@/core/email/EmailTemplates.js';
 import { L_CHARS, secureRndstr } from '@/misc/secure-rndstr.js';
+import { findVerifiedLocalEmailProfile, normalizeAccountEmail } from '@/misc/account-email.js';
 
 export const meta = {
 	tags: ['reset password'],
@@ -46,9 +46,6 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 		@Inject(DI.config)
 		private config: Config,
 
-		@Inject(DI.usersRepository)
-		private usersRepository: UsersRepository,
-
 		@Inject(DI.userProfilesRepository)
 		private userProfilesRepository: UserProfilesRepository,
 
@@ -59,42 +56,29 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 		private emailService: EmailService,
 	) {
 		super(meta, paramDef, async (ps, me) => {
-			const emailAddress = ps.email.trim();
+			const emailAddress = normalizeAccountEmail(ps.email);
 
 			if (emailAddress === '') {
 				return;
 			}
 
-			const profiles = await this.userProfilesRepository
-				.createQueryBuilder('profile')
-				.where('LOWER(profile.email) = :email', { email: emailAddress.toLowerCase() })
-				.andWhere('profile.emailVerified = true')
-				.getMany();
+			const profile = await findVerifiedLocalEmailProfile(this.userProfilesRepository, emailAddress);
+			// Unknown and ambiguous addresses both return without disclosing account information.
+			if (profile?.user == null || profile.email == null) return;
+			const user = profile.user;
 
-			for (const profile of profiles) {
-				const user = await this.usersRepository.findOneBy({
-					id: profile.userId,
-					host: IsNull(),
-				});
+			const token = secureRndstr(64, { chars: L_CHARS });
 
-				// パスワードリセットの対象はローカルユーザーのみ
-				if (user == null) {
-					continue;
-				}
+			await this.passwordResetRequestsRepository.insert({
+				id: this.idService.gen(),
+				userId: profile.userId,
+				token,
+			});
 
-				const token = secureRndstr(64, { chars: L_CHARS });
+			const link = `${this.config.url}/reset-password/${token}`;
+			const email = createPasswordResetEmail(link, user.username);
 
-				await this.passwordResetRequestsRepository.insert({
-					id: this.idService.gen(),
-					userId: profile.userId,
-					token,
-				});
-
-				const link = `${this.config.url}/reset-password/${token}`;
-				const email = createPasswordResetEmail(link, user.username);
-
-				this.emailService.sendEmail(emailAddress, email.subject, email.html, email.text);
-			}
+			this.emailService.sendEmail(profile.email.trim(), email.subject, email.html, email.text);
 		});
 	}
 }

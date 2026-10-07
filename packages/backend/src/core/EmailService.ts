@@ -16,6 +16,7 @@ import { LoggerService } from '@/core/LoggerService.js';
 import { bindThis } from '@/decorators.js';
 import { HttpRequestService } from '@/core/HttpRequestService.js';
 import { escapeHtml } from '@/misc/escape-html.js';
+import { isAccountEmailUsed, normalizeAccountEmail } from '@/misc/account-email.js';
 
 @Injectable()
 export class EmailService {
@@ -225,6 +226,7 @@ export class EmailService {
 		available: boolean;
 		reason: null | 'used' | 'format' | 'disposable' | 'mx' | 'smtp' | 'banned' | 'network' | 'blacklist';
 	}> {
+		emailAddress = normalizeAccountEmail(emailAddress);
 		if (!this.utilityService.validateEmailFormat(emailAddress)) {
 			return {
 				available: false,
@@ -232,12 +234,7 @@ export class EmailService {
 			};
 		}
 
-		const exist = await this.userProfilesRepository.countBy({
-			emailVerified: true,
-			email: emailAddress,
-		});
-
-		if (exist !== 0) {
+		if (await isAccountEmailUsed(this.userProfilesRepository, emailAddress)) {
 			return {
 				available: false,
 				reason: 'used',

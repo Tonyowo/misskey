@@ -5,9 +5,14 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 <template>
 <div v-if="communityNavigation" ref="rootEl" :class="$style.root">
-	<button v-for="item in primaryItems" :key="item.key" type="button" class="_button" :class="$style.item" :aria-label="item.label" @click="item.action">
-		<div :class="$style.itemInner"><i :class="[$style.itemIcon, item.icon]"></i><i v-if="item.key === 'messages' && ($i?.hasUnreadNotification || $i?.hasUnreadChatMessages)" :class="$style.itemIndicator" class="_indicatorCircle"></i></div>
-		<span :class="$style.itemLabel">{{ item.label }}</span>
+	<button v-for="item in primaryItems" :key="item.key" v-tooltip="item.label" type="button" class="_button" :class="[$style.item, { [$style.post]: item.key === 'publish' }]" :aria-label="item.label" :aria-current="isActive(item.key) ? 'page' : undefined" :aria-expanded="item.key === 'menu' ? drawerMenuShowing : item.key === 'widgets' ? widgetsShowing : undefined" @click="item.action">
+		<div :class="$style.itemInner">
+			<i aria-hidden="true" :class="[$style.itemIcon, item.icon]"></i>
+			<span v-if="item.key === 'notifications' && $i?.hasUnreadNotification" :class="$style.itemIndicator">
+				<span class="_indicateCounter" :class="$style.itemIndicateValueIcon">{{ $i.unreadNotificationsCount > 99 ? '99+' : $i.unreadNotificationsCount }}</span>
+			</span>
+			<i v-else-if="item.key === 'menu' && menuIndicated" aria-hidden="true" :class="$style.itemIndicator" class="_indicatorCircle"></i>
+		</div>
 	</button>
 </div>
 <div v-else ref="legacyRootEl" :class="$style.root">
@@ -60,19 +65,27 @@ const widgetsShowing = defineModel<boolean>('widgetsShowing');
 
 const communityNavigation = computed(() => prefer.s.menu.includes('messages'));
 const primaryItems = [
+	{ key: 'menu', label: i18n.ts.menu, icon: 'ti ti-menu-2', action: () => { drawerMenuShowing.value = true; } },
 	{ key: 'home', label: i18n.ts._community.home, icon: 'ti ti-home', action: () => mainRouter.push('/') },
-	{ key: 'discover', label: i18n.ts._community.discover, icon: 'ti ti-compass', action: () => mainRouter.push('/explore') },
-	{ key: 'publish', label: i18n.ts._community.publish, icon: 'ti ti-pencil', action: () => { os.post(); } },
-	{ key: 'messages', label: i18n.ts._community.messages, icon: 'ti ti-messages', action: () => mainRouter.push('/my/messages') },
-	{ key: 'profile', label: i18n.ts._community.myProfile, icon: 'ti ti-user', action: () => mainRouter.pushByPath($i ? `/@${$i.username}` : '/settings') },
+	{ key: 'notifications', label: i18n.ts.notifications, icon: 'ti ti-bell', action: () => mainRouter.push('/my/notifications') },
+	{ key: 'widgets', label: i18n.ts.widgets, icon: 'ti ti-apps', action: () => { widgetsShowing.value = true; } },
+	{ key: 'publish', label: i18n.ts.note, icon: 'ti ti-pencil', action: () => { os.post(); } },
 ];
+
+function isActive(key: string): boolean {
+	const path = mainRouter.currentRoute.value.path;
+	if (key === 'home') return path === '/';
+	if (key === 'notifications') return path.startsWith('/my/notifications');
+	return false;
+}
+
 const primaryRoot = useTemplateRef('rootEl');
 const legacyRoot = useTemplateRef('legacyRootEl');
 const rootEl = computed(() => primaryRoot.value ?? legacyRoot.value);
 
 const menuIndicated = computed(() => {
 	for (const def in navbarItemDef) {
-		if (def === 'notifications') continue; // 通知は下にボタンとして表示されてるから
+		if (def === 'notifications') continue;
 		if (navbarItemDef[def].indicated) return true;
 	}
 	return false;
@@ -151,12 +164,6 @@ watch(rootEl, () => {
 	&:active {
 		background: var(--MI_THEME-panelHighlight);
 	}
-}
-
-.itemLabel {
-	display: block;
-	font-size: 0.75rem;
-	margin-top: 3px;
 }
 
 .itemIcon {

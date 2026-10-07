@@ -24,6 +24,7 @@ import XUsers from './explore.users.vue';
 import XRoles from './explore.roles.vue';
 import { definePage } from '@/page.js';
 import { i18n } from '@/i18n.js';
+import { mainRouter } from '@/router.js';
 
 const props = withDefaults(defineProps<{
 	initialTab?: string;
@@ -33,7 +34,11 @@ const props = withDefaults(defineProps<{
 
 const tab = ref(props.initialTab);
 
-const headerActions = computed(() => []);
+const headerActions = computed(() => [{
+	icon: 'ti ti-search',
+	text: i18n.ts.search,
+	handler: () => mainRouter.push('/search'),
+}]);
 
 const headerTabs = computed(() => [{
 	key: 'featured',

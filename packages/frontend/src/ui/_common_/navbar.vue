@@ -7,14 +7,14 @@ SPDX-License-Identifier: AGPL-3.0-only
 <div :class="[$style.root, { [$style.iconOnly]: iconOnly }]">
 	<div :class="$style.body">
 		<div :class="$style.top">
-<button v-tooltip.noDelay.right="instance.name ?? i18n.ts.instance" class="_button" :class="$style.instance">
+<button v-tooltip.noDelay.right="instance.name ?? i18n.ts.instance" :aria-label="instance.name ?? i18n.ts.instance" class="_button" :class="$style.instance" @click="openInstanceMenu">
         <img :src="instance.iconUrl || '/favicon.ico'" alt="" :class="$style.instanceIcon" style="view-transition-name: navbar-serverIcon;"/>
 			</button>
 			<button v-if="!iconOnly" v-tooltip.noDelay.right="i18n.ts.realtimeMode" class="_button" :class="[$style.realtimeMode, store.r.realtimeMode.value ? $style.on : null]" @click="toggleRealtimeMode">
 				<i v-if="store.r.realtimeMode.value" class="ti ti-bolt ti-fw"></i>
 				<i v-else class="ti ti-bolt-off ti-fw"></i>
 			</button>
-			<button v-if="!iconOnly && showWidgetButton" v-tooltip.noDelay.right="i18n.ts.widgets" class="_button" :class="[$style.widget]" @click="() => emit('widgetButtonClick')">
+			<button v-if="!iconOnly && showWidgetButton" v-tooltip.noDelay.right="i18n.ts.widgets" :aria-label="i18n.ts.widgets" class="_button" :class="[$style.widget]" @click="() => emit('widgetButtonClick')">
 				<i class="ti ti-apps ti-fw"></i>
 			</button>
 		</div>
@@ -22,11 +22,14 @@ SPDX-License-Identifier: AGPL-3.0-only
 			<MkA v-tooltip.noDelay.right="(prefer.s.menu.includes('messages') ? i18n.ts._community.home : i18n.ts.timeline)" :class="$style.item" :activeClass="$style.active" to="/" exact>
 				<i :class="$style.itemIcon" class="ti ti-home ti-fw" style="view-transition-name: navbar-homeIcon;"></i><span :class="$style.itemText">{{ (prefer.s.menu.includes('messages') ? i18n.ts._community.home : i18n.ts.timeline) }}</span>
 			</MkA>
-			<template v-for="item in prefer.r.menu.value">
+			<MkA v-if="props.asDrawer" v-tooltip.noDelay.right="i18n.ts.settings" :class="$style.item" :activeClass="$style.active" to="/settings">
+				<i :class="$style.itemIcon" class="ti ti-settings ti-fw"></i><span :class="$style.itemText">{{ i18n.ts.settings }}</span>
+			</MkA>
+			<template v-for="item in menu">
 				<div v-if="item === '-'" :class="$style.divider"></div>
 				<component
 					:is="navbarItemDef[item].to ? 'MkA' : 'button'"
-					v-else-if="navbarItemDef[item] && (navbarItemDef[item].show == null || navbarItemDef[item].show.value !== false)"
+					v-else-if="navbarItemDef[item] && (navbarItemDef[item].show == null || unref(navbarItemDef[item].show))"
 					v-tooltip.noDelay.right="navbarItemDef[item].title"
 					class="_button"
 					:class="[$style.item]"
@@ -41,11 +44,14 @@ SPDX-License-Identifier: AGPL-3.0-only
 					</span>
 				</component>
 			</template>
+			<button v-if="!props.asDrawer || !prefer.s.menu.includes('messages')" v-tooltip.noDelay.right="i18n.ts.more" type="button" :aria-label="i18n.ts.more" class="_button" :class="$style.item" data-testid="navigation-more" @click="more">
+				<i :class="$style.itemIcon" class="ti ti-grid-dots ti-fw" aria-hidden="true"></i><span :class="$style.itemText">{{ i18n.ts.more }}</span>
+			</button>
 			<div :class="$style.divider"></div>
 			<MkA v-if="$i != null && ($i.isAdmin || $i.isModerator)" v-tooltip.noDelay.right="i18n.ts.controlPanel" :class="$style.item" :activeClass="$style.active" to="/admin">
 				<i :class="$style.itemIcon" class="ti ti-dashboard ti-fw" style="view-transition-name: navbar-controlPanel;"></i><span :class="$style.itemText">{{ i18n.ts.controlPanel }}</span>
 			</MkA>
-			<MkA v-tooltip.noDelay.right="i18n.ts.settings" :class="$style.item" :activeClass="$style.active" to="/settings">
+			<MkA v-if="!props.asDrawer" v-tooltip.noDelay.right="i18n.ts.settings" :class="$style.item" :activeClass="$style.active" to="/settings">
 				<i :class="$style.itemIcon" class="ti ti-settings ti-fw" style="view-transition-name: navbar-settings;"></i><span :class="$style.itemText">{{ i18n.ts.settings }}</span>
 			</MkA>
 		</div>
@@ -100,7 +106,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script lang="ts" setup>
-import { computed, ref, watch } from 'vue';
+import { computed, ref, unref, watch } from 'vue';
 import { openInstanceMenu } from './common.js';
 import * as os from '@/os.js';
 import { navbarItemDef } from '@/navbar.js';
@@ -111,6 +117,9 @@ import { useRouter } from '@/router.js';
 import { prefer } from '@/preferences.js';
 import { getAccountMenu } from '@/accounts.js';
 import { $i } from '@/i.js';
+import { getDesktopNavigationItems } from '@/utility/desktop-navigation.js';
+import { getMobileNavigationItems } from '@/utility/mobile-navigation.js';
+import { getHTMLElementOrNull } from '@/utility/get-dom-node-or-null.js';
 
 const router = useRouter();
 
@@ -118,6 +127,8 @@ const props = defineProps<{
 	showWidgetButton?: boolean;
 	asDrawer?: boolean;
 }>();
+
+const menu = computed(() => props.asDrawer ? getMobileNavigationItems(prefer.r.menu.value) : getDesktopNavigationItems(prefer.r.menu.value));
 
 const emit = defineEmits<{
 	(ev: 'widgetButtonClick'): void;
@@ -172,6 +183,14 @@ async function openAccountMenu(ev: PointerEvent) {
 
 function menuEdit() {
 	router.push('/settings/navbar');
+}
+
+async function more(ev: MouseEvent) {
+	const target = getHTMLElementOrNull(ev.currentTarget ?? ev.target);
+	if (!target) return;
+	const { dispose } = await os.popupAsyncWithDialog(import('@/components/MkLaunchPad.vue').then(x => x.default), {
+		anchorElement: target,
+	}, { closed: () => dispose() });
 }
 </script>
 

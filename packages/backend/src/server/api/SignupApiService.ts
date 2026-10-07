@@ -4,6 +4,7 @@
  */
 
 import { Inject, Injectable } from '@nestjs/common';
+import { normalizeAccountEmail } from '@/misc/account-email.js';
 import bcrypt from 'bcryptjs';
 import { IsNull, LessThanOrEqual } from 'typeorm';
 import { DI } from '@/di-symbols.js';
@@ -116,7 +117,7 @@ export class SignupApiService {
 		const password = body['password'];
 		const host: string | null = process.env.NODE_ENV === 'test' ? (body['host'] ?? null) : null;
 		const invitationCode = body['invitationCode'];
-		const emailAddress = body['emailAddress'];
+		const emailAddress = typeof body.emailAddress === 'string' ? normalizeAccountEmail(body.emailAddress) : body.emailAddress;
 
 		if (this.meta.emailRequiredForSignup) {
 			if (emailAddress == null || typeof emailAddress !== 'string') {
@@ -350,18 +351,11 @@ export class SignupApiService {
 			const { account } = await this.signupService.signup({
 				username: pendingUser.username,
 				passwordHash: pendingUser.password,
+				verifiedEmail: pendingUser.email,
 			});
 
 			this.userPendingsRepository.delete({
 				id: pendingUser.id,
-			});
-
-			const profile = await this.userProfilesRepository.findOneByOrFail({ userId: account.id });
-
-			await this.userProfilesRepository.update({ userId: profile.userId }, {
-				email: pendingUser.email,
-				emailVerified: true,
-				emailVerifyCode: null,
 			});
 
 			const ticket = await this.registrationTicketsRepository.findOneBy({ pendingUserId: pendingUser.id });

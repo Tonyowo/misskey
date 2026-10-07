@@ -186,7 +186,7 @@ export const PREF_DEF = definePreferences({
 		default: true,
 	},
 	menu: {
-		default: ['explore', 'publish', 'messages', 'profile', '-', 'favorites', 'search', 'chat', 'drive', 'followRequests'],
+		default: ['explore', 'publish', 'notifications', 'messages', 'profile', '-', 'favorites', 'search', 'drive', 'followRequests'],
 	},
 	statusbars: {
 		default: [] as StatusbarStore[],

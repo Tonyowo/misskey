@@ -453,4 +453,20 @@ describe('chat', () => {
 		assert.ok(roomAfterKick);
 		assert.strictEqual(roomAfterKick.isJoined, false);
 	});
+
+	test('concurrent ownership transfers reject the stale request without losing a member', async () => {
+		const room = await successfulApiCall({ endpoint: 'chat/rooms/create', parameters: { name: 'owner-race' }, user: alice });
+		for (const member of [bob, charlie]) {
+			await successfulApiCall({ endpoint: 'chat/rooms/invitations/create', parameters: { roomId: room.id, userId: member.id }, user: alice });
+			await successfulApiCall({ endpoint: 'chat/rooms/join', parameters: { roomId: room.id }, user: member }, { status: 204 });
+		}
+		const results = await Promise.all([bob, charlie].map(member => api('chat/rooms/transfer-owner', { roomId: room.id, userId: member.id }, alice)));
+		assert.deepStrictEqual(results.map(result => result.status).sort(), [200, 400]);
+		const roomAfter = results.find(result => result.status === 200)!.body;
+		const currentOwner = roomAfter.ownerId === bob.id ? bob : charlie;
+		const memberships = await successfulApiCall({ endpoint: 'chat/rooms/members', parameters: { roomId: room.id }, user: currentOwner });
+		assert.deepStrictEqual(new Set([currentOwner.id, ...memberships.map(member => member.userId)]), new Set([alice.id, bob.id, charlie.id]));
+		const leaveOwner = await api('chat/rooms/leave', { roomId: room.id }, currentOwner);
+		assert.strictEqual(leaveOwner.status, 400);
+	});
 });

@@ -5,7 +5,7 @@
 
 import type { ChatConversationFilter } from './history-items.js';
 
-export const chatHomeTabs = ['conversation', 'groups'] as const;
+export const chatHomeTabs = ['conversation', 'groups', 'directNotes'] as const;
 export type ChatHomeTab = typeof chatHomeTabs[number];
 
 export const chatHomeFocusTargets = ['invitations', 'requests', 'approvals'] as const;

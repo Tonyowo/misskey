@@ -7,20 +7,21 @@ SPDX-License-Identifier: AGPL-3.0-only
 <PageWithHeader v-model:tab="tab" :actions="headerActions" :tabs="headerTabs" :swipable="true">
 	<div class="_spacer" style="--MI_SPACER-w: 700px;">
 		<XHome
-			v-if="tab === 'conversation'"
+			v-if="chatAvailable && tab === 'conversation'"
 			:filter="filter"
 			:query="q"
 			@openGroups="openGroups"
 			@update:filter="filter = $event"
 			@update:query="q = $event"
 		/>
-		<XGroups v-else-if="tab === 'groups'" :focusTarget="groupsFocusTarget"/>
+		<XGroups v-else-if="chatAvailable && tab === 'groups'" :focusTarget="groupsFocusTarget"/>
+		<MkNotesTimeline v-else :paginator="directNotesPaginator"/>
 	</div>
 </PageWithHeader>
 </template>
 
 <script lang="ts" setup>
-import { computed, nextTick, onActivated, onMounted, ref, watch } from 'vue';
+import { computed, markRaw, nextTick, onActivated, onMounted, ref, watch } from 'vue';
 import XHome from './home.home.vue';
 import XGroups from './home.groups.vue';
 import {
@@ -36,6 +37,10 @@ import { definePage } from '@/page.js';
 import { misskeyApi } from '@/utility/misskey-api.js';
 import { useGlobalEvent } from '@/events.js';
 import { useRouter } from '@/router.js';
+import { i18n } from '@/i18n.js';
+import MkNotesTimeline from '@/components/MkNotesTimeline.vue';
+import { Paginator } from '@/utility/paginator.js';
+import { $i } from '@/i.js';
 
 type ChatSummary = {
 	invitations: number;
@@ -60,7 +65,8 @@ const props = defineProps<{
 
 const router = useRouter();
 
-const tab = ref<ChatHomeTab>(parseChatHomeTab(props.tab));
+const chatAvailable = computed(() => $i?.policies.chatAvailability !== 'unavailable');
+const tab = ref<ChatHomeTab>(chatAvailable.value ? parseChatHomeTab(props.tab) : 'directNotes');
 const filter = ref<ChatConversationFilter>(parseChatHomeFilter(props.filter));
 const q = ref(props.q ?? '');
 const groupsFocusTarget = ref<GroupFocusTarget>(parseChatHomeFocus(props.focus));
@@ -77,6 +83,10 @@ const summary = ref<ChatSummary>({
 });
 
 const pendingCount = computed(() => summary.value.invitations + summary.value.myRequests + summary.value.pendingRequests);
+const directNotesPaginator = markRaw(new Paginator('notes/mentions', {
+	limit: 10,
+	params: { visibility: 'specified' },
+}));
 
 const headerActions = computed<PageHeaderItem[]>(() => pendingCount.value > 0 ? [{
 	icon: 'ti ti-inbox',
@@ -87,7 +97,7 @@ const headerActions = computed<PageHeaderItem[]>(() => pendingCount.value > 0 ? 
 	},
 }] : []);
 
-const headerTabs = computed(() => [{
+const headerTabs = computed(() => [...(chatAvailable.value ? [{
 	key: 'conversation',
 	title: '会话',
 	icon: 'ti ti-message-circle',
@@ -95,6 +105,10 @@ const headerTabs = computed(() => [{
 	key: 'groups',
 	title: '群聊',
 	icon: 'ti ti-users-group',
+}] : []), {
+	key: 'directNotes',
+	title: i18n.ts.directNotes,
+	icon: 'ti ti-mail',
 }]);
 
 let syncingRoute = false;
@@ -121,7 +135,7 @@ function syncRoute() {
 	}
 
 	syncingRoute = true;
-	router.replace('/chat', {
+	router.replace(router.currentRoute.value.path === '/my/messages' ? '/my/messages' : '/chat', {
 		query: nextQuery,
 	});
 	queueMicrotask(() => {
@@ -130,6 +144,7 @@ function syncRoute() {
 }
 
 async function fetchCounts() {
+	if (!chatAvailable.value) return;
 	summary.value = await misskeyApi<ChatSummary>('chat/summary' as never, {} as never);
 }
 
@@ -154,7 +169,7 @@ useGlobalEvent('chatHomeInvalidated', () => {
 });
 
 watch(() => props.tab, (value) => {
-	tab.value = parseChatHomeTab(value);
+	tab.value = chatAvailable.value ? parseChatHomeTab(value) : 'directNotes';
 });
 
 watch(() => props.filter, (value) => {
@@ -174,7 +189,7 @@ watch([tab, filter, q, groupsFocusTarget], () => {
 });
 
 definePage(() => ({
-	title: '聊天',
+	title: i18n.ts._community.messages,
 	icon: 'ti ti-messages',
 }));
 </script>

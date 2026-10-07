@@ -527,6 +527,7 @@ export const ROUTE_DEF = [{
 	path: '/my/messages',
 	component: page(() => import('@/pages/messages.vue')),
 	loginRequired: true,
+	query: { tab: 'tab', filter: 'filter', q: 'q', focus: 'focus' },
 }, {
 	path: '/my/notifications',
 	component: page(() => import('@/pages/notifications.vue')),

@@ -503,6 +503,8 @@ watch(searchQuery, (value) => {
 
 .filterChip {
 	display: inline-flex;
+	flex-shrink: 0;
+	white-space: nowrap;
 	align-items: center;
 	gap: 8px;
 	padding: 8px 14px;

@@ -129,11 +129,11 @@ describe('SigninApiService', () => {
 		});
 		await createUserProfile({
 			userId,
-			email: 'alice@example.com',
+			email: 'Alice@Example.COM',
 			emailVerified: true,
 		});
 
-		const req = new DummyFastifyRequest({ username: 'alice@example.com' }) as ApiFastifyRequestType;
+		const req = new DummyFastifyRequest({ username: ' ALICE@example.com ' }) as ApiFastifyRequestType;
 		const res = new DummyFastifyReply() as unknown as FastifyReply;
 		const response = await signinApiService.signin(req, res);
 
@@ -220,5 +220,30 @@ describe('SigninApiService', () => {
 				id: '6cc579cc-885d-43d8-95c2-b8c7fc963280',
 			},
 		});
+	});
+
+	test('rejects ambiguous legacy emails while preserving username signin', async () => {
+		for (const [username, email] of [['legacyalice', 'Alice@Example.COM'], ['legacybob', 'alice@example.com']]) {
+			const user = await createUser({ id: idService.gen(), username, usernameLower: username, host: null });
+			await createUserProfile({ userId: user.id, email, emailVerified: true });
+		}
+		const emailReply = new DummyFastifyReply() as unknown as FastifyReply;
+		await signinApiService.signin(new DummyFastifyRequest({ username: 'Alice@Example.COM' }) as ApiFastifyRequestType, emailReply);
+		expect(emailReply.statusCode).toBe(404);
+		const usernameReply = new DummyFastifyReply() as unknown as FastifyReply;
+		const response = await signinApiService.signin(new DummyFastifyRequest({ username: 'legacyalice' }) as ApiFastifyRequestType, usernameReply);
+		expect(usernameReply.statusCode).toBe(200);
+		expect(response).toMatchObject({ user: { username: 'legacyalice' }, finished: false });
+	});
+
+	test('remote and unverified profiles do not shadow a verified local email', async () => {
+		for (const [username, host, emailVerified] of [['localuser', null, true], ['remoteuser', 'remote.example', true], ['pendinguser', null, false]] as const) {
+			const user = await createUser({ id: idService.gen(), username, usernameLower: username, host });
+			await createUserProfile({ userId: user.id, email: 'Same@Example.COM', emailVerified });
+		}
+		const reply = new DummyFastifyReply() as unknown as FastifyReply;
+		const response = await signinApiService.signin(new DummyFastifyRequest({ username: 'same@example.com' }) as ApiFastifyRequestType, reply);
+		expect(reply.statusCode).toBe(200);
+		expect(response).toMatchObject({ user: { username: 'localuser' } });
 	});
 });

@@ -32,6 +32,18 @@ describe('community upgrade', () => {
 
 	afterAll(async () => { await redis.quit(); await db.destroy(); });
 
+	test('repeated HTTP deletion changes the author count only once', async () => {
+		const author = await signup();
+		await post(author, { text: 'keep' });
+		const note = await post(author, { text: 'delete', localOnly: true });
+		const before = await db.getRepository(MiUser).findOneByOrFail({ id: author.id });
+		const responses = await Promise.all([api('notes/delete', { noteId: note.id }, author), api('notes/delete', { noteId: note.id }, author)]);
+		expect(responses.some(response => response.status === 204)).toBe(true);
+		expect(responses.every(response => [204, 400].includes(response.status))).toBe(true);
+		const after = await db.getRepository(MiUser).findOneByOrFail({ id: author.id });
+		expect(after.notesCount).toBe(before.notesCount - 1);
+	});
+
 	test('patch preserves audience, files and reply target; no-op does not create history', async () => {
 		const parent = await post(alice, { text: 'parent' });
 		const note = await post(alice, { text: 'before', visibility: 'home', replyId: parent.id, localOnly: true });

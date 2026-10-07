@@ -27,11 +27,12 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script lang="ts" setup>
-import { useTemplateRef } from 'vue';
+import { computed, unref, useTemplateRef } from 'vue';
 import MkModal from '@/components/MkModal.vue';
 import { navbarItemDef } from '@/navbar.js';
 import { deviceKind } from '@/utility/device-kind.js';
 import { prefer } from '@/preferences.js';
+import { getOverflowExcludedItems } from '@/utility/inbox-navigation.js';
 
 const props = withDefaults(defineProps<{
 	anchorElement?: HTMLElement | null;
@@ -51,17 +52,16 @@ const preferedModalType = (deviceKind === 'desktop' && props.anchorElement != nu
 
 const modal = useTemplateRef('modal');
 
-const menu = prefer.s.menu;
-
-const items = Object.keys(navbarItemDef).filter(k => !menu.includes(k)).map(k => navbarItemDef[k]).filter(def => def.show == null ? true : def.show).map(def => ({
+const excludedItems = computed(() => getOverflowExcludedItems(prefer.r.menu.value));
+const items = computed(() => Object.keys(navbarItemDef).filter(k => !excludedItems.value.has(k)).map(k => navbarItemDef[k]).filter(def => def.show == null || unref(def.show)).map(def => ({
 	type: def.to ? 'link' : 'button',
 	text: def.title,
 	icon: def.icon,
 	to: def.to,
 	action: def.action,
-	indicate: def.indicated,
-	indicateValue: def.indicateValue,
-}));
+	indicate: unref(def.indicated),
+	indicateValue: unref(def.indicateValue),
+})));
 
 function close() {
 	modal.value?.close();
