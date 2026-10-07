@@ -3,8 +3,7 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
-export const RECENTLY_USED_EMOJIS_LIMIT = 32;
-export const RECENTLY_USED_EMOJIS_VISIBLE_ROWS = 2;
+export const RECENTLY_USED_EMOJIS_LIMIT = 30;
 
 export function updateRecentlyUsedEmojis(recentlyUsedEmojis: readonly string[], emoji: string): string[] {
 	return [

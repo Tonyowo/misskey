@@ -29,7 +29,6 @@ describe('emoji picker category data', () => {
 		expect(index.get('animals/cats')?.map(emoji => emoji.name)).toEqual(['a', 'd']);
 		expect(index.get('')?.map(emoji => emoji.name)).toEqual(['b', 'c']);
 	});
-
 });
 
 describe('emoji picker search', () => {
@@ -117,6 +116,39 @@ describe('emoji picker virtual range', () => {
 });
 
 describe('recently used emojis', () => {
+	test('keeps the latest 30 distinct emojis and evicts the oldest as new ones are used', () => {
+		let history: string[] = [];
+		for (let index = 1; index <= 30; index++) {
+			history = updateRecentlyUsedEmojis(history, `:emoji_${index}:`);
+		}
+
+		history = updateRecentlyUsedEmojis(history, ':emoji_31:');
+		expect(history).toHaveLength(30);
+		expect(history[0]).toBe(':emoji_31:');
+		expect(history.at(-1)).toBe(':emoji_2:');
+		expect(history).not.toContain(':emoji_1:');
+
+		history = updateRecentlyUsedEmojis(history, ':emoji_32:');
+		expect(history).toHaveLength(30);
+		expect(history.at(-1)).toBe(':emoji_3:');
+		expect(history).not.toContain(':emoji_2:');
+	});
+
+	test('moves a reused emoji to the front without discarding another emoji or mutating history', () => {
+		const current = ['😀', ':party:', '👍'];
+		const updated = updateRecentlyUsedEmojis(current, ':party:');
+
+		expect(updated).toEqual([':party:', '😀', '👍']);
+		expect(current).toEqual(['😀', ':party:', '👍']);
+	});
+
+	test('trims a previously saved 32-item history to the newest 30 items', () => {
+		const current = Array.from({ length: 32 }, (_, index) => `:emoji_${32 - index}:`);
+		const updated = updateRecentlyUsedEmojis(current, '😀');
+
+		expect(updated).toEqual(['😀', ...current.slice(0, 29)]);
+	});
+
 	test('deduplicates the selected emoji and keeps the configured storage limit', () => {
 		const current = Array.from({ length: RECENTLY_USED_EMOJIS_LIMIT }, (_, index) => `${index}`);
 		const updated = updateRecentlyUsedEmojis(current, '10');

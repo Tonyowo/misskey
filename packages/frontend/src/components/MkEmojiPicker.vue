@@ -9,68 +9,15 @@ SPDX-License-Identifier: AGPL-3.0-only
 	:style="rootStyle"
 	@keydown.capture="onPickerKeydown"
 >
-	<div :class="$style.searchBar">
-		<i class="ti ti-search" :class="$style.searchIcon" aria-hidden="true"></i>
-		<input
-			ref="searchEl"
-			v-model="searchQuery"
-			:class="$style.searchInput"
-			data-prevent-emoji-insert
-			type="search"
-			:placeholder="i18n.ts._emojiPicker.searchPlaceholder"
-			:aria-label="i18n.ts._emojiPicker.searchPlaceholder"
-			autocapitalize="off"
-			autocomplete="off"
-			spellcheck="false"
-			@keydown="onSearchKeydown"
-		>
-		<button
-			v-if="searchQuery !== ''"
-			class="_button"
-			:class="$style.clearSearch"
-			:title="i18n.ts.clear"
-			:aria-label="i18n.ts.clear"
-			@click="clearSearch"
-		>
-			<i class="ti ti-x" aria-hidden="true"></i>
-		</button>
-	</div>
-
 	<div :id="panelId" :class="$style.content" role="tabpanel">
-		<template v-if="normalizedSearchQuery !== ''">
-			<div :class="$style.sectionHeader">
-				<div :class="$style.sectionTitle">{{ i18n.ts.searchResult }}</div>
-				<div :class="$style.resultCount" aria-live="polite">
-					{{ i18n.tsx._emojiPicker.searchResultCount({ count: searchResults.length }) }}
-				</div>
-			</div>
-			<MkEmojiPickerGrid
-				v-if="searchResults.length > 0"
-				ref="grid"
-				:class="$style.grid"
-				:items="searchResults"
-				:disabledItems="searchDisabledEmojis"
-				:columns="columns"
-				:itemSize="cellSize"
-				:responsive="asDrawer || asWindow"
-				:animated="prefer.s.animation"
-				:ariaLabel="i18n.ts.searchResult"
-				@chosen="chosen"
-			/>
-			<div v-else :class="$style.emptyState">
-				<i class="ti ti-search-off" aria-hidden="true"></i>
-				<span>{{ i18n.ts._emojiPicker.noSearchResults }}</span>
-			</div>
-		</template>
-
-		<template v-else-if="activeSectionKey === HOME_SECTION_KEY">
+		<template v-if="activeSectionKey === HOME_SECTION_KEY">
 			<div ref="homeScrollEl" :class="$style.home">
 				<section :class="$style.homeSection">
 					<h2 :class="[$style.sectionTitle, $style.homeSectionTitle]">{{ i18n.ts.recentUsed }}</h2>
 					<MkEmojiPickerGrid
-						v-if="recentlyUsedEmojisDisplay.length > 0"
+						v-if="recentlyUsedEmojis.length > 0"
 						ref="recentGrid"
-						:items="recentlyUsedEmojisDisplay"
+						:items="recentlyUsedEmojis"
 						:disabledItems="recentDisabledEmojis"
 						:columns="columns"
 						:itemSize="cellSize"
@@ -174,11 +121,9 @@ SPDX-License-Identifier: AGPL-3.0-only
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, useId, useTemplateRef, watch } from 'vue';
 import * as Misskey from 'misskey-js';
 import {
-	emojilist,
 	emojiCharByCategory,
 	unicodeEmojiCategories,
 } from '@@/js/emojilist.js';
-import type { EmojiPickerSearchEntry } from '@/utility/emoji-picker-data.js';
 import MkEmojiPickerGrid from '@/components/MkEmojiPickerGrid.vue';
 import MkRippleEffect from '@/components/MkRippleEffect.vue';
 import * as os from '@/os.js';
@@ -189,11 +134,8 @@ import { $i } from '@/i.js';
 import { checkReactionPermissions } from '@/utility/check-reaction-permissions.js';
 import { prefer } from '@/preferences.js';
 import { haptic } from '@/utility/haptic.js';
-import { RECENTLY_USED_EMOJIS_VISIBLE_ROWS, updateRecentlyUsedEmojis } from '@/utility/recently-used-emojis.js';
-import {
-	buildCustomEmojiCategoryIndex,
-	searchEmojiPickerEntries,
-} from '@/utility/emoji-picker-data.js';
+import { RECENTLY_USED_EMOJIS_LIMIT, updateRecentlyUsedEmojis } from '@/utility/recently-used-emojis.js';
+import { buildCustomEmojiCategoryIndex } from '@/utility/emoji-picker-data.js';
 import { deviceKind } from '@/utility/device-kind.js';
 import { isTouchUsing } from '@/utility/touch.js';
 
@@ -231,13 +173,11 @@ const emit = defineEmits<{
 	(ev: 'esc'): void;
 }>();
 
-const searchEl = useTemplateRef('searchEl');
 const grid = useTemplateRef('grid');
 const recentGrid = useTemplateRef('recentGrid');
 const homeScrollEl = useTemplateRef('homeScrollEl');
 const bottomBarTrack = useTemplateRef('bottomBarTrack');
 const panelId = `emoji-picker-panel-${useId()}`;
-const searchQuery = ref('');
 const activeSectionKey = ref(HOME_SECTION_KEY);
 const showPrevArrow = ref(false);
 const showNextArrow = ref(false);
@@ -248,7 +188,7 @@ const {
 	emojiPickerWidth,
 	emojiPickerHeight,
 } = prefer.r;
-const recentlyUsedEmojis = store.r.recentlyUsedEmojis;
+const recentlyUsedEmojis = computed(() => store.r.recentlyUsedEmojis.value.slice(0, RECENTLY_USED_EMOJIS_LIMIT));
 
 const size = computed(() => emojiPickerScale.value);
 const width = computed(() => emojiPickerWidth.value);
@@ -256,9 +196,6 @@ const height = computed(() => emojiPickerHeight.value);
 const cellSize = computed(() => [40, 45, 50, 55, 60][Math.min(Math.max(size.value - 1, 0), 4)] ?? 45);
 const columns = computed(() => width.value + 4);
 const rows = computed(() => [4, 6, 8, 10][Math.min(Math.max(height.value - 1, 0), 3)] ?? 6);
-const homeDisplayLimit = computed(() => columns.value * RECENTLY_USED_EMOJIS_VISIBLE_ROWS);
-const normalizedSearchQuery = computed(() => searchQuery.value.trim());
-const recentlyUsedEmojisDisplay = computed(() => recentlyUsedEmojis.value.slice(0, homeDisplayLimit.value));
 
 const categoryIndex = computed(() => buildCustomEmojiCategoryIndex(customEmojis.value));
 const customSections = computed<PickerSection[]>(() => {
@@ -305,25 +242,8 @@ const navigationSections = computed<PickerSection[]>(() => [
 ]);
 const activeSection = computed(() => navigationSections.value.find(section => section.key === activeSectionKey.value) ?? homeSection.value);
 const activeSectionDisabledEmojis = computed(() => activeSection.value.emojis.filter(emoji => !canReact(emoji)));
-const recentDisabledEmojis = computed(() => recentlyUsedEmojisDisplay.value.filter(emoji => !canReact(emoji)));
+const recentDisabledEmojis = computed(() => recentlyUsedEmojis.value.filter(emoji => !canReact(emoji)));
 
-const searchEntries = computed<EmojiPickerSearchEntry[]>(() => {
-	const customEntries: EmojiPickerSearchEntry[] = customEmojis.value.map(emoji => ({
-		key: `:${emoji.name}:`,
-		name: emoji.name,
-		aliases: emoji.aliases,
-		keywords: [],
-	}));
-	const unicodeEntries: EmojiPickerSearchEntry[] = emojilist.map(emoji => ({
-		key: emoji.char,
-		name: emoji.name,
-		aliases: [],
-		keywords: Object.values(store.s.additionalUnicodeEmojiIndexes).flatMap(index => index[emoji.char] ?? []),
-	}));
-	return [...customEntries, ...unicodeEntries];
-});
-const searchResults = computed(() => searchEmojiPickerEntries(searchEntries.value, normalizedSearchQuery.value).map(entry => entry.key));
-const searchDisabledEmojis = computed(() => searchResults.value.filter(emoji => !canReact(emoji)));
 const rootStyle = computed(() => ({
 	width: props.asDrawer || props.asWindow ? undefined : `${cellSize.value * columns.value + 16}px`,
 	height: props.asWindow ? undefined : `${cellSize.value * rows.value + 16}px`,
@@ -346,10 +266,6 @@ watch(activeSectionKey, () => {
 	});
 });
 
-watch(normalizedSearchQuery, () => {
-	nextTick(() => grid.value?.reset());
-});
-
 function canReact(emoji: string): boolean {
 	if (!props.targetNote) return true;
 	if ($i == null) return false;
@@ -362,25 +278,7 @@ function canReact(emoji: string): boolean {
 
 function selectSection(key: string) {
 	activeSectionKey.value = key;
-	searchQuery.value = '';
 	if (homeScrollEl.value) homeScrollEl.value.scrollTop = 0;
-}
-
-function clearSearch() {
-	searchQuery.value = '';
-	nextTick(() => searchEl.value?.focus());
-}
-
-function onSearchKeydown(event: KeyboardEvent) {
-	if (event.isComposing || event.key === 'Process' || event.keyCode === 229) return;
-
-	if (event.key === 'Enter' && searchResults.value[0]) {
-		event.preventDefault();
-		chosen(searchResults.value[0]);
-	} else if (event.key === 'ArrowDown' && searchResults.value.length > 0) {
-		event.preventDefault();
-		grid.value?.focus();
-	}
 }
 
 function onPickerKeydown(event: KeyboardEvent) {
@@ -388,11 +286,7 @@ function onPickerKeydown(event: KeyboardEvent) {
 
 	event.preventDefault();
 	event.stopPropagation();
-	if (searchQuery.value !== '') {
-		clearSearch();
-	} else {
-		emit('esc');
-	}
+	emit('esc');
 }
 
 function updateRailButtons() {
@@ -464,12 +358,17 @@ function chosen(emoji: string, event?: PointerEvent) {
 
 function focus() {
 	if (!['smartphone', 'tablet'].includes(deviceKind) && !isTouchUsing) {
-		searchEl.value?.focus({ preventScroll: true });
+		if (activeSectionKey.value === HOME_SECTION_KEY && recentlyUsedEmojis.value.some(canReact)) {
+			recentGrid.value?.focus();
+		} else if (activeSectionKey.value !== HOME_SECTION_KEY && activeSection.value.emojis.some(canReact)) {
+			grid.value?.focus();
+		} else {
+			bottomBarTrack.value?.querySelector<HTMLElement>('[aria-selected="true"]')?.focus({ preventScroll: true });
+		}
 	}
 }
 
 function reset() {
-	searchQuery.value = '';
 	activeSectionKey.value = HOME_SECTION_KEY;
 	if (homeScrollEl.value) homeScrollEl.value.scrollTop = 0;
 	grid.value?.reset();
@@ -512,64 +411,6 @@ defineExpose({
 	height: 100% !important;
 }
 
-.searchBar {
-	flex: 0 0 auto;
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	margin: 8px 8px 0;
-	padding: 0 10px;
-	min-height: 38px;
-	border: 1px solid var(--MI_THEME-divider);
-	border-radius: var(--MI-radius);
-	background: var(--MI_THEME-panelHighlight);
-
-	&:focus-within {
-		border-color: var(--MI_THEME-focus);
-		box-shadow: 0 0 0 1px var(--MI_THEME-focus);
-	}
-}
-
-.searchIcon {
-	flex: 0 0 auto;
-	color: var(--MI_THEME-fgTransparentStrong);
-}
-
-.searchInput {
-	flex: 1 1 auto;
-	min-width: 0;
-	padding: 8px 0;
-	border: 0;
-	outline: 0;
-	background: transparent;
-	color: var(--MI_THEME-fg);
-	font: inherit;
-
-	&::placeholder {
-		color: var(--MI_THEME-fgTransparentWeak);
-	}
-
-	&::-webkit-search-cancel-button {
-		display: none;
-	}
-}
-
-.clearSearch {
-	flex: 0 0 auto;
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	width: 30px;
-	height: 30px;
-	border-radius: 50%;
-	color: var(--MI_THEME-fgTransparentStrong);
-
-	&:hover {
-		background: var(--MI_THEME-buttonHoverBg);
-		color: var(--MI_THEME-fg);
-	}
-}
-
 .content {
 	flex: 1 1 auto;
 	display: flex;
@@ -610,12 +451,6 @@ defineExpose({
 
 .homeSectionTitle {
 	padding: 8px 12px 0;
-}
-
-.resultCount {
-	margin-left: auto;
-	font-size: 11px;
-	color: var(--MI_THEME-fgTransparentWeak);
 }
 
 .emptyState {
