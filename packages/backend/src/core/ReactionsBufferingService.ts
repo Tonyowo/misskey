@@ -174,16 +174,16 @@ export class ReactionsBufferingService implements OnApplicationShutdown {
 			const deltas = Object.entries(buffered.deltas);
 			if (deltas.length === 0) continue;
 
-			const expressions: string[] = [];
+			let sql = '"reactions"';
 			const parameters: Record<string, string | number> = {};
 			for (const [i, [reaction, count]] of deltas.entries()) {
-				expressions.push(`jsonb_set("reactions", ARRAY[:reaction${i}], (COALESCE("reactions"->>:reaction${i}, '0')::int + :count${i})::text::jsonb)`);
+				// Apply each delta to the preceding result so later keys cannot overwrite it.
+				sql = `jsonb_set(${sql}, ARRAY[:reaction${i}], (COALESCE("reactions"->>:reaction${i}, '0')::int + :count${i})::text::jsonb)`;
 				parameters[`reaction${i}`] = reaction;
 				parameters[`count${i}`] = count;
 			}
-			const sql = expressions.join(' || ');
 
-			this.notesRepository.createQueryBuilder().update()
+			await this.notesRepository.createQueryBuilder().update()
 				.set({
 					reactions: () => sql,
 					reactionAndUserPairCache: buffered.pairs.map(x => x.join('/')),

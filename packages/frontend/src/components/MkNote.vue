@@ -5,13 +5,14 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 <template>
 <div
-	v-if="!hardMuted && !hideByPlugin && muted === false"
+	v-if="!isDeleted && !hardMuted && !hideByPlugin && muted === false"
 	ref="rootEl"
 	v-hotkey="keymap"
-	:class="[$style.root, { [$style.showActionsOnlyHover]: prefer.s.showNoteActionsOnlyHover, [$style.skipRender]: prefer.s.skipNoteRender }]"
+	:class="[$style.root, { [$style.compact]: compact, [$style.showActionsOnlyHover]: !compact && prefer.s.showNoteActionsOnlyHover, [$style.skipRender]: prefer.s.skipNoteRender }]"
 	tabindex="0"
+	@keydown.enter.self.prevent.stop="openNote"
 >
-	<MkNoteSub v-if="appearNote.replyId && !renoteCollapsed" :note="appearNote?.reply ?? null" :class="$style.replyTo"/>
+	<MkNoteSub v-if="!compact && appearNote.replyId && !renoteCollapsed" :note="appearNote?.reply ?? null" :class="$style.replyTo"/>
 	<div v-if="pinned" :class="$style.tip"><i class="ti ti-pin"></i> {{ i18n.ts.pinnedNote }}</div>
 	<div v-if="isRenote" :class="$style.renote">
 		<div v-if="note.channel" :class="$style.colorBar" :style="{ background: note.channel.color }"></div>
@@ -45,7 +46,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 		<MkAvatar :class="$style.collapsedRenoteTargetAvatar" :user="appearNote.user" link preview/>
 		<Mfm :text="getNoteSummary(appearNote)" :plain="true" :nowrap="true" :author="appearNote.user" :nyaize="'respect'" :class="$style.collapsedRenoteTargetText" @click="renoteCollapsed = false"/>
 	</div>
-	<article v-else :class="$style.article" @contextmenu.stop="onContextmenu">
+	<article v-else :class="$style.article" role="link" tabindex="0" :aria-label="i18n.ts.note" @click="onNoteClick" @keydown.enter.self.prevent.stop="openNote" @contextmenu.stop="onContextmenu">
 		<div v-if="appearNote.channel" :class="$style.colorBar" :style="{ background: appearNote.channel.color }"></div>
 		<MkAvatar :class="[$style.avatar, prefer.s.useStickyIcons ? $style.useSticky : null]" :user="appearNote.user" :link="!mock" :preview="!mock"/>
 		<div :class="$style.main">
@@ -86,11 +87,12 @@ SPDX-License-Identifier: AGPL-3.0-only
 							</div>
 						</div>
 					</div>
-					<div v-if="appearNote.files && appearNote.files.length > 0" style="margin-top: 8px;">
+					<div v-if="appearNote.files && appearNote.files.length > 0" data-note-click-ignore style="margin-top: 8px;">
 						<MkMediaList ref="galleryEl" :mediaList="appearNote.files" :user="appearNote.user"/>
 					</div>
 					<MkPoll
 						v-if="appearNote.poll"
+						data-note-click-ignore
 						:noteId="appearNote.id"
 						:multiple="appearNote.poll.multiple"
 						:expiresAt="appearNote.poll.expiresAt"
@@ -102,7 +104,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 					<div v-if="isEnabledUrlPreview">
 						<MkUrlPreview v-for="url in urls" :key="url" :url="url" :compact="true" :detail="false" :class="$style.urlPreview"/>
 					</div>
-					<div v-if="appearNote.renoteId" :class="$style.quote"><MkNoteSimple :note="appearNote?.renote ?? null" :class="$style.quoteNote"/></div>
+					<div v-if="appearNote.renoteId" :class="$style.quote" data-note-click-ignore><MkNoteSimple :note="appearNote?.renote ?? null" :class="$style.quoteNote"/></div>
 					<button v-if="isLong && collapsed" :class="$style.collapsed" class="_button" @click="collapsed = false">
 						<span :class="$style.collapsedLabel">{{ i18n.ts.showMore }}</span>
 					</button>
@@ -135,14 +137,14 @@ SPDX-License-Identifier: AGPL-3.0-only
 					class="_button"
 					:aria-label="i18n.ts._community.reposts" @click="renote()"
 				>
-					<i class="ti ti-repeat"></i><span>{{ i18n.ts._community.reposts }}</span>
+					<i class="ti ti-repeat"></i><span v-if="!compact">{{ i18n.ts._community.reposts }}</span>
 					<p v-if="appearNote.renoteCount > 0" :class="$style.footerButtonCount">{{ number(appearNote.renoteCount) }}</p>
 				</button>
 				<button v-else :class="$style.footerButton" class="_button" disabled>
 					<i class="ti ti-ban"></i>
 				</button>
-				<button :class="$style.footerButton" class="_button" @click="reply()">
-					<i class="ti ti-message-circle"></i><span>{{ i18n.ts._community.comment }}</span>
+				<button :class="$style.footerButton" class="_button" :aria-label="i18n.ts.reply" @click="reply()">
+					<i class="ti" :class="compact ? 'ti-arrow-back-up' : 'ti-message-circle'"></i><span v-if="!compact">{{ i18n.ts._community.comment }}</span>
 					<p v-if="appearNote.repliesCount > 0" :class="$style.footerButtonCount">{{ number(appearNote.repliesCount) }}</p>
 				</button>
 				<button ref="reactButton" :class="$style.footerButton" class="_button" :aria-label="appearNote.reactionAcceptance === 'likeOnly' ? i18n.ts._community.like : i18n.ts.reactions" :aria-pressed="$appearNote.myReaction != null" @click="handleToggleReact()">
@@ -155,14 +157,14 @@ SPDX-License-Identifier: AGPL-3.0-only
 				<button v-if="prefer.s.showClipButtonInNoteFooter" ref="clipButton" :class="$style.footerButton" class="_button" @mousedown.prevent="clip()">
 					<i class="ti ti-paperclip"></i>
 				</button>
-				<button ref="menuButton" :class="$style.footerButton" class="_button" @mousedown.prevent="showMenu()">
+				<button ref="menuButton" :class="$style.footerButton" class="_button" :aria-label="i18n.ts.more" @mousedown.prevent="showMenu()">
 					<i class="ti ti-dots"></i>
 				</button>
 			</footer>
 		</div>
 	</article>
 </div>
-<div v-else-if="!hardMuted && !hideByPlugin" :class="$style.muted" @click="muted = false">
+<div v-else-if="!isDeleted && !hardMuted && !hideByPlugin" :class="$style.muted" @click="muted = false">
 	<I18n v-if="muted === 'sensitiveMute'" :src="i18n.ts.userSaysSomethingSensitive" tag="small">
 		<template #name>
 			<MkA v-user-preview="appearNote.userId" :to="userPage(appearNote.user)">
@@ -204,6 +206,9 @@ import { useNote } from '@/composables/use-note.js';
 import { prefer } from '@/preferences.js';
 import { i18n } from '@/i18n.js';
 import { userPage } from '@/filters/user.js';
+import { notePage } from '@/filters/note.js';
+import { useRouter } from '@/router.js';
+import { shouldOpenNoteOnClick } from '@/utility/note-click.js';
 import { getNoteSummary } from '@/utility/get-note-summary.js';
 import { isEnabledUrlPreview } from '@/utility/url-preview.js';
 import { focusPrev, focusNext } from '@/utility/focus.js';
@@ -227,6 +232,7 @@ const props = withDefaults(defineProps<{
 	pinned?: boolean;
 	mock?: boolean;
 	withHardMute?: boolean;
+	compact?: boolean;
 }>(), {
 	mock: false,
 });
@@ -237,6 +243,8 @@ const emit = defineEmits<{
 }>();
 
 provide(DI.mock, props.mock);
+
+const router = useRouter();
 
 // 周辺コンテキストのインジェクト
 const inTimeline = inject<boolean>('inTimeline', false);
@@ -262,6 +270,7 @@ const {
 	hideByPlugin,
 	isRenote,
 	showContent,
+	isDeleted,
 	translating,
 	translation,
 	muted,
@@ -297,9 +306,20 @@ const {
 	inChannel,
 	currentClip,
 	currentAntenna,
+	forceCapture: props.compact,
 });
 
 const hasCw = computed(() => appearNote.cw != null);
+
+function openNote() {
+	if (props.mock) return;
+	router.push(notePage(appearNote));
+}
+
+function onNoteClick(ev: MouseEvent) {
+	if (!shouldOpenNoteOnClick(ev)) return;
+	openNote();
+}
 
 // provide
 provide(DI.mfmEmojiReactCallback, reactViaMfmEmoji);
@@ -355,7 +375,7 @@ const keymap = {
 		if (renoteCollapsed.value) return;
 		galleryEl.value?.openGallery();
 	},
-	'v|enter': () => {
+	'v': () => {
 		if (renoteCollapsed.value) {
 			renoteCollapsed.value = false;
 		} else if (hasCw.value) {
@@ -557,6 +577,7 @@ const keymap = {
 	position: relative;
 	display: flex;
 	padding: 28px 32px;
+	cursor: pointer;
 }
 
 .colorBar {
@@ -644,6 +665,7 @@ const keymap = {
 
 .text {
 	overflow-wrap: break-word;
+	cursor: text;
 }
 
 .replyIcon {
@@ -818,6 +840,22 @@ const keymap = {
 @container (max-width: 250px) {
 	.quoteNote {
 		padding: 12px;
+	}
+}
+
+.root.compact {
+	.article {
+		padding: 12px 16px;
+	}
+
+	.avatar {
+		width: 38px;
+		height: 38px;
+		margin-right: 8px;
+	}
+
+	.footerButton:not(:last-child) {
+		margin-right: 16px;
 	}
 }
 
