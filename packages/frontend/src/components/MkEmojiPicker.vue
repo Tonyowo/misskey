@@ -12,7 +12,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 	<div :id="panelId" :class="$style.content" role="tabpanel">
 		<template v-if="activeSectionKey === HOME_SECTION_KEY">
 			<div ref="homeScrollEl" :class="$style.home">
-				<section :class="$style.homeSection">
+				<section>
 					<h2 :class="[$style.sectionTitle, $style.homeSectionTitle]">{{ i18n.ts.recentUsed }}</h2>
 					<MkEmojiPickerGrid
 						v-if="recentlyUsedEmojis.length > 0"
@@ -186,16 +186,13 @@ let railResizeObserver: ResizeObserver | null = null;
 const {
 	emojiPickerScale,
 	emojiPickerWidth,
-	emojiPickerHeight,
 } = prefer.r;
 const recentlyUsedEmojis = computed(() => store.r.recentlyUsedEmojis.value.slice(0, RECENTLY_USED_EMOJIS_LIMIT));
 
 const size = computed(() => emojiPickerScale.value);
 const width = computed(() => emojiPickerWidth.value);
-const height = computed(() => emojiPickerHeight.value);
 const cellSize = computed(() => [40, 45, 50, 55, 60][Math.min(Math.max(size.value - 1, 0), 4)] ?? 45);
 const columns = computed(() => width.value + 4);
-const rows = computed(() => [4, 6, 8, 10][Math.min(Math.max(height.value - 1, 0), 3)] ?? 6);
 
 const categoryIndex = computed(() => buildCustomEmojiCategoryIndex(customEmojis.value));
 const customSections = computed<PickerSection[]>(() => {
@@ -246,9 +243,9 @@ const recentDisabledEmojis = computed(() => recentlyUsedEmojis.value.filter(emoj
 
 const rootStyle = computed(() => ({
 	width: props.asDrawer || props.asWindow ? undefined : `${cellSize.value * columns.value + 16}px`,
-	height: props.asWindow ? undefined : `${cellSize.value * rows.value + 16}px`,
 	maxHeight: props.maxHeight ? `${props.maxHeight}px` : undefined,
 	'--emojiPickerCellSize': `${cellSize.value}px`,
+	'--emojiPickerColumns': `${columns.value}`,
 }));
 
 watch(navigationSections, sections => {
@@ -411,10 +408,19 @@ defineExpose({
 	height: 100% !important;
 }
 
+.asDrawer {
+	container-type: inline-size;
+
+	.content {
+		height: calc((100cqi - 16px) / var(--emojiPickerColumns) * 5 + 16px + 42px);
+	}
+}
+
 .content {
 	flex: 1 1 auto;
 	display: flex;
 	flex-direction: column;
+	height: calc(var(--emojiPickerCellSize) * 5 + 16px + 42px);
 	min-height: 0;
 }
 
@@ -430,15 +436,13 @@ defineExpose({
 	scrollbar-width: none;
 }
 
-.homeSection {
-	padding-top: 10px;
-}
-
-.sectionHeader {
+.sectionHeader,
+.homeSectionTitle {
 	flex: 0 0 auto;
 	display: flex;
 	align-items: center;
-	min-height: 34px;
+	box-sizing: border-box;
+	height: 42px;
 	padding: 8px 12px 0;
 }
 
@@ -447,10 +451,6 @@ defineExpose({
 	font-size: 13px;
 	font-weight: 700;
 	color: var(--MI_THEME-fgTransparentStrong);
-}
-
-.homeSectionTitle {
-	padding: 8px 12px 0;
 }
 
 .emptyState {
