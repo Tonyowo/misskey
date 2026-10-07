@@ -49,7 +49,7 @@ const props = defineProps<{
 	note: Misskey.entities.Note;
 }>();
 
-const isLong = shouldCollapsed(props.note, []);
+const isLong = shouldCollapsed(props.note, [], false);
 
 const collapsed = ref(isLong);
 </script>

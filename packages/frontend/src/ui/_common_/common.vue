@@ -26,7 +26,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 	:leaveToClass="prefer.s.animation ? $style.transition_menuDrawer_leaveTo : ''"
 >
 	<div v-if="drawerMenuShowing" :class="$style.menuDrawer">
-		<XNavbar style="height: 100%;" :asDrawer="true" :showWidgetButton="true" @widgetButtonClick="openWidgetsFromMenu"/>
+		<XNavbar style="height: 100%;" :asDrawer="true"/>
 	</div>
 </Transition>
 
@@ -125,11 +125,6 @@ const XWidgets = defineAsyncComponent(() => import('./widgets.vue'));
 
 const drawerMenuShowing = defineModel<boolean>('drawerMenuShowing');
 const widgetsShowing = defineModel<boolean>('widgetsShowing');
-
-function openWidgetsFromMenu() {
-	drawerMenuShowing.value = false;
-	widgetsShowing.value = true;
-}
 
 const dev = _DEV_;
 
